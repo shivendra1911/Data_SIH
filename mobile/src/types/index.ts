@@ -23,6 +23,17 @@ export interface SOSPayload {
   notes?: string;
 }
 
+export interface LocationSyncPayload {
+  device_uuid: string;
+  lat: number;
+  lng: number;
+  altitude?: number | null;
+  accuracy?: number | null;
+  battery_level?: number | null;
+  last_synced_at: string;
+  zone_id?: string;
+}
+
 export type NetworkMode = 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
 
 export interface MeshPeer {
@@ -34,6 +45,21 @@ export interface MeshPeer {
   location?: string;
   flag?: string;
   timestamp?: string;
+  lat?: number;
+  lng?: number;
+  status?: SOSStatus;
+  distanceMeters?: number;
+  inVoiceCall?: boolean;
+}
+
+export interface MeshChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: string;
+  isMeshRelayed: boolean;
+  hopCount: number;
 }
 
 export interface CitizenBeaconItem {

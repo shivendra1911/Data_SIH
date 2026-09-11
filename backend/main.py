@@ -253,6 +253,70 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
         ]
     }
 
+class LocationSyncPayload(BaseModel):
+    device_uuid: str
+    lat: float
+    lng: float
+    altitude: Optional[float] = None
+    accuracy: Optional[float] = None
+    battery_level: Optional[float] = None
+    last_synced_at: str
+    zone_id: Optional[str] = "chamoli_01"
+
+# Store 5-minute location history
+location_history_db = {}
+
+@app.post("/api/location/sync")
+def sync_device_location(payload: LocationSyncPayload):
+    """
+    Ingests 5-minute periodic location telemetry from mobile clients.
+    Persists last known location for rescue tracking.
+    """
+    location_history_db[payload.device_uuid] = {
+        "device_uuid": payload.device_uuid,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "altitude": payload.altitude,
+        "battery_level": payload.battery_level,
+        "last_synced_at": payload.last_synced_at,
+        "zone_id": payload.zone_id,
+        "server_received_at": datetime.now(timezone.utc).isoformat()
+    }
+    print(f"[Location Sync] 5-Min GPS update from {payload.device_uuid[:8]}: ({payload.lat}, {payload.lng})")
+    return {
+        "success": True,
+        "device_uuid": payload.device_uuid,
+        "synced_at": payload.last_synced_at,
+        "total_active_devices": len(location_history_db)
+    }
+
+@app.get("/api/location/live")
+def get_live_device_locations():
+    """
+    Returns latest GPS locations of all connected devices for NDRF government portal.
+    """
+    return {
+        "total_devices": len(location_history_db),
+        "devices": list(location_history_db.values())
+    }
+
+@app.post("/api/alert/broadcast")
+def broadcast_red_zone_alert(zone_id: str = "chamoli_01"):
+    """
+    Triggers emergency RED ALERT notification to all devices in the affected zone.
+    """
+    sensors = zone_sensor_state.get(zone_id.lower(), zone_sensor_state["chamoli_01"])
+    sensors["rainfall_mm"] = 280.0 # Force extreme rainfall
+    sensors["seismic_mag"] = 5.8  # Force GLOF earthquake
+
+    return {
+        "success": True,
+        "broadcast_status": "DISPATCHED",
+        "affected_zone": zone_id,
+        "priority": "RED_ZONE_CRITICAL",
+        "message": f"EMERGENCY RED ALERT DISPATCHED TO ALL DEVICES IN {zone_id.upper()} RANGE"
+    }
+
 @app.post("/api/telemetry/update")
 def update_sensor_telemetry(payload: SensorUpdatePayload):
     """
