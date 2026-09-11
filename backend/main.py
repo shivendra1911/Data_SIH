@@ -7,7 +7,7 @@ import joblib
 import numpy as np
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -563,7 +563,7 @@ def get_all_zone_predictions():
     }
 
 @app.post("/api/sos/trigger")
-def trigger_sos_beacon(payload: SOSPayload):
+def trigger_sos_beacon(payload: SOSPayload, background_tasks: BackgroundTasks):
     """
     Ingests SOS / Safe / Helping beacons from citizens (direct or BLE mesh relayed).
     """
@@ -581,7 +581,7 @@ def trigger_sos_beacon(payload: SOSPayload):
     }
 
     sos_events_db.append(event_entry)
-    sync_to_firestore("sos_events", message_id, event_entry)
+    background_tasks.add_task(sync_to_firestore, "sos_events", message_id, event_entry)
 
     if payload.device_uuid in location_history_db:
         location_history_db[payload.device_uuid]["status"] = payload.status
@@ -600,7 +600,7 @@ def trigger_sos_beacon(payload: SOSPayload):
             "zone_id": "chamoli_01",
             "status": payload.status
         }
-    sync_to_firestore("citizen_locations", payload.device_uuid, location_history_db[payload.device_uuid])
+    background_tasks.add_task(sync_to_firestore, "citizen_locations", payload.device_uuid, location_history_db[payload.device_uuid])
 
     print(f"[SOS Ingest] Beacon received [{payload.status}] from {payload.device_uuid[:8]} (Mesh: {payload.is_mesh_relayed})")
 
@@ -680,7 +680,7 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
     }
 
 @app.post("/api/rescue/dispatch")
-def dispatch_rescue_squad(payload: RescueDispatchPayload):
+def dispatch_rescue_squad(payload: RescueDispatchPayload, background_tasks: BackgroundTasks):
     """
     Allows the NDRF Web Command Portal to dispatch specialized rescue squads
     (Helicopter, Rescue Boat, Ground Team, Medical) to an active SOS cluster.
@@ -698,7 +698,7 @@ def dispatch_rescue_squad(payload: RescueDispatchPayload):
     }
 
     dispatched_rescues_db.append(dispatch_entry)
-    sync_to_firestore("dispatched_rescues", dispatch_entry["dispatch_id"], dispatch_entry)
+    background_tasks.add_task(sync_to_firestore, "dispatched_rescues", dispatch_entry["dispatch_id"], dispatch_entry)
     print(f"[NDRF Command] Rescue Squad [{payload.squad_type}] dispatched to Cluster #{payload.cluster_id}")
 
     return {
@@ -716,7 +716,7 @@ def get_all_dispatches():
     }
 
 @app.post("/api/location/sync")
-def sync_device_location(payload: LocationSyncPayload):
+def sync_device_location(payload: LocationSyncPayload, background_tasks: BackgroundTasks):
     """
     Ingests 5-minute periodic location telemetry from mobile clients.
     Persists last known location for rescue tracking.
@@ -736,7 +736,7 @@ def sync_device_location(payload: LocationSyncPayload):
         "server_received_at": datetime.now(timezone.utc).isoformat()
     }
     location_history_db[payload.device_uuid] = location_entry
-    sync_to_firestore("citizen_locations", payload.device_uuid, location_entry)
+    background_tasks.add_task(sync_to_firestore, "citizen_locations", payload.device_uuid, location_entry)
     print(f"[Location Sync] 5-Min GPS update from {payload.device_uuid[:8]}: ({payload.lat}, {payload.lng})")
     return {
         "success": True,
