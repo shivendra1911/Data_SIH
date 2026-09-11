@@ -59,7 +59,12 @@ def train_and_evaluate(dataset_path, model_output_path):
     print("[OK] Model saved successfully!")
 
 if __name__ == "__main__":
-    train_and_evaluate(
-        dataset_path="neernetra_hybrid_dataset.csv",
-        model_output_path="../backend/neernetra_model.pkl"
-    )
+    import shutil
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(base_dir, "neernetra_hybrid_dataset.csv")
+    backend_target = os.path.join(base_dir, "..", "backend", "neernetra_model.pkl")
+    local_target = os.path.join(base_dir, "neernetra_model_local.pkl")
+
+    train_and_evaluate(dataset_path=data_path, model_output_path=backend_target)
+    shutil.copy2(backend_target, local_target)
+    print(f"[OK] Synced model copy to {local_target}")

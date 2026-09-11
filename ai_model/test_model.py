@@ -1,13 +1,17 @@
-import os
+﻿import os
 import sys
 import numpy as np
 import pandas as pd
 import joblib
-import pytest
 from generate_data import generate_hybrid_dataset
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_MODEL_PATH = os.path.join(BASE_DIR, "neernetra_model_local.pkl")
+BACKEND_MODEL_PATH = os.path.join(BASE_DIR, "..", "backend", "neernetra_model.pkl")
+
 def test_generate_data_produces_10000_rows():
-    df = generate_hybrid_dataset(n_samples=10000, output_path="test_dataset.csv")
+    test_csv = os.path.join(BASE_DIR, "test_dataset.csv")
+    df = generate_hybrid_dataset(n_samples=10000, output_path=test_csv)
     assert len(df) == 10000
     expected_cols = [
         "rainfall_mm_hr", "soil_moisture_pct", "terrain_slope_deg",
@@ -16,17 +20,16 @@ def test_generate_data_produces_10000_rows():
     ]
     for col in expected_cols:
         assert col in df.columns
+    if os.path.exists(test_csv):
+        os.remove(test_csv)
 
 def test_model_loads_and_has_methods():
-    model = joblib.load("neernetra_model_local.pkl")
+    model = joblib.load(LOCAL_MODEL_PATH)
     assert hasattr(model, "predict")
     assert hasattr(model, "predict_proba")
 
 def test_input_validation():
-    # The model itself is a RandomForestClassifier from sklearn, 
-    # it does not natively throw errors on negative inputs unless it's designed to, 
-    # but let's test if it handles it without crashing.
-    model = joblib.load("neernetra_model_local.pkl")
+    model = joblib.load(LOCAL_MODEL_PATH)
     X = np.array([[-10.0, -5.0, -1.0, -2.0, 15.0]])
     pred = model.predict(X)
     assert len(pred) == 1
@@ -35,56 +38,49 @@ def test_input_validation():
     try:
         model.predict(X_nan)
     except Exception as e:
-        assert isinstance(e, ValueError) # sklearn RF raises ValueError on NaN
+        assert isinstance(e, ValueError)
 
 def test_predictions_deterministic():
-    model = joblib.load("neernetra_model_local.pkl")
+    model = joblib.load(LOCAL_MODEL_PATH)
     X = np.array([[50.0, 60.0, 30.0, 6.5, 3.0]])
     pred1 = model.predict_proba(X)
     pred2 = model.predict_proba(X)
     np.testing.assert_array_equal(pred1, pred2)
 
 def test_red_scenario():
-    model = joblib.load("neernetra_model_local.pkl")
-    # Extreme conditions
+    model = joblib.load(LOCAL_MODEL_PATH)
     X = np.array([[150.0, 95.0, 55.0, 11.0, 7.0]])
     prob = model.predict_proba(X)[0, 1]
-    # RED is prob >= 0.75
     assert prob >= 0.75
 
 def test_green_scenario():
-    model = joblib.load("neernetra_model_local.pkl")
-    # Very safe conditions
+    model = joblib.load(LOCAL_MODEL_PATH)
     X = np.array([[0.0, 10.0, 5.0, 1.0, 0.0]])
     prob = model.predict_proba(X)[0, 1]
-    # GREEN is prob < 0.35
     assert prob < 0.35
 
 def test_model_output_range():
-    model = joblib.load("neernetra_model_local.pkl")
+    model = joblib.load(LOCAL_MODEL_PATH)
     X = np.random.rand(100, 5) * 100
     probs = model.predict_proba(X)[:, 1]
     assert np.all(probs >= 0.0)
     assert np.all(probs <= 1.0)
 
 def test_model_copies_match():
-    local_size = os.path.getsize("neernetra_model_local.pkl")
-    backend_size = os.path.getsize(os.path.join("..", "backend", "neernetra_model.pkl"))
+    local_size = os.path.getsize(LOCAL_MODEL_PATH)
+    backend_size = os.path.getsize(BACKEND_MODEL_PATH)
     assert local_size == backend_size
 
 def test_edge_cases():
-    model = joblib.load("neernetra_model_local.pkl")
-    # All zeros
+    model = joblib.load(LOCAL_MODEL_PATH)
     X_zero = np.zeros((1, 5))
     prob_zero = model.predict_proba(X_zero)[0, 1]
     assert 0.0 <= prob_zero <= 1.0
     
-    # All max
     X_max = np.ones((1, 5)) * 9999.0
     prob_max = model.predict_proba(X_max)[0, 1]
     assert 0.0 <= prob_max <= 1.0
     
-    # Single extreme feature (seismic)
     X_seismic = np.array([[0.0, 10.0, 5.0, 1.0, 9.5]])
     prob_seis = model.predict_proba(X_seismic)[0, 1]
     assert 0.0 <= prob_seis <= 1.0
@@ -115,4 +111,4 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"  RESULTS: {passed}/{len(tests)} TESTS PASSED")
     print("=" * 60)
-
+    sys.exit(0 if passed == len(tests) else 1)

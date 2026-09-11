@@ -105,7 +105,10 @@ def generate_enhanced_dataset(n_samples=50000, seed=42, output_path="neernetra_h
     # Edge Case: False Positive handling (high seismic but flat terrain = no GLOF risk)
     slope_factor = np.where(slope >= 25.0, slope / 45.0, 0.0)
     
-    hydro_risk = (rainfall / 100.0) * (soil / 100.0) * (np.sin(np.radians(slope)) ** 0.8)
+    # Physics-Informed Hydrological Risk: Base infiltration limit + slope velocity multiplier
+    slope_velocity = np.sin(np.radians(np.clip(slope, 2.0, 75.0))) ** 0.6
+    runoff_potential = 0.30 + 0.70 * slope_velocity
+    hydro_risk = (rainfall / 75.0) * (soil / 100.0) * runoff_potential
     
     excess_river = np.maximum(0.0, (river - 6.0) / 4.0)
     river_risk = excess_river ** 1.3
@@ -114,13 +117,17 @@ def generate_enhanced_dataset(n_samples=50000, seed=42, output_path="neernetra_h
     glof_risk = excess_seismic * slope_factor
 
     # Feature interactions: high rain + high soil escalates quickly
-    saturation_multiplier = np.where((rainfall > 50) & (soil > 80), 1.5, 1.0)
+    saturation_multiplier = np.where((rainfall > 50) & (soil > 80), 1.4, 1.0)
     hydro_risk *= saturation_multiplier
 
-    raw_score = (0.40 * hydro_risk) + (0.35 * river_risk) + (0.45 * glof_risk)
+    # Compound Multi-Hazard Risk Formulation (FEMA / NDMA Standard)
+    # Catastrophic single hazard dominates (e.g. cloudburst, GLOF, or dam breach), while compound factors amplify
+    compound_max = np.maximum(np.maximum(hydro_risk, river_risk), glof_risk)
+    compound_mean = (hydro_risk + river_risk + glof_risk) / 3.0
+    raw_score = 0.70 * compound_max + 0.30 * compound_mean
     
     # Calibrate probability using sigmoid
-    probability = 1.0 / (1.0 + np.exp(-6.0 * (raw_score - 0.5)))
+    probability = 1.0 / (1.0 + np.exp(-7.5 * (raw_score - 0.40)))
     probability = np.clip(probability, 0.01, 0.99)
 
     is_flood = (probability >= 0.50).astype(int)
@@ -177,4 +184,6 @@ def generate_enhanced_dataset(n_samples=50000, seed=42, output_path="neernetra_h
     return df
 
 if __name__ == "__main__":
-    generate_enhanced_dataset()
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    out_file = os.path.join(base_dir, "neernetra_hybrid_dataset.csv")
+    generate_enhanced_dataset(output_path=out_file)
