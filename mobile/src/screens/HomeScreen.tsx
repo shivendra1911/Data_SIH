@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ZonePrediction, NetworkMode, LocationSyncPayload, SOSType, SOSPayload } from '../types';
 import { fetchCurrentPrediction, sendSOSPayload, flushOfflineSOSQueue } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
-import { meshManager, meshEngine } from '../services/bluetoothMesh';
+import { meshManager, meshEngine, bleEngine } from '../services/bluetoothMesh';
 import {
   start5MinPeriodicLocationTracker,
   getLastKnownLocation,
@@ -25,6 +25,7 @@ import {
   markUserAsSafeConfirmed,
   stopDangerTimer,
 } from '../services/dangerEscalation';
+import { startBLEAdvertising, stopBLEAdvertising } from '../services/bleAdvertiser';
 
 import { TopPillNav, CitizenTab } from '../components/TopPillNav';
 import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
@@ -73,8 +74,31 @@ export const HomeScreen: React.FC = () => {
       start5MinPeriodicLocationTracker(storedUuid, 'chamoli_01');
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
+
+      // ── Real BLE Mesh Initialisation ──────────────────────────────────────
+      // Init real BLE engine (requests permissions, starts scanning)
+      const bleOk = await bleEngine.init(storedUuid, 'Citizen');
+      if (bleOk) {
+        // Start advertising so other phones can find us
+        await startBLEAdvertising('NeerNetra_' + storedUuid.substring(4, 10));
+
+        // Live peer updates → refresh peer count
+        bleEngine.onPeersChanged = (peers) => {
+          setPeerCount(peers.length);
+        };
+
+        // SOS received from another mesh peer
+        bleEngine.onSOSReceived = (senderId, lat, lng) => {
+          console.warn(`[HomeScreen] SOS received via mesh from ${senderId} at ${lat},${lng}`);
+        };
+
+        // Network mode: if peers > 0 and no internet → BLE_MESH
+        bleEngine.onStateChange = (state) => {
+          if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
+        };
+      }
     } catch (e) {
-      console.warn('[HomeScreen] Device UUID init failed:', e);
+      console.warn('[HomeScreen] Device UUID / BLE init failed:', e);
     }
   };
 
@@ -111,7 +135,7 @@ export const HomeScreen: React.FC = () => {
   const checkOfflineQueue = async () => {
     const queue = await getOfflineSOSQueue();
     setQueuedCount(queue.length);
-    setPeerCount(meshManager.getActivePeersCount());
+    setPeerCount(meshEngine.getConnectedPeers().length);
     const cachedLoc = await getLastKnownLocation();
     setLastLocation(cachedLoc);
   };

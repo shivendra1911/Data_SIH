@@ -35,15 +35,26 @@ export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
   const [filter, setFilter] = useState<'ALL' | 'SOS'>('ALL');
 
   useEffect(() => {
-    // Initial load
+    // Initial load from BLE engine
     setPeers(meshEngine.getConnectedPeers());
 
-    // Refresh every 10 seconds to pick up new peers
+    // Hook into real BLE engine — fires immediately when a new phone is discovered
+    const prev = meshEngine.onPeersChanged;
+    meshEngine.onPeersChanged = (peers) => {
+      setPeers([...peers]);
+      if (prev) prev(peers);
+    };
+
+    // Fallback poll every 5 seconds in case callback wasn't fired
     const interval = setInterval(() => {
       setPeers(meshEngine.getConnectedPeers());
-    }, 10000);
+    }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Restore previous callback
+      meshEngine.onPeersChanged = prev;
+    };
   }, []);
 
   const filtered = peers.filter((p) => {

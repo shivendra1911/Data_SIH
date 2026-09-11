@@ -21,11 +21,17 @@ export const BluetoothWalkieTalkie: React.FC = () => {
 
   const peers = meshEngine.getConnectedPeers();
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputMsg.trim()) return;
-    const newMsg = meshEngine.sendMeshMessage('user_me', 'Priyanshu (You)', inputMsg);
-    setMessages(meshEngine.getMeshChatMessages());
+    const text = inputMsg;
     setInputMsg('');
+    try {
+      // Sends via real BLE to all connected peers
+      const newMsg = await meshEngine.sendChatMessage('You', text);
+      setMessages([...meshEngine.getMeshChatMessages()]);
+    } catch (e) {
+      Alert.alert('Send Failed', 'Could not send message via BLE mesh. Are you connected to any peers?');
+    }
   };
 
   const handleStartWalkieTalkie = (peer: MeshPeer) => {
