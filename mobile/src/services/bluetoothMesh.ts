@@ -69,6 +69,10 @@ class BluetoothMeshEngine {
     return [...this.activePeers];
   }
 
+  public getActivePeersCount(): number {
+    return this.activePeers.length;
+  }
+
   public getMeshChatMessages(): MeshChatMessage[] {
     return [...this.chatMessages];
   }
@@ -100,3 +104,4 @@ class BluetoothMeshEngine {
 }
 
 export const meshEngine = new BluetoothMeshEngine();
+export const meshManager = meshEngine;

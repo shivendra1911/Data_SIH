@@ -27,9 +27,8 @@ import {
 
 import { TopPillNav } from '../components/TopPillNav';
 import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
-import { MapSessionCard } from '../components/MapSessionCard';
-import { PeopleBeaconCard } from '../components/PeopleBeaconCard';
-import { DarkSessionDrawer } from '../components/DarkSessionDrawer';
+import { NearbyVictimsHelpCard, NearbyVictim } from '../components/NearbyVictimsHelpCard';
+import { MeshRelayFeed } from '../components/MeshRelayFeed';
 import { TriageModal } from '../components/TriageModal';
 import { MeshStatusBadge } from '../components/MeshStatusBadge';
 import { BluetoothWalkieTalkie } from '../components/BluetoothWalkieTalkie';
@@ -215,18 +214,18 @@ export const HomeScreen: React.FC = () => {
           />
         )}
 
-        {/* Tab 1: Telemetry & Overview */}
+        {/* Tab 1: Telemetry & Citizen Overview */}
         {activeTab === 'telemetry' && (
           <>
             <SecurityGaugeCard prediction={prediction} />
+            <NearbyVictimsHelpCard />
+            <BluetoothWalkieTalkie />
             <OfflineMapContainer
               lastLocation={lastLocation}
               peers={peers}
               isRedZone={prediction?.alert_color === 'RED'}
             />
-            <BluetoothWalkieTalkie />
-            <PeopleBeaconCard beacons={[]} />
-            <DarkSessionDrawer />
+            <MeshRelayFeed peers={peers} />
           </>
         )}
 
@@ -238,18 +237,18 @@ export const HomeScreen: React.FC = () => {
               networkMode={networkMode}
               onStatusSubmitted={() => checkOfflineQueue()}
             />
+            <NearbyVictimsHelpCard />
             <BluetoothWalkieTalkie />
             <OfflineMapContainer
               lastLocation={lastLocation}
               peers={peers}
               isRedZone={prediction?.alert_color === 'RED'}
             />
-            <PeopleBeaconCard beacons={[]} />
-            <DarkSessionDrawer />
+            <MeshRelayFeed peers={peers} />
           </>
         )}
 
-        {/* Tab 3: Live Map Focus */}
+        {/* Tab 3: Offline Map Focus */}
         {activeTab === 'map' && (
           <>
             <OfflineMapContainer
@@ -257,10 +256,10 @@ export const HomeScreen: React.FC = () => {
               peers={peers}
               isRedZone={prediction?.alert_color === 'RED'}
             />
-            <MapSessionCard />
+            <NearbyVictimsHelpCard />
             <BluetoothWalkieTalkie />
             <SecurityGaugeCard prediction={prediction} />
-            <DarkSessionDrawer />
+            <MeshRelayFeed peers={peers} />
           </>
         )}
       </ScrollView>

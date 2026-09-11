@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
   titleRow: {
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'center',
+    justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
     borderColor: '#34d399',
