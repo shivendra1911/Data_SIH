@@ -1,0 +1,17 @@
+{
+  "accuracy": 0.9995,
+  "roc_auc": 1.0,
+  "f1_score": 0.9993,
+  "precision_flood": 0.9989,
+  "recall_flood": 0.9997,
+  "cv_mean_accuracy": 0.9966,
+  "cv_std": 0.0006,
+  "confusion_matrix": {
+    "TN": 6328,
+    "FP": 4,
+    "FN": 1,
+    "TP": 3667
+  },
+  "brier_score": 0.0012,
+  "kappa": 0.9989
+}
