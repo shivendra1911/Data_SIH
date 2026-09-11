@@ -9,11 +9,12 @@ import {
   PhoneCall,
   ShieldAlert,
   AlertTriangle,
-  CheckCircle2,
-  HelpCircle,
+  ChevronDown,
+  ChevronUp,
   Footprints,
   Ban,
   Radio,
+  RadioTower,
 } from "lucide-react";
 
 interface AccessibleVoiceCardProps {
@@ -28,6 +29,7 @@ export default function AccessibleVoiceCard({
   language,
 }: AccessibleVoiceCardProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const t = translations[language];
 
   const handleSpeak = () => {
@@ -51,16 +53,16 @@ export default function AccessibleVoiceCard({
         0
       )} प्रतिशत है। खतरे का स्तर ${
         activeZone.alertColor === "RED" ? "अत्यधिक लाल" : "नारंगी"
-      } है। आपके पास सुरक्षित स्थान पर जाने के लिए ${hours} घंटे और ${mins} मिनट का समय है। कृपया नदी किनारे से तुरंत हटकर ऊंचे स्थानों पर पहुंचे। किसी भी पुल या रपटे को पार न करें।`;
+      } है। सुरक्षित निकासी के लिए लगभग ${hours} घंटे ${mins} मिनट का समय शेष है। कृपया नदी किनारे से तुरंत हटकर ऊंचे स्थानों पर पहुंचे।`;
     } else {
-      speechText = `Warning! Flash flood risk in ${activeZone.name} is ${riskPercent.toFixed(
+      speechText = `Warning! Flash flood and GLOF risk in ${activeZone.name} is ${riskPercent.toFixed(
         0
-      )} percent. Alert level is ${activeZone.alertColor}. You have approximately ${hours} hours and ${mins} minutes of safe evacuation window. Move to higher ground immediately and stay off river bridges.`;
+      )} percent. Alert level is ${activeZone.alertColor}. You have an estimated ${hours} hours and ${mins} minutes safe evacuation lead-time window. Move to higher ground immediately and stay clear of riverbanks.`;
     }
 
     const utterance = new SpeechSynthesisUtterance(speechText);
     utterance.lang = language === "hi" ? "hi-IN" : "en-IN";
-    utterance.rate = 0.95; // Slightly slower for crisp clarity
+    utterance.rate = 0.95;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -75,121 +77,126 @@ export default function AccessibleVoiceCard({
 
   return (
     <div
-      className={`rounded-2xl border p-4 sm:p-5 shadow-xl transition-all ${
+      className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-xl ${
         isRed
-          ? "bg-gradient-to-br from-rose-950/60 via-slate-950 to-slate-950 border-rose-500/50 shadow-rose-950/30"
+          ? "bg-slate-950/90 border-rose-500/40 shadow-rose-950/20"
           : isOrange
-          ? "bg-gradient-to-br from-amber-950/50 via-slate-950 to-slate-950 border-amber-500/50 shadow-amber-950/30"
-          : "bg-slate-950/80 border-slate-800"
+          ? "bg-slate-950/90 border-amber-500/40 shadow-amber-950/20"
+          : "bg-slate-950/90 border-slate-800"
       }`}
     >
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Left: Big Audio Read-Aloud Button for non-readers */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+      <div className="p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        {/* Left: Audio Broadcast Controller */}
+        <div className="flex items-center gap-3">
           <button
             onClick={handleSpeak}
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-sm sm:text-base transition min-h-[52px] shadow-lg ${
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition min-h-[44px] shadow-lg ${
               isSpeaking
-                ? "bg-amber-500 text-slate-950 animate-pulse ring-4 ring-amber-400/30"
+                ? "bg-amber-400 text-slate-950 ring-4 ring-amber-400/30 animate-pulse"
                 : isRed
-                ? "bg-rose-600 hover:bg-rose-500 text-white ring-4 ring-rose-500/20"
+                ? "bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-rose-900/50"
                 : "bg-sky-600 hover:bg-sky-500 text-white"
             }`}
           >
             {isSpeaking ? (
               <>
-                <VolumeX className="w-6 h-6 animate-spin" />
-                <span>{t.listening}</span>
+                <VolumeX className="w-4 h-4 animate-spin" />
+                <span>Broadcasting Audio Alert...</span>
               </>
             ) : (
               <>
-                <Volume2 className="w-6 h-6" />
-                <span>{t.listenAlert}</span>
+                <RadioTower className="w-4 h-4 animate-pulse" />
+                <span>Acoustic Siren & Audio Broadcast</span>
               </>
             )}
           </button>
 
-          <div>
+          <div className="hidden sm:block">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                {t.plainLanguageSummaryTitle}
+              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 font-bold">
+                Civil Defense Audio Alert
               </span>
             </div>
-            <p className="text-sm font-semibold text-white mt-0.5">
+            <p className="text-xs font-medium text-slate-200 line-clamp-1">
               {isRed
-                ? t.dangerNotice
+                ? "CRITICAL EVACUATION PROTOCOL: Low-lying riverbanks must evacuate uphill immediately."
                 : isOrange
-                ? t.warningNotice
-                : t.safeNotice}
+                ? "ELEVATED VIGILANCE: River levels accelerating towards warning marks."
+                : "BASELINE CONDITIONS: All hydrometric stations reporting normal river velocity."}
             </p>
           </div>
         </div>
 
-        {/* Right: One-Click Emergency Hotlines */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
-          <span className="text-xs text-slate-400 font-medium flex items-center gap-1 mr-1">
-            <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{t.emergencyHelplines}:</span>
-          </span>
-
+        {/* Right: Hotline Speed Dials & Checklist Toggle */}
+        <div className="flex flex-wrap items-center gap-2">
           <a
             href="tel:1078"
-            className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition min-h-[44px]"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold flex items-center gap-1.5 transition min-h-[38px]"
           >
-            <span>🚨 {t.ndrfHelpline}</span>
+            <span>NDRF 1078</span>
           </a>
 
           <a
             href="tel:1070"
-            className="px-3 py-1.5 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-500/40 text-sky-300 font-bold text-xs flex items-center gap-1.5 transition min-h-[44px]"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-sky-500/40 text-sky-300 font-mono text-xs font-bold flex items-center gap-1.5 transition min-h-[38px]"
           >
-            <span>🏛️ {t.sdmaHelpline}</span>
+            <span>SDMA 1070</span>
           </a>
 
           <a
             href="tel:108"
-            className="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center gap-1.5 transition min-h-[44px]"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-rose-500/40 text-rose-300 font-mono text-xs font-bold flex items-center gap-1.5 transition min-h-[38px]"
           >
-            <span>🚑 {t.ambulanceHelpline}</span>
+            <span>Ambulance 108</span>
           </a>
+
+          <button
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition min-h-[38px]"
+          >
+            <span>{isExpanded ? "Hide Actions" : "Ground Directives"}</span>
+            {isExpanded ? (
+              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            )}
+          </button>
         </div>
       </div>
 
-      {/* 3-Step Simple Action Cards for Ground Level Users */}
-      <div className="mt-4 pt-3.5 border-t border-slate-800/80">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 block">
-          {t.actionNowTitle}
-        </span>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-          <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Footprints className="w-4 h-4" />
+      {/* Collapsible Ground Directives */}
+      {isExpanded && (
+        <div className="p-3 sm:p-4 bg-slate-950/60 border-t border-slate-800/80">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Footprints className="w-4 h-4" />
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                {t.actions.moveHighGround}
+              </p>
             </div>
-            <p className="text-xs text-slate-200 leading-relaxed font-medium">
-              {t.actions.moveHighGround}
-            </p>
-          </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Ban className="w-4 h-4" />
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Ban className="w-4 h-4" />
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                {t.actions.avoidBridges}
+              </p>
             </div>
-            <p className="text-xs text-slate-200 leading-relaxed font-medium">
-              {t.actions.avoidBridges}
-            </p>
-          </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Radio className="w-4 h-4" />
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Radio className="w-4 h-4" />
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                {t.actions.keepPhoneCharged}
+              </p>
             </div>
-            <p className="text-xs text-slate-200 leading-relaxed font-medium">
-              {t.actions.keepPhoneCharged}
-            </p>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

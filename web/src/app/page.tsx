@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Dashboard/Header";
+import TelemetryStrip from "@/components/Dashboard/TelemetryStrip";
 import AccessibleVoiceCard from "@/components/Dashboard/AccessibleVoiceCard";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import CitizenSafetyHub from "@/components/Citizen/CitizenSafetyHub";
@@ -31,12 +32,10 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldCheck,
-  Sparkles,
-  Volume2,
-  VolumeX,
-  Users2,
-  Activity,
-  Compass,
+  Radio,
+  RadioTower,
+  Sliders,
+  LifeBuoy,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -53,8 +52,8 @@ export default function DashboardPage() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showRescueLayer, setShowRescueLayer] = useState<boolean>(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<"CITIZEN" | "COMMAND">("CITIZEN");
-  const [language, setLanguage] = useState<Language>("hi"); // Default to Hindi for rural accessibility!
+  const [viewMode, setViewMode] = useState<"COMMAND" | "CITIZEN">("COMMAND");
+  const [language, setLanguage] = useState<Language>("en"); // English is the professional default!
 
   const t = translations[language];
 
@@ -182,7 +181,7 @@ export default function DashboardPage() {
       lat: selectedZone.center[0] + latOffset,
       lng: selectedZone.center[1] + lngOffset,
       status: "SOS",
-      sos_type: language === "hi" ? "नदी का जलस्तर तेजी से बढ़ा" : "RIVER LEVEL RISING RAPIDLY",
+      sos_type: "RIVER LEVEL RISING RAPIDLY (INUNDATION SURGE)",
       is_mesh_relayed: isMesh,
       created_at: new Date().toISOString(),
     };
@@ -210,8 +209,8 @@ export default function DashboardPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090d16] text-slate-100">
-      {/* Top Command Header with Bilingual Switch & Android Bridge */}
+    <div className="min-h-screen flex flex-col bg-[#060811] text-slate-100 font-sans">
+      {/* 1. Tactical Command Header with View Mode Switcher */}
       <Header
         selectedZone={selectedZone}
         onSelectZone={handleSelectZone}
@@ -222,89 +221,38 @@ export default function DashboardPage() {
         floodRiskPercent={displayedRisk}
         language={language}
         onToggleLanguage={() => setLanguage((l) => (l === "en" ? "hi" : "en"))}
+        viewMode={viewMode}
+        onSelectViewMode={(mode) => setViewMode(mode)}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((prev) => !prev)}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 p-3 sm:p-4 lg:p-6 space-y-5 max-w-[1750px] mx-auto w-full">
-        {/* Giant Accessible Mode Switcher: Citizen View vs Command Center */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 border border-slate-800 p-2.5 rounded-2xl shadow-xl">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-xs sm:text-sm font-bold text-white">
-              {language === "hi"
-                ? "आप किस रूप में देखना चाहते हैं? (Select Mode):"
-                : "Choose Your Viewing Experience:"}
-            </span>
-          </div>
+      {/* 2. Executive Real-Time Telemetry Ribbon */}
+      <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => setViewMode("CITIZEN")}
-              className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition min-h-[46px] ${
-                viewMode === "CITIZEN"
-                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-950 ring-2 ring-emerald-400/40"
-                  : "bg-slate-900 text-slate-400 hover:text-white"
-              }`}
-            >
-              <Users2 className="w-4 h-4" />
-              <span>
-                {language === "hi"
-                  ? "👨‍👩‍👧‍👦 नागरिक सुरक्षा केंद्र (Citizen View)"
-                  : "👨‍👩‍👧‍👦 Citizen Safety Hub"}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setViewMode("COMMAND")}
-              className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition min-h-[46px] ${
-                viewMode === "COMMAND"
-                  ? "bg-sky-600 text-white shadow-lg shadow-sky-950 ring-2 ring-sky-400/40"
-                  : "bg-slate-900 text-slate-400 hover:text-white"
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>
-                {language === "hi"
-                  ? "🛰️ नियंत्रण कक्ष (Command Center)"
-                  : "🛰️ Command Center"}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* 1. CITIZEN VIEW: Plain Language, Bulletins, Relief Camps, Do's & Don'ts */}
-        {viewMode === "CITIZEN" && (
-          <div className="space-y-5">
-            <CitizenSafetyHub
-              activeZone={selectedZone}
-              riskPercent={displayedRisk}
-              language={language}
-              onSuccessSOS={handleAndroidSOSArrival}
-            />
-          </div>
-        )}
-
-        {/* 2. COMMAND CENTER VIEW: Detailed Maps, Hydrographs, Dam Controls, Sliders */}
+      {/* 3. Main Workspace */}
+      <main className="flex-1 p-3 sm:p-5 lg:p-6 space-y-5 max-w-[1750px] mx-auto w-full">
+        {/* VIEW 1: TACTICAL COMMAND CENTER (DEFAULT ELITE VIEW) */}
         {viewMode === "COMMAND" && (
           <div className="space-y-5">
-            {/* Accessible Voice Announcement & Plain Language Action Card */}
+            {/* Audio Broadcast & Civil Defense Siren Bar */}
             <AccessibleVoiceCard
               activeZone={selectedZone}
               riskPercent={displayedRisk}
               language={language}
             />
 
-            {/* Multi-Horizon Prediction Forecast Slider */}
+            {/* Multi-Horizon Scrubber */}
             <ForecastHorizonSlider
               currentHorizon={forecastHorizon}
               onSelectHorizon={(h) => setForecastHorizon(h)}
             />
 
-            {/* Primary Row 1: Tactical Inundation Map (8 cols) + AI Prediction & 5-Factor Sensors (4 cols) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-              {/* Tactical Inundation Map */}
+            {/* Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Tactical Geospatial Map */}
               <div className="lg:col-span-8 flex flex-col">
-                <div className="w-full h-[500px] lg:h-[550px]">
+                <div className="w-full h-[520px] lg:h-[560px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
                   <MapWrapper
                     center={mapCenter}
                     zoom={mapZoom}
@@ -318,7 +266,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* AI Prediction & 5-Factor Environmental Sensors */}
+              {/* AI Neural Predictive Engine */}
               <div className="lg:col-span-4 flex flex-col">
                 <PredictionPanel
                   prediction={
@@ -344,8 +292,8 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Primary Row 2: River Inundation Hydrograph (7 cols) + Pre-Disaster Preventive Directives (5 cols) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+            {/* Row 2: Inundation Hydrograph (7 cols) + Preventive Directives Matrix (5 cols) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               {/* Hydrograph & Lead Time Countdown */}
               <div className="lg:col-span-7">
                 <HydrographPanel activeZone={selectedZone} language={language} />
@@ -357,28 +305,28 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Secondary Collapsible Layer: Last-Mile Citizen Triage & Rescue Verification */}
-            <div className="border border-slate-800/80 rounded-2xl bg-slate-950/40 p-4 space-y-4">
+            {/* Row 3: Tactical Rescue Operations & Field Beacons (Collapsible) */}
+            <div className="border border-slate-800/80 rounded-2xl bg-slate-950/60 p-4 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <LifeBuoy className="w-4 h-4" />
+                  </div>
                   <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                      {t.citizenLayerTitle}
+                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                      Field Distress Beacons & Automated K-Means Rescue Triage
                     </h3>
-                    <p className="text-[11px] text-slate-400">
-                      {language === "hi"
-                        ? "नागरिक सुरक्षा जाल (ब्लूटूथ मेश व लाइव सुपबेस सत्यापन)"
-                        : "Citizen Safety Net (BLE Offline Mesh + Supabase Realtime Verification)"}
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Offline BLE Mesh Relays • Realtime Latency &lt;450ms • Connected Nodes: {sosEvents.length}
                     </p>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setShowRescueLayer((prev) => !prev)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-medium text-slate-300 border border-slate-800 flex items-center gap-1.5 min-h-[44px]"
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-850 text-xs font-mono font-semibold text-slate-300 border border-slate-800 flex items-center gap-2 transition min-h-[40px]"
                 >
-                  <span>{showRescueLayer ? t.hideCitizen : t.expandCitizen}</span>
+                  <span>{showRescueLayer ? "Collapse Triage" : "Expand Rescue Clusters"}</span>
                   {showRescueLayer ? (
                     <ChevronUp className="w-3.5 h-3.5" />
                   ) : (
@@ -388,7 +336,7 @@ export default function DashboardPage() {
               </div>
 
               {showRescueLayer && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
                   <div className="lg:col-span-6">
                     <ClusterTriagePanel
                       clusters={clusters}
@@ -409,6 +357,18 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* VIEW 2: PUBLIC SAFETY & CITIZEN GUIDANCE PORTAL */}
+        {viewMode === "CITIZEN" && (
+          <div className="space-y-5">
+            <CitizenSafetyHub
+              activeZone={selectedZone}
+              riskPercent={displayedRisk}
+              language={language}
+              onSuccessSOS={handleAndroidSOSArrival}
+            />
+          </div>
+        )}
       </main>
 
       {/* Mobile Pairing Modal */}
@@ -418,19 +378,17 @@ export default function DashboardPage() {
         onSimulateAndroidSOS={handleAndroidSOSArrival}
       />
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-slate-900 bg-slate-950/80 px-6 py-3 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <div>
-          NeerNetra PS: SIH26192 • Team NeerNetra (GLA University) • Himalayan Flash Flood Prediction & Mitigation System
+      {/* Command Footer */}
+      <footer className="mt-auto border-t border-slate-800/80 bg-slate-950 px-6 py-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="font-mono text-[11px] text-slate-400">
+          NEERNETRA • Smart India Hackathon PS: SIH26192 • Flash Flood & GLOF Early Warning System
         </div>
-        <div className="flex items-center gap-3 text-slate-400">
-          <span>{language === "hi" ? "आवाज द्वारा चेतावनी" : "Voice Alerts"}</span>
+        <div className="flex flex-wrap items-center gap-3 text-slate-400 font-mono text-[11px]">
+          <span className="text-emerald-400">● CWC Sensor API Online</span>
           <span>•</span>
-          <span>{language === "hi" ? "दैनिक आकाशवाणी बुलेटिन" : "Radio Bulletins"}</span>
+          <span className="text-sky-400">● Mobile Relay: 172.16.183.190:3000</span>
           <span>•</span>
-          <span>{language === "hi" ? "राहत शिविर निर्देशिका" : "Relief Camps"}</span>
-          <span>•</span>
-          <span>Android Bridge: http://172.16.183.190:3000</span>
+          <span>NDRF: 1078 / SDMA: 1070</span>
         </div>
       </footer>
     </div>
