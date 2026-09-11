@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Header from "@/components/Dashboard/Header";
 import TelemetryStrip from "@/components/Dashboard/TelemetryStrip";
 import AccessibleVoiceCard from "@/components/Dashboard/AccessibleVoiceCard";
@@ -13,6 +14,24 @@ import ForecastHorizonSlider from "@/components/Dashboard/ForecastHorizonSlider"
 import ClusterTriagePanel from "@/components/Dashboard/ClusterTriagePanel";
 import LiveSOSFeed from "@/components/Dashboard/LiveSOSFeed";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
+
+// Dynamically import Vectrus-style 500vh WebCodecs Scroll Video Hero with SSR disabled
+const ScrollVideoHero = dynamic(
+  () => import("@/components/CinematicHero/ScrollVideoHero"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-screen w-full bg-[#1D3045] flex items-center justify-center text-white font-mono">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+          <span className="text-xs uppercase tracking-widest text-cyan-200">
+            Initializing WebCodecs 60FPS Video Canvas...
+          </span>
+        </div>
+      </div>
+    ),
+  }
+);
 import {
   ForecastHorizon,
   HazardZone,
@@ -233,11 +252,20 @@ export default function DashboardPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#05070e] text-slate-100 font-sans hud-grid selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* 1. Tactical Command Header with HUD Telemetry Status */}
-      <Header
-        selectedZone={selectedZone}
-        onSelectZone={handleSelectZone}
+    <div className="min-h-screen flex flex-col bg-[#05070e] text-slate-100 font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* 0. Vectrus-Style 500vh WebCodecs Hardware-Accelerated Video Scrub Hero & Sequential Typography */}
+      <ScrollVideoHero
+        onEnterCommandCenter={() => {
+          document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" });
+        }}
+      />
+
+      {/* Primary Command Operations Center Anchor */}
+      <div id="command-center" className="min-h-screen flex flex-col bg-[#05070e] hud-grid relative">
+        {/* 1. Tactical Command Header with HUD Telemetry Status */}
+        <Header
+          selectedZone={selectedZone}
+          onSelectZone={handleSelectZone}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode((prev) => !prev)}
         onSimulateSOS={handleSimulateSOS}
@@ -389,6 +417,28 @@ export default function DashboardPage() {
         activeZone={selectedZone}
         riskPercent={displayedRisk}
       />
+
+      </div>
+
+      {/* Floating Tactical Quick-Switch Pill */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-slate-900/95 border border-slate-700/80 rounded-full p-1.5 shadow-2xl backdrop-blur-md">
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="px-4 py-2 rounded-full text-[11px] font-mono font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1.5 min-h-[44px]"
+          title="Scroll to Cinematic Overview"
+        >
+          <ChevronUp className="w-3.5 h-3.5" />
+          <span>Cinematic Overview</span>
+        </button>
+        <button
+          onClick={() => document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" })}
+          className="px-4 py-2 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[11px] font-mono font-bold uppercase transition flex items-center gap-1.5 min-h-[44px]"
+          title="Jump to Tactical Command Center"
+        >
+          <span>Command Center</span>
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* Command Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-950 px-6 py-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
