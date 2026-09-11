@@ -60,26 +60,35 @@ export const HomeScreen: React.FC = () => {
   const [userName] = useState<string>('Citizen');
 
   useEffect(() => {
-    initDeviceUuid();
-    loadPrediction();
-    checkOfflineQueue();
+    let isMounted = true;
+
+    initDeviceUuid().then((uuid) => {
+      if (isMounted) {
+        loadPrediction(uuid);
+        checkOfflineQueue();
+      }
+    });
 
     const unsubscribeNet = NetInfo.addEventListener(state => {
       const isConnected = !!(state.isConnected && state.isInternetReachable !== false);
       if (isConnected) {
         setNetworkMode('ONLINE');
-        flushOfflineSOSQueue().then(() => checkOfflineQueue()).catch(() => {});
+        flushOfflineSOSQueue().then(() => {
+          if (isMounted) checkOfflineQueue();
+        }).catch(() => {});
       } else {
         setNetworkMode('BLE_MESH');
       }
     });
 
     return () => {
+      isMounted = false;
       unsubscribeNet();
+      stopDangerTimer();
     };
   }, []);
 
-  const initDeviceUuid = async () => {
+  const initDeviceUuid = async (): Promise<string> => {
     try {
       let storedUuid = await AsyncStorage.getItem(DEVICE_UUID_KEY);
       if (!storedUuid) {
@@ -114,12 +123,15 @@ export const HomeScreen: React.FC = () => {
           if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
         };
       }
+      return storedUuid;
     } catch (e) {
       console.warn('[HomeScreen] Device UUID / BLE init failed:', e);
+      return deviceUuid;
     }
   };
 
-  const loadPrediction = async () => {
+  const loadPrediction = async (targetUuid?: string) => {
+    const activeUuid = targetUuid || deviceUuid;
     setLoading(true);
     try {
       const data = await fetchCurrentPrediction('chamoli_01');
@@ -131,7 +143,7 @@ export const HomeScreen: React.FC = () => {
         setShowRedAlertOverlay(true);
 
         startRedZoneDangerTimer(
-          deviceUuid,
+          activeUuid,
           300,
           (remSeconds) => setRemainingCountdown(remSeconds),
           () => {

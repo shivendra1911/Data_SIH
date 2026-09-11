@@ -17,12 +17,16 @@ const BASE_URL = getBaseUrl();
 
 export const fetchCurrentPrediction = async (zoneId: string = 'chamoli_01'): Promise<ZonePrediction> => {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
     const response = await fetch(`${BASE_URL}/api/prediction/current?zone_id=${encodeURIComponent(zoneId)}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
       },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       throw new Error(`HTTP Error ${response.status}`);
@@ -31,13 +35,13 @@ export const fetchCurrentPrediction = async (zoneId: string = 'chamoli_01'): Pro
     const data = await response.json();
     return data as ZonePrediction;
   } catch (error) {
-    console.warn('[API Service] Backend fetch failed, returning localized mock prediction:', error);
-    // Return fallback realistic payload if local backend server is starting up or unreachable
+    console.warn('[API Service] Backend fetch unreachable, maintaining offline safe baseline:', error);
+    // Return offline safe baseline (avoids false-alarm sirens when out of range)
     return {
       zone_id: zoneId,
-      flood_probability_percent: 82.4,
-      alert_color: 'RED',
-      primary_trigger: 'GLOF Glacial Outflow & Heavy Downpour',
+      flood_probability_percent: 0.0,
+      alert_color: 'SAFE',
+      primary_trigger: 'Offline Mesh Node (Awaiting Telemetry)',
       last_updated: new Date().toISOString(),
     };
   }
@@ -45,13 +49,17 @@ export const fetchCurrentPrediction = async (zoneId: string = 'chamoli_01'): Pro
 
 export const sendSOSPayload = async (payload: SOSPayload): Promise<{ success: boolean; message: string }> => {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
     const response = await fetch(`${BASE_URL}/api/sos/trigger`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       throw new Error(`Server returned status ${response.status}`);
@@ -67,36 +75,51 @@ export const sendSOSPayload = async (payload: SOSPayload): Promise<{ success: bo
   }
 };
 
+let isFlushingQueue = false;
+
 export const flushOfflineSOSQueue = async (): Promise<number> => {
-  const queue = await getOfflineSOSQueue();
-  if (queue.length === 0) return 0;
+  if (isFlushingQueue) return 0;
+  isFlushingQueue = true;
 
-  console.log(`[API Service] Attempting sync for ${queue.length} offline queued items...`);
-  let syncedCount = 0;
-  const remainingQueue: SOSPayload[] = [];
+  try {
+    const queue = await getOfflineSOSQueue();
+    if (queue.length === 0) return 0;
 
-  for (let i = 0; i < queue.length; i++) {
-    const item = queue[i];
-    try {
-      const res = await fetch(`${BASE_URL}/api/sos/trigger`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...item, is_mesh_relayed: true }),
-      });
-      if (res.ok) {
-        syncedCount++;
-      } else {
-        remainingQueue.push(item);
+    console.log(`[API Service] Attempting sync for ${queue.length} offline queued items...`);
+    let syncedCount = 0;
+    const syncedIndices = new Set<number>();
+
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(`${BASE_URL}/api/sos/trigger`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...item, is_mesh_relayed: true }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          syncedCount++;
+          syncedIndices.add(i);
+        }
+      } catch {
+        // Network drop: stop processing current batch
+        break;
       }
-    } catch {
-      // Network drop: keep current and remaining items in queue
-      remainingQueue.push(...queue.slice(i));
-      break;
     }
-  }
 
-  await setOfflineSOSQueue(remainingQueue);
-  return syncedCount;
+    // Read current queue again to avoid dropping items queued during async flush
+    const latestQueue = await getOfflineSOSQueue();
+    const remainingQueue = latestQueue.filter((_, idx) => !syncedIndices.has(idx));
+    await setOfflineSOSQueue(remainingQueue);
+
+    return syncedCount;
+  } finally {
+    isFlushingQueue = false;
+  }
 };
 
 export const registerPushTokenApi = async (

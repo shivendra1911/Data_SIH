@@ -86,7 +86,22 @@ interface ZonePredictionSummary {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+function projectGeoToRadar(lat: number, lng: number, centerLat: number = 30.5573, centerLng: number = 79.5642, zoomKm = 10) {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+    return { top: 50, left: 50 };
+  }
+  const dLatKm = (lat - centerLat) * 111.32;
+  const dLngKm = (lng - centerLng) * (111.32 * Math.cos((centerLat * Math.PI) / 180));
+  const left = 50 + (dLngKm / zoomKm) * 35;
+  const top = 50 - (dLatKm / zoomKm) * 35;
+  return {
+    top: Math.max(12, Math.min(88, top)),
+    left: Math.max(12, Math.min(88, left))
+  };
+}
+
 export default function GovernmentCommandPortal() {
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   const [selectedZone, setSelectedZone] = useState<string>('chamoli_01');
   const [allZones, setAllZones] = useState<ZonePredictionSummary[]>([]);
   const [currentPrediction, setCurrentPrediction] = useState<any>({
@@ -103,7 +118,7 @@ export default function GovernmentCommandPortal() {
       river_water_level_m: 8.4,
       terrain_slope_deg: 38.5,
     },
-    last_updated: new Date().toISOString()
+    last_updated: '2026-09-11T12:00:00.000Z'
   });
 
   const [liveDevices, setLiveDevices] = useState<CitizenLiveLocation[]>([]);
@@ -112,6 +127,7 @@ export default function GovernmentCommandPortal() {
   const [dispatches, setDispatches] = useState<RescueDispatch[]>([]);
   const [backendOnline, setBackendOnline] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
+  const [broadcastPending, setBroadcastPending] = useState<boolean>(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<CitizenLiveLocation | null>(null);
   const [filterZoneOnly, setFilterZoneOnly] = useState<boolean>(false);
@@ -120,29 +136,48 @@ export default function GovernmentCommandPortal() {
     ? liveDevices.filter(d => (d.zone_id || 'chamoli_01').toLowerCase() === selectedZone.toLowerCase())
     : liveDevices;
 
-  // Poll backend data with adaptive tab visibility (4s active, 12s hidden)
   useEffect(() => {
-    fetchAllData();
-    let intervalMs = 4000;
-    let timer = setInterval(fetchAllData, intervalMs);
+    setIsMounted(true);
+  }, []);
+
+  // Poll backend data with adaptive tab visibility and AbortController
+  useEffect(() => {
+    let active = true;
+    let timer: NodeJS.Timeout | null = null;
+    const controller = new AbortController();
+
+    const poll = async () => {
+      await fetchAllData(controller.signal);
+      if (active && !controller.signal.aborted) {
+        const intervalMs = document.hidden ? 12000 : 4000;
+        timer = setTimeout(poll, intervalMs);
+      }
+    };
+
+    poll();
 
     const handleVisibilityChange = () => {
-      clearInterval(timer);
-      intervalMs = document.hidden ? 12000 : 4000;
-      timer = setInterval(fetchAllData, intervalMs);
+      if (timer) clearTimeout(timer);
+      if (!document.hidden) {
+        poll(); // Immediate refresh upon returning to tab
+      } else {
+        timer = setTimeout(poll, 12000);
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      clearInterval(timer);
+      active = false;
+      controller.abort();
+      if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [selectedZone]);
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (signal?: AbortSignal) => {
     try {
       // 1. High-speed consolidated endpoint (fetches predictions, zones, radar, clusters, dispatches in 1 round-trip)
-      const overviewRes = await fetch(`${API_BASE}/api/dashboard/overview?zone_id=${encodeURIComponent(selectedZone)}`);
+      const overviewRes = await fetch(`${API_BASE}/api/dashboard/overview?zone_id=${encodeURIComponent(selectedZone)}`, { signal });
       if (overviewRes.ok) {
         const data = await overviewRes.json();
         if (data.selected_zone?.prediction) {
@@ -154,44 +189,24 @@ export default function GovernmentCommandPortal() {
             last_updated: data.timestamp
           });
         }
-        if (data.all_zones) setAllZones(data.all_zones);
-        if (data.live_devices) setLiveDevices(data.live_devices);
-        if (data.clusters) setClusters(data.clusters);
-        if (data.dispatches) setDispatches(data.dispatches);
+        if (Array.isArray(data.all_zones)) setAllZones(data.all_zones);
+        if (Array.isArray(data.live_devices)) setLiveDevices(data.live_devices);
+        if (Array.isArray(data.clusters)) setClusters(data.clusters);
+        if (Array.isArray(data.dispatches)) setDispatches(data.dispatches);
         setBackendOnline(true);
-        return;
       }
 
-      // Fallback: individual endpoints if running on older backend instance
-      const predRes = await fetch(`${API_BASE}/api/prediction/current?zone_id=${encodeURIComponent(selectedZone)}`);
-      if (predRes.ok) {
-        const predData = await predRes.json();
-        setCurrentPrediction(predData);
-        setBackendOnline(true);
+      // 2. Fetch live citizen distress beacons feed
+      const sosRes = await fetch(`${API_BASE}/api/sos/events`, { signal });
+      if (sosRes.ok) {
+        const sosData = await sosRes.json();
+        if (Array.isArray(sosData.events)) setSosEvents(sosData.events);
       }
-      const zonesRes = await fetch(`${API_BASE}/api/prediction/zones`);
-      if (zonesRes.ok) {
-        const zonesData = await zonesRes.json();
-        if (zonesData.zones) setAllZones(zonesData.zones);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.warn('[Command Portal] Backend offline or deferred:', err);
+        setBackendOnline(false);
       }
-      const locRes = await fetch(`${API_BASE}/api/location/live`);
-      if (locRes.ok) {
-        const locData = await locRes.json();
-        if (locData.devices) setLiveDevices(locData.devices);
-      }
-      const clusterRes = await fetch(`${API_BASE}/api/sos/clusters?zone_id=${encodeURIComponent(selectedZone)}`);
-      if (clusterRes.ok) {
-        const clusterData = await clusterRes.json();
-        if (clusterData.clusters) setClusters(clusterData.clusters);
-      }
-      const dispRes = await fetch(`${API_BASE}/api/rescue/dispatches`);
-      if (dispRes.ok) {
-        const dispData = await dispRes.json();
-        if (dispData.dispatches) setDispatches(dispData.dispatches);
-      }
-    } catch (err) {
-      console.warn('[Command Portal] Backend offline or deferred:', err);
-      setBackendOnline(false);
     }
   };
 
@@ -230,6 +245,8 @@ export default function GovernmentCommandPortal() {
 
   // Trigger emergency broadcast
   const handleTriggerBroadcast = async () => {
+    if (broadcastPending) return;
+    setBroadcastPending(true);
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/alert/broadcast?zone_id=${encodeURIComponent(selectedZone)}`, {
@@ -249,6 +266,7 @@ export default function GovernmentCommandPortal() {
       setTimeout(() => setActionNotice(null), 5000);
     } finally {
       setLoading(false);
+      setBroadcastPending(false);
     }
   };
 
@@ -365,15 +383,20 @@ export default function GovernmentCommandPortal() {
 
           {/* Emergency Broadcast Button */}
           <button
-            style={styles.broadcastBtn}
+            style={{
+              ...styles.broadcastBtn,
+              opacity: broadcastPending ? 0.6 : 1,
+              cursor: broadcastPending ? 'not-allowed' : 'pointer',
+            }}
             onClick={handleTriggerBroadcast}
+            disabled={broadcastPending}
             title="Broadcast emergency evacuation siren to all citizen phones in this zone"
           >
             <BellRing style={{ width: 16, height: 16, color: '#ffffff' }} />
-            <span>TRIGGER RED BROADCAST</span>
+            <span>{broadcastPending ? 'TRANSMITTING...' : 'TRIGGER RED BROADCAST'}</span>
           </button>
 
-          <button style={styles.refreshBtn} onClick={fetchAllData} title="Refresh live telemetry">
+          <button style={styles.refreshBtn} onClick={() => fetchAllData()} title="Refresh live telemetry">
             <RefreshCw style={{ width: 16, height: 16, color: '#94a3b8' }} />
           </button>
         </div>
@@ -550,7 +573,7 @@ export default function GovernmentCommandPortal() {
                 <div style={styles.coordBox}>
                   <span style={styles.coordLabel}>LAST KNOWN GPS COORDINATES:</span>
                   <span style={styles.coordVal}>
-                    {dev.lat.toFixed(4)}° N, {dev.lng.toFixed(4)}° E ({dev.altitude || 1450}m Elev)
+                    {(dev.lat != null ? Number(dev.lat).toFixed(4) : '30.5573')}° N, {(dev.lng != null ? Number(dev.lng).toFixed(4) : '79.5642')}° E ({dev.altitude || 1450}m Elev)
                   </span>
                 </div>
 
@@ -639,23 +662,19 @@ export default function GovernmentCommandPortal() {
               </div>
 
               {/* Citizen Pins on Map */}
-              {displayedDevices.map((dev, idx) => {
-                const centerLat = currentPrediction?.coordinates?.lat ?? 30.4167;
-                const centerLng = currentPrediction?.coordinates?.lng ?? 79.3167;
-                const deltaLat = dev.lat - centerLat;
-                const deltaLng = dev.lng - centerLng;
-                const normY = 50 - (deltaLat / 0.06) * 32;
-                const normX = 50 + (deltaLng / 0.06) * 32;
-                const topPercent = isNaN(normY) ? (25 + (idx * 12) % 55) : Math.max(12, Math.min(84, normY));
-                const leftPercent = isNaN(normX) ? (20 + (idx * 15) % 60) : Math.max(12, Math.min(84, normX));
+              {displayedDevices.map((dev) => {
+                const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
+                const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
+                const pos = projectGeoToRadar(dev.lat, dev.lng, centerLat, centerLng);
                 return (
                   <div
                     key={dev.device_uuid}
                     onClick={() => setSelectedDevice(dev)}
                     style={{
                       position: 'absolute',
-                      top: `${topPercent}%`,
-                      left: `${leftPercent}%`,
+                      top: `${pos.top}%`,
+                      left: `${pos.left}%`,
+                      transform: 'translate(-50%, -50%)',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -687,22 +706,17 @@ export default function GovernmentCommandPortal() {
               })}
 
               {/* Rescue Cluster Search Perimeters */}
-              {clusters.map((c, i) => {
-                const centerLat = currentPrediction?.coordinates?.lat ?? 30.4167;
-                const centerLng = currentPrediction?.coordinates?.lng ?? 79.3167;
-                const clusterDeltaLat = c.center_lat - centerLat;
-                const clusterDeltaLng = c.center_lng - centerLng;
-                const cNormY = 50 - (clusterDeltaLat / 0.06) * 32;
-                const cNormX = 50 + (clusterDeltaLng / 0.06) * 32;
-                const cTop = isNaN(cNormY) ? (i === 0 ? 42 : (30 + i * 22) % 70) : Math.max(15, Math.min(78, cNormY));
-                const cLeft = isNaN(cNormX) ? (i === 0 ? 38 : (25 + i * 25) % 70) : Math.max(15, Math.min(78, cNormX));
+              {clusters.map((c) => {
+                const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
+                const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
+                const pos = projectGeoToRadar(c.center_lat, c.center_lng, centerLat, centerLng);
                 return (
                   <div
                     key={c.cluster_id}
                     style={{
                       position: 'absolute',
-                      top: `${cTop}%`,
-                      left: `${cLeft}%`,
+                      top: `${pos.top}%`,
+                      left: `${pos.left}%`,
                       transform: 'translate(-50%, -50%)',
                       width: 140,
                       height: 140,
@@ -873,8 +887,8 @@ export default function GovernmentCommandPortal() {
             {clusters.map((c) => (
               <div key={c.cluster_id} style={styles.clusterCard}>
                 <div style={styles.clusterTop}>
-                  <span style={c.priority.includes('P1') ? styles.p1Badge : styles.p2Badge}>
-                    {c.priority}
+                  <span style={c.priority?.includes?.('P1') ? styles.p1Badge : styles.p2Badge}>
+                    {c.priority || 'P2'}
                   </span>
                   <span style={styles.peopleCount}>
                     {c.total_people} People Stranded
@@ -886,7 +900,7 @@ export default function GovernmentCommandPortal() {
                   Primary Need: <strong style={{ color: '#fde047' }}>{c.primary_need}</strong>
                 </p>
                 <p style={styles.clusterCoords}>
-                  Center GPS: {c.center_lat.toFixed(4)}° N, {c.center_lng.toFixed(4)}° E
+                  Center GPS: {(c.center_lat != null ? Number(c.center_lat).toFixed(4) : '30.5573')}° N, {(c.center_lng != null ? Number(c.center_lng).toFixed(4) : '79.5642')}° E
                 </p>
 
                 {/* Dispatch Tactical Squad Buttons */}

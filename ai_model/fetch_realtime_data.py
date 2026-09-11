@@ -66,9 +66,11 @@ def fetch_rainfall_open_meteo_fallback(lat, lng):
         }
         resp = requests.get(url, params=params, timeout=8)
         if resp.status_code == 200:
-            current = resp.json().get("current", {})
-            rain = float(current.get("precipitation", 0.0))
-            humidity = float(current.get("relative_humidity_2m", 50.0))
+            current = resp.json().get("current") or {}
+            raw_rain = current.get("precipitation")
+            rain = float(raw_rain) if raw_rain is not None else 0.0
+            raw_hum = current.get("relative_humidity_2m")
+            humidity = float(raw_hum) if raw_hum is not None else 50.0
             return round(rain, 2), round(humidity, 1)
     except Exception as e:
         print(f"  [WARN] Open-Meteo fallback failed: {e}")
@@ -96,9 +98,12 @@ def fetch_rainfall(lat, lng):
         resp = requests.get(url, params=params, headers=headers, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
-            values = data.get("data", {}).get("values", {})
-            rain = values.get("precipitationIntensity", 0.0)
-            humidity = values.get("humidity", 50.0)
+            data_obj = data.get("data") or {}
+            values = data_obj.get("values") or {}
+            raw_rain = values.get("precipitationIntensity")
+            rain = float(raw_rain) if raw_rain is not None else 0.0
+            raw_hum = values.get("humidity")
+            humidity = float(raw_hum) if raw_hum is not None else 50.0
             _rainfall_cache[coord_key] = (now, round(rain, 2), round(humidity, 1))
             return round(rain, 2), round(humidity, 1)
         else:
@@ -110,6 +115,12 @@ def fetch_rainfall(lat, lng):
     if f_rain is not None:
         _rainfall_cache[coord_key] = (now, f_rain, f_hum)
         return f_rain, f_hum
+
+    # Return stale cached value if both live APIs fail during severe storm
+    if coord_key in _rainfall_cache:
+        ts, s_rain, s_hum = _rainfall_cache[coord_key]
+        print(f"  [WARN] Using stale cached rainfall telemetry ({int(now - ts)}s old)")
+        return s_rain, s_hum
 
     return None, None
 
@@ -170,8 +181,17 @@ def estimate_slope_from_elevation(lat, lng, base_elev=None):
 
 
 def fetch_seismic(lat, lng, radius_km=200):
-    """Fetch recent seismic activity from USGS Earthquake API (free, no key)"""
+    """Fetch recent seismic activity from USGS Earthquake API (free, no key) with 24-hr filter and cache"""
+    coord_key = (round(lat, 2), round(lng, 2))
+    now = time.time()
+    if coord_key in _seismic_cache:
+        ts, mag = _seismic_cache[coord_key]
+        if now - ts < CACHE_TTL_SEISMIC:
+            return mag
+
     try:
+        from datetime import datetime, timezone, timedelta
+        start_window = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
         url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
         params = {
             "format": "geojson",
@@ -179,6 +199,7 @@ def fetch_seismic(lat, lng, radius_km=200):
             "longitude": lng,
             "maxradiuskm": radius_km,
             "minmagnitude": 0.5,
+            "starttime": start_window,
             "limit": 5,
             "orderby": "time"
         }
@@ -186,15 +207,19 @@ def fetch_seismic(lat, lng, radius_km=200):
         if resp.status_code == 200:
             data = resp.json()
             features = data.get("features", [])
+            peak_mag = 0.0
             if features:
-                # Return the highest magnitude in the recent window
-                mags = [f["properties"]["mag"] for f in features if f["properties"]["mag"]]
+                # Return the highest magnitude in the recent 24h window
+                mags = [float(f["properties"]["mag"]) for f in features if f.get("properties") and f["properties"].get("mag") is not None]
                 if mags:
-                    return round(max(mags), 2)
-            return 0.0  # No recent earthquakes = 0.0
+                    peak_mag = round(max(mags), 2)
+            _seismic_cache[coord_key] = (now, peak_mag)
+            return peak_mag
         return None
     except Exception as e:
         print(f"  [ERR] USGS failed: {e}")
+        if coord_key in _seismic_cache:
+            return _seismic_cache[coord_key][1]
         return None
 
 

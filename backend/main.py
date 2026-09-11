@@ -5,6 +5,7 @@ import uuid
 import json
 import warnings
 import joblib
+import threading
 import numpy as np
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -30,10 +31,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Concurrency Mutex Lock for In-Memory Database Access
+db_lock = threading.RLock()
 
 # Global In-Memory Data Stores & Model Handle
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "neernetra_model.pkl")
@@ -303,9 +307,9 @@ location_history_db: Dict[str, Dict[str, Any]] = {
 
 # --- Pydantic Schemas ---
 class SOSPayload(BaseModel):
-    device_uuid: str
-    lat: float
-    lng: float
+    device_uuid: str = Field(..., min_length=1, max_length=128)
+    lat: float = Field(..., ge=-90.0, le=90.0, description="WGS84 Latitude")
+    lng: float = Field(..., ge=-180.0, le=180.0, description="WGS84 Longitude")
     status: str = Field(..., description="Status Enum: 'SOS', 'SAFE', 'HELPING'")
     sos_type: Optional[str] = Field(default="GENERAL", description="Enum: 'TRAPPED', 'MEDICAL', 'EVACUATION', 'FOOD_WATER'")
     is_mesh_relayed: bool = False
@@ -314,9 +318,9 @@ class SOSPayload(BaseModel):
     zone_id: Optional[str] = None
 
 class LocationSyncPayload(BaseModel):
-    device_uuid: str
-    lat: float
-    lng: float
+    device_uuid: str = Field(..., min_length=1, max_length=128)
+    lat: float = Field(..., ge=-90.0, le=90.0, description="WGS84 Latitude")
+    lng: float = Field(..., ge=-180.0, le=180.0, description="WGS84 Longitude")
     altitude: Optional[float] = None
     accuracy: Optional[float] = None
     battery_level: Optional[float] = None
@@ -335,11 +339,11 @@ class SimulateScenarioPayload(BaseModel):
     scenario: str = Field(..., description="Enum: 'GLOF_CRITICAL', 'TORRENTIAL_CLOUDBURST', 'SEISMIC_SHOCK', 'NORMAL_BASELINE'")
 
 class SensorUpdatePayload(BaseModel):
-    zone_id: str
-    rainfall_mm: float
-    seismic_mag: float
-    soil_moisture: float
-    river_discharge_m3s: float
+    zone_id: str = Field(..., min_length=1, max_length=64)
+    rainfall_mm: float = Field(..., ge=0.0, le=1000.0)
+    seismic_mag: float = Field(..., ge=0.0, le=10.0)
+    soil_moisture: float = Field(..., ge=0.0, le=1.0)
+    river_discharge_m3s: float = Field(..., ge=0.0, le=50000.0)
 
 class PushTokenRegistration(BaseModel):
     device_uuid: str
@@ -391,13 +395,13 @@ def startup_services():
 def sync_to_firestore(collection_name: str, doc_id: str, data: Dict[str, Any]):
     """
     Safely writes documents to Google Cloud Firestore when enabled,
-    without crashing or blocking on error.
+    with structured logging on failure.
     """
     if firestore_db:
         try:
             firestore_db.collection(collection_name).document(str(doc_id)).set(data)
         except Exception as e:
-            pass  # Fallback to in-memory gracefully
+            print(f"[Firestore Sync Error] Write to {collection_name}/{doc_id} failed: {e}")
 
 def send_firebase_fcm_alert(
     zone_id: str,
@@ -409,7 +413,7 @@ def send_firebase_fcm_alert(
     """
     Broadcasts FCM push alerts to:
     1) Topic: zone_{zone_id}
-    2) All registered device FCM tokens for this zone
+    2) All registered device FCM tokens for this zone (in batches <= 500)
     """
     clean_zone = zone_id.lower()
 
@@ -457,22 +461,27 @@ def send_firebase_fcm_alert(
         except Exception as topic_err:
             summary["errors"].append(f"Topic broadcast error: {str(topic_err)}")
 
-        # 2. Multicast to registered devices in this zone
+        # 2. Multicast to registered devices in this zone (thread-safe snapshot & batching <= 500)
+        with db_lock:
+            tokens_snapshot = list(registered_push_tokens.values())
+
         target_tokens = [
-            info["fcm_token"] for info in registered_push_tokens.values()
+            info["fcm_token"] for info in tokens_snapshot
             if info.get("zone_id", "").lower() == clean_zone and info.get("fcm_token")
         ]
 
         if target_tokens:
             try:
-                multicast_msg = messaging.MulticastMessage(
-                    notification=messaging.Notification(title=title, body=body),
-                    data=data_payload or {},
-                    tokens=target_tokens
-                )
-                res = messaging.send_each_for_multicast(multicast_msg, dry_run=dry_run)
-                summary["multicast_success_count"] = res.success_count
-                summary["multicast_failure_count"] = res.failure_count
+                for i in range(0, len(target_tokens), 500):
+                    batch = target_tokens[i:i + 500]
+                    multicast_msg = messaging.MulticastMessage(
+                        notification=messaging.Notification(title=title, body=body),
+                        data=data_payload or {},
+                        tokens=batch
+                    )
+                    res = messaging.send_each_for_multicast(multicast_msg, dry_run=dry_run)
+                    summary["multicast_success_count"] += res.success_count
+                    summary["multicast_failure_count"] += res.failure_count
             except Exception as multi_err:
                 summary["errors"].append(f"Multicast error: {str(multi_err)}")
 
@@ -664,39 +673,23 @@ def get_all_sos_events():
 def get_sos_clusters(zone_id: str = "chamoli_01"):
     """
     Groups active SOS events into high-priority rescue zones for NDRF triage.
+    Filters by zone_id so distinct valley sectors are not merged.
     """
-    active_sos = [e for e in list(sos_events_db) if e.get('status') == 'SOS']
+    clean_zone = zone_id.lower()
+    with db_lock:
+        active_sos = [
+            e for e in list(sos_events_db)
+            if e.get('status') == 'SOS' and e.get('zone_id', 'chamoli_01').lower() == clean_zone
+        ]
+        dispatched_ids = {d["cluster_id"] for d in list(dispatched_rescues_db)}
 
     if not active_sos:
         return {
             "zone_id": zone_id,
-            "total_clusters": 2,
-            "clusters": [
-                {
-                    "cluster_id": 1,
-                    "center_lat": 30.5573,
-                    "center_lng": 79.5642,
-                    "total_people": 47,
-                    "priority": "P1-CRITICAL",
-                    "primary_need": "TRAPPED under debris",
-                    "status": "PENDING_DISPATCH",
-                    "sector": "Sector 1 Riverbank Collapse"
-                },
-                {
-                    "cluster_id": 2,
-                    "center_lat": 30.5810,
-                    "center_lng": 79.5230,
-                    "total_people": 18,
-                    "priority": "P2-HIGH",
-                    "primary_need": "EVACUATION",
-                    "status": "PENDING_DISPATCH",
-                    "sector": "Joshimath Highway Evacuation"
-                }
-            ]
+            "total_clusters": 0,
+            "clusters": []
         }
 
-    dispatched_ids = {d["cluster_id"] for d in dispatched_rescues_db}
-    
     # Spatial proximity grouping into distinct rescue clusters (~0.05 deg ~ 5.5km)
     grouped: List[List[Dict[str, Any]]] = []
     for event in active_sos:
@@ -776,31 +769,38 @@ def get_all_dispatches():
 def sync_device_location(payload: LocationSyncPayload, background_tasks: BackgroundTasks):
     """
     Ingests 5-minute periodic location telemetry from mobile clients.
-    Persists last known location for rescue tracking.
+    Persists last known location for rescue tracking with SOS state preservation.
     """
-    curr_status = location_history_db.get(payload.device_uuid, {}).get("status", "ACTIVE")
-    resolved_zone = payload.zone_id.lower() if payload.zone_id else find_nearest_zone(payload.lat, payload.lng)
+    with db_lock:
+        existing = location_history_db.get(payload.device_uuid)
+        if existing and existing.get("status") == "SOS":
+            curr_status = "SOS"
+        else:
+            curr_status = existing.get("status", "ACTIVE") if existing else "ACTIVE"
 
-    location_entry = {
-        "device_uuid": payload.device_uuid,
-        "lat": payload.lat,
-        "lng": payload.lng,
-        "altitude": payload.altitude or 1450,
-        "accuracy": payload.accuracy or 5.0,
-        "battery_level": payload.battery_level or 85,
-        "last_synced_at": payload.last_synced_at,
-        "zone_id": resolved_zone,
-        "status": curr_status,
-        "server_received_at": datetime.now(timezone.utc).isoformat()
-    }
-    location_history_db[payload.device_uuid] = location_entry
+        resolved_zone = payload.zone_id.lower() if payload.zone_id else find_nearest_zone(payload.lat, payload.lng)
+
+        location_entry = {
+            "device_uuid": payload.device_uuid,
+            "lat": payload.lat,
+            "lng": payload.lng,
+            "altitude": payload.altitude or 1450,
+            "accuracy": payload.accuracy or 5.0,
+            "battery_level": payload.battery_level or 85,
+            "last_synced_at": payload.last_synced_at,
+            "zone_id": resolved_zone,
+            "status": curr_status,
+            "server_received_at": datetime.now(timezone.utc).isoformat()
+        }
+        location_history_db[payload.device_uuid] = location_entry
+        total_devs = len(location_history_db)
     background_tasks.add_task(sync_to_firestore, "citizen_locations", payload.device_uuid, location_entry)
     print(f"[Location Sync] 5-Min GPS update from {payload.device_uuid[:8]}: ({payload.lat}, {payload.lng})")
     return {
         "success": True,
         "device_uuid": payload.device_uuid,
         "synced_at": payload.last_synced_at,
-        "total_active_devices": len(location_history_db)
+        "total_active_devices": total_devs
     }
 
 @app.get("/api/location/live")
@@ -840,12 +840,15 @@ def broadcast_red_zone_alert(zone_id: str = "chamoli_01"):
     Triggers emergency RED ALERT evacuation broadcast to all devices in the affected zone.
     """
     zone_key = zone_id.lower()
-    sensors = zone_sensor_state.get(zone_key, zone_sensor_state["chamoli_01"])
+    if zone_key not in zone_sensor_state:
+        raise HTTPException(status_code=404, detail=f"Zone '{zone_id}' not found")
+    sensors = zone_sensor_state[zone_key]
     sensors["rainfall_mm"] = 280.0
     sensors["rainfall_mm_hr"] = 280.0
     sensors["seismic_mag"] = 5.8
     sensors["seismic_magnitude"] = 5.8
     sensors["river_discharge_m3s"] = 2250.0
+    sensors["river_water_level_m"] = 9.8
 
     broadcast_entry = {
         "broadcast_id": f"bcast_{uuid.uuid4().hex[:8]}",
@@ -991,6 +994,9 @@ def update_sensor_telemetry(payload: SensorUpdatePayload):
     if zone_key not in zone_sensor_state:
         zone_sensor_state[zone_key] = {"zone_name": payload.zone_id}
 
+    discharge = max(10.0, float(payload.river_discharge_m3s))
+    river_stage = round(min(15.0, 0.42 * (discharge ** 0.41)), 2)
+
     zone_sensor_state[zone_key].update({
         "rainfall_mm": payload.rainfall_mm,
         "rainfall_mm_hr": payload.rainfall_mm,
@@ -998,7 +1004,8 @@ def update_sensor_telemetry(payload: SensorUpdatePayload):
         "seismic_magnitude": payload.seismic_mag,
         "soil_moisture": payload.soil_moisture,
         "soil_moisture_pct": payload.soil_moisture * 100.0 if payload.soil_moisture <= 1.0 else payload.soil_moisture,
-        "river_discharge_m3s": payload.river_discharge_m3s
+        "river_discharge_m3s": payload.river_discharge_m3s,
+        "river_water_level_m": river_stage
     })
 
     inference = run_zone_inference(zone_key, zone_sensor_state[zone_key])

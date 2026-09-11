@@ -36,8 +36,8 @@ export enum BLEMsgType {
 }
 
 // ─── Packet Encoder/Decoder ──────────────────────────────────────────────────
-function encodePacket(type: BLEMsgType, senderId: string, payload: string, ttl: number = 7): string {
-  const msgId = Math.random().toString(36).substring(2, 18).padEnd(16, '0');
+function encodePacket(type: BLEMsgType, senderId: string, payload: string, ttl: number = 7, existingMsgId?: string): string {
+  const msgId = existingMsgId || Math.random().toString(36).substring(2, 18).padEnd(16, '0');
   const senderPad = senderId.substring(0, 16).padEnd(16, '0');
   const header = `${String.fromCharCode(type)}${msgId}${senderPad}${String.fromCharCode(ttl)}`;
   const raw = header + payload;
@@ -204,7 +204,11 @@ class NeerNetraBLEMesh {
       }
     );
 
-    // Restart scan every 30 seconds to find new peers
+    // Restart scan every 30 seconds to find new peers (clearing prior interval to avoid leaks)
+    if (this.scanTimer) {
+      clearInterval(this.scanTimer);
+      this.scanTimer = null;
+    }
     this.scanTimer = setInterval(() => {
       this.manager?.stopDeviceScan();
       this.isScanning = false;
@@ -297,9 +301,9 @@ class NeerNetraBLEMesh {
   }
 
   // ── Send a packet to a single connected peer ───────────────────────────────
-  private async sendToPeer(device: Device, type: BLEMsgType, payload: string, ttl: number = 7) {
+  private async sendToPeer(device: Device, type: BLEMsgType, payload: string, ttl: number = 7, existingMsgId?: string) {
     try {
-      const packet = encodePacket(type, this.myDeviceId, payload, ttl);
+      const packet = encodePacket(type, this.myDeviceId, payload, ttl, existingMsgId);
       await device.writeCharacteristicWithoutResponseForService(
         NEERNETRA_SERVICE_UUID,
         WRITE_CHAR_UUID,
@@ -311,10 +315,10 @@ class NeerNetraBLEMesh {
   }
 
   // ── Broadcast a packet to ALL connected peers (mesh flood) ─────────────────
-  private async broadcastToAll(type: BLEMsgType, payload: string, ttl: number = 7) {
-    const packet = encodePacket(type, this.myDeviceId, payload, ttl);
+  private async broadcastToAll(type: BLEMsgType, payload: string, ttl: number = 7, existingMsgId?: string) {
+    const packet = encodePacket(type, this.myDeviceId, payload, ttl, existingMsgId);
     const promises = Array.from(this.connectedDevices.values()).map((d) =>
-      this.sendToPeer(d, type, payload, ttl)
+      this.sendToPeer(d, type, payload, ttl, existingMsgId)
     );
     notifyAllCentrals(packet).catch(() => {});
     await Promise.allSettled(promises);
@@ -355,16 +359,16 @@ class NeerNetraBLEMesh {
         break;
 
       case BLEMsgType.RELAY:
-        // Relay to others if TTL allows
+        // Relay to others if TTL allows (preserving original msgId to prevent broadcast storms)
         if (packet.ttl > 1) {
-          this.broadcastToAll(BLEMsgType.RELAY, packet.payload, packet.ttl - 1);
+          this.broadcastToAll(BLEMsgType.RELAY, packet.payload, packet.ttl - 1, packet.msgId);
         }
         break;
     }
 
-    // Multi-hop relay: re-broadcast with decremented TTL
+    // Multi-hop relay: re-broadcast with decremented TTL and preserved msgId
     if (packet.ttl > 1 && packet.type !== BLEMsgType.ACK) {
-      this.broadcastToAll(packet.type, packet.payload, packet.ttl - 1).then(() => {
+      this.broadcastToAll(packet.type, packet.payload, packet.ttl - 1, packet.msgId).then(() => {
         // Update relay count for the forwarding peer
         const peer = this.activePeers.get(fromDeviceId);
         if (peer) {

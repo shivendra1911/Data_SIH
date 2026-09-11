@@ -28,70 +28,119 @@ FEATURE_NAMES = [
     "seismic_magnitude"
 ]
 
-_cached_model = None
+_models = {}
 
 def get_model(model_path=None):
-    global _cached_model
-    if _cached_model is not None:
-        return _cached_model
-
     candidates = [model_path, BACKEND_MODEL_PATH, DEFAULT_MODEL_PATH]
     for p in candidates:
         if p and os.path.exists(p):
-            try:
-                _cached_model = joblib.load(p)
-                return _cached_model
-            except Exception as e:
-                print(f"[InferenceEngine] Warning: Could not load {p}: {e}")
+            abs_p = os.path.abspath(p)
+            if abs_p not in _models:
+                try:
+                    _models[abs_p] = joblib.load(abs_p)
+                except Exception as e:
+                    print(f"[InferenceEngine] Warning: Could not load {p}: {e}")
+                    continue
+            return _models[abs_p]
 
     raise FileNotFoundError("Could not find a valid neernetra_model.pkl file.")
 
 
+def _safe_float(val, default: float, min_val: float = None, max_val: float = None) -> float:
+    if val is None:
+        return default
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        if min_val is not None:
+            f = max(min_val, f)
+        if max_val is not None:
+            f = min(max_val, f)
+        return f
+    except (ValueError, TypeError):
+        return default
+
+
 def normalize_input(data):
     """
-    Normalizes any format (dict, list, tuple, np.ndarray) into a standardized 
-    5-factor pandas DataFrame with proper units.
+    Normalizes any format (dict, list, tuple, np.ndarray, DataFrame) into a standardized 
+    5-factor pandas DataFrame with proper units and bounded physical values.
     """
+    if isinstance(data, pd.DataFrame):
+        df = data[FEATURE_NAMES].copy()
+        df.fillna({"rainfall_mm_hr": 0.0, "soil_moisture_pct": 50.0, "terrain_slope_deg": 25.0, "river_water_level_m": 2.5, "seismic_magnitude": 0.0}, inplace=True)
+        return df
+
+    if isinstance(data, pd.Series):
+        d = data.to_dict()
+        return normalize_input(d)
+
     if isinstance(data, dict):
-        # 1. Rainfall (mm/hr)
-        rain = data.get("rainfall_mm_hr", data.get("rainfall_mm", data.get("rain", 0.0)))
-        
-        # 2. Soil Moisture (%) - Handle fractions (0.0 - 1.0) vs percentages (0 - 100)
-        soil = data.get("soil_moisture_pct", data.get("soil_moisture", data.get("soil", 50.0)))
-        if soil <= 1.0 and soil > 0.0:
-            soil = soil * 100.0
+        # 1. Rainfall (mm/hr): bounded 0 to 500
+        raw_rain = None
+        for k in ["rainfall_mm_hr", "rainfall_mm", "rain"]:
+            if k in data and data[k] is not None:
+                raw_rain = data[k]
+                break
+        rain = _safe_float(raw_rain, 0.0, min_val=0.0, max_val=500.0)
 
-        # 3. Terrain Slope (degrees)
-        slope = data.get("terrain_slope_deg", data.get("slope_angle_deg", data.get("slope", 25.0)))
-
-        # 4. River Water Level (meters) - Handle river discharge (m3/s) conversion if given
-        if "river_water_level_m" in data:
-            river = data["river_water_level_m"]
-        elif "river_discharge_m3s" in data:
-            # Empirical Himalayan river stage rating curve: Level ~ (Discharge / 150)^0.45
-            discharge = max(10.0, data["river_discharge_m3s"])
-            river = min(15.0, (discharge / 120.0) ** 0.48)
+        # 2. Soil Moisture (%): handle fractions (0.0 - 1.0) vs percentages (0 - 100)
+        if "soil_moisture_pct" in data and data["soil_moisture_pct"] is not None:
+            soil = _safe_float(data["soil_moisture_pct"], 50.0, min_val=0.0, max_val=100.0)
+        elif "soil_moisture" in data and data["soil_moisture"] is not None:
+            raw_soil = _safe_float(data["soil_moisture"], 0.5)
+            soil = raw_soil * 100.0 if raw_soil <= 1.0 and raw_soil > 0.0 else raw_soil
+            soil = max(0.0, min(100.0, soil))
         else:
-            river = data.get("river_level", data.get("river", 2.5))
+            soil = _safe_float(data.get("soil"), 50.0, min_val=0.0, max_val=100.0)
 
-        # 5. Seismic Magnitude (Richter)
-        seismic = data.get("seismic_magnitude", data.get("seismic_mag", data.get("seismic", 0.0)))
+        # 3. Terrain Slope (degrees): bounded 0 to 90
+        raw_slope = None
+        for k in ["terrain_slope_deg", "slope_angle_deg", "slope"]:
+            if k in data and data[k] is not None:
+                raw_slope = data[k]
+                break
+        slope = _safe_float(raw_slope, 25.0, min_val=0.0, max_val=90.0)
 
-        row = [float(rain), float(soil), float(slope), float(river), float(seismic)]
+        # 4. River Water Level (meters): Calibrated Himalayan stage curve ~ 0.42 * (discharge ** 0.41)
+        if "river_water_level_m" in data and data["river_water_level_m"] is not None:
+            river = _safe_float(data["river_water_level_m"], 2.5, min_val=0.1, max_val=25.0)
+        elif "river_discharge_m3s" in data and data["river_discharge_m3s"] is not None:
+            discharge = max(10.0, _safe_float(data["river_discharge_m3s"], 150.0))
+            river = round(min(15.0, 0.42 * (discharge ** 0.41)), 2)
+        else:
+            river = _safe_float(data.get("river_level", data.get("river")), 2.5, min_val=0.1, max_val=25.0)
+
+        # 5. Seismic Magnitude (Richter): bounded 0 to 10.0
+        raw_seismic = None
+        for k in ["seismic_magnitude", "seismic_mag", "seismic"]:
+            if k in data and data[k] is not None:
+                raw_seismic = data[k]
+                break
+        seismic = _safe_float(raw_seismic, 0.0, min_val=0.0, max_val=10.0)
+
+        row = [rain, soil, slope, river, seismic]
 
     elif isinstance(data, (list, tuple, np.ndarray)):
-        arr = list(data)
+        arr = np.array(data).flatten().tolist()
         if len(arr) != 5:
             raise ValueError(f"Expected 5 features, got {len(arr)}")
-        
-        rain, soil, slope, river, seismic = [float(x) for x in arr]
-        if soil <= 1.0 and soil > 0.0:
+
+        rain = _safe_float(arr[0], 0.0, 0.0, 500.0)
+        soil = _safe_float(arr[1], 50.0, 0.0, 100.0)
+        if 0.0 < soil <= 1.0:
             soil = soil * 100.0
+        slope = _safe_float(arr[2], 25.0, 0.0, 90.0)
+        river = _safe_float(arr[3], 2.5, 0.1, 25.0)
+        seismic = _safe_float(arr[4], 0.0, 0.0, 10.0)
         row = [rain, soil, slope, river, seismic]
     else:
         raise TypeError(f"Unsupported data type: {type(data)}")
 
-    return pd.DataFrame([row], columns=FEATURE_NAMES)
+    df = pd.DataFrame([row], columns=FEATURE_NAMES)
+    df.fillna({"rainfall_mm_hr": 0.0, "soil_moisture_pct": 50.0, "terrain_slope_deg": 25.0, "river_water_level_m": 2.5, "seismic_magnitude": 0.0}, inplace=True)
+    return df
 
 
 def predict_flood_risk(sensor_data, model_path=None):

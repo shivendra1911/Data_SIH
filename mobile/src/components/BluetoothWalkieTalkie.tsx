@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,15 @@ export const BluetoothWalkieTalkie: React.FC = () => {
   const [inputMsg, setInputMsg] = useState<string>('');
   const [isCalling, setIsCalling] = useState<boolean>(false);
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    meshEngine.onMessageReceived = () => {
+      setMessages([...meshEngine.getMeshChatMessages()]);
+    };
+    return () => {
+      meshEngine.onMessageReceived = undefined;
+    };
+  }, []);
 
   const peers = meshEngine.getConnectedPeers();
 
