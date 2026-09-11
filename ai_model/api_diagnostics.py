@@ -7,7 +7,7 @@ apis = [
     ("Open-Elevation", "https://api.open-elevation.com/api/v1/lookup?locations=30.5573,79.5642"),
     ("USGS Earthquake", "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=30.4167&longitude=79.3167&maxradiuskm=200"),
     ("NASA POWER Climate", "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=PRECTOTCORR&community=AG&longitude=79.3167&latitude=30.4167&start=20240901&end=20240905&format=JSON"),
-    ("OSM Overpass Shelters", "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%3Bnode%28around%3A10000%2C30.4167%2C79.3167%29%5B%22amenity%22%3D%22hospital%22%5D%3Bout%3B")
+    ("OSM Shelters & POI", "https://nominatim.openstreetmap.org/search?q=hospital+chamoli+uttarakhand&format=json&limit=3")
 ]
 
 print("=" * 80)
@@ -18,7 +18,7 @@ results = []
 for name, url in apis:
     t0 = time.time()
     try:
-        headers = {"User-Agent": "NeerNetraDisasterSystem/1.0 (contact: student-sih@example.org)"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NeerNetraDisasterPortal/1.0"}
         r = requests.get(url, headers=headers, timeout=15)
         latency = int((time.time() - t0) * 1000)
         status = r.status_code

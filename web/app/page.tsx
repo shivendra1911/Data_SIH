@@ -114,6 +114,11 @@ export default function GovernmentCommandPortal() {
   const [loading, setLoading] = useState<boolean>(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<CitizenLiveLocation | null>(null);
+  const [filterZoneOnly, setFilterZoneOnly] = useState<boolean>(false);
+
+  const displayedDevices = filterZoneOnly
+    ? liveDevices.filter(d => (d.zone_id || 'chamoli_01').toLowerCase() === selectedZone.toLowerCase())
+    : liveDevices;
 
   // Poll backend data every 4 seconds
   useEffect(() => {
@@ -202,6 +207,10 @@ export default function GovernmentCommandPortal() {
         setActionNotice(`✅ ${squadType} Squad successfully dispatched to Cluster #${clusterId}!`);
         setTimeout(() => setActionNotice(null), 5000);
         fetchAllData();
+      } else {
+        const errData = await res.text();
+        setActionNotice(`❌ Dispatch failed (HTTP ${res.status}): ${errData.slice(0, 120)}`);
+        setTimeout(() => setActionNotice(null), 5000);
       }
     } catch (err) {
       setActionNotice(`❌ Dispatch failed: ${err}`);
@@ -222,6 +231,10 @@ export default function GovernmentCommandPortal() {
         setActionNotice(`🚨 EMERGENCY RED ALERT BROADCAST DISPATCHED TO ALL PHONES IN ${selectedZone.toUpperCase()}!`);
         setTimeout(() => setActionNotice(null), 6000);
         fetchAllData();
+      } else {
+        const errData = await res.text();
+        setActionNotice(`❌ Broadcast failed (HTTP ${res.status}): ${errData.slice(0, 120)}`);
+        setTimeout(() => setActionNotice(null), 5000);
       }
     } catch (err) {
       setActionNotice(`❌ Broadcast dispatch failed: ${err}`);
@@ -247,9 +260,15 @@ export default function GovernmentCommandPortal() {
         setActionNotice(`⚡ Scenario applied: [${scenario}]. Live models re-evaluated.`);
         setTimeout(() => setActionNotice(null), 4000);
         fetchAllData();
+      } else {
+        const errData = await res.text();
+        setActionNotice(`❌ Simulation failed (HTTP ${res.status}): ${errData.slice(0, 120)}`);
+        setTimeout(() => setActionNotice(null), 5000);
       }
     } catch (err) {
       console.warn('Simulation error:', err);
+      setActionNotice(`❌ Simulation request failed: ${err}`);
+      setTimeout(() => setActionNotice(null), 5000);
     } finally {
       setLoading(false);
     }
@@ -465,9 +484,27 @@ export default function GovernmentCommandPortal() {
       <main style={styles.mainGrid}>
         {/* Left Column: Citizens Live Location & Danger Tracking */}
         <section style={styles.leftCol}>
-          <div style={styles.cardHeader}>
-            <Navigation style={{ width: 18, height: 18, color: '#38bdf8' }} />
-            <h2 style={styles.cardTitle}>CITIZEN GPS TELEMETRY (5-MIN SYNC)</h2>
+          <div style={{ ...styles.cardHeader, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Navigation style={{ width: 18, height: 18, color: '#38bdf8' }} />
+              <h2 style={styles.cardTitle}>CITIZEN GPS TELEMETRY</h2>
+            </div>
+            <button
+              onClick={() => setFilterZoneOnly(!filterZoneOnly)}
+              style={{
+                backgroundColor: filterZoneOnly ? '#0284c7' : '#1e293b',
+                color: filterZoneOnly ? '#ffffff' : '#94a3b8',
+                border: '1px solid #38bdf8',
+                borderRadius: 6,
+                padding: '3px 8px',
+                fontSize: 10,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+              title="Toggle between filtering by selected sector or viewing all Himalayan sectors"
+            >
+              {filterZoneOnly ? `📍 SECTOR (${displayedDevices.length})` : `🌐 ALL (${liveDevices.length})`}
+            </button>
           </div>
 
           <p style={styles.cardDesc}>
@@ -475,7 +512,7 @@ export default function GovernmentCommandPortal() {
           </p>
 
           <div style={styles.deviceList}>
-            {liveDevices.map((dev) => (
+            {displayedDevices.map((dev) => (
               <div
                 key={dev.device_uuid}
                 onClick={() => setSelectedDevice(dev)}
@@ -594,18 +631,23 @@ export default function GovernmentCommandPortal() {
               </div>
 
               {/* Citizen Pins on Map */}
-              {liveDevices.map((dev, idx) => {
-                // Plot relative to center
-                const topPercent = 35 + (idx * 14) + (dev.lat % 0.01) * 1000;
-                const leftPercent = 30 + (idx * 16) + (dev.lng % 0.01) * 1000;
+              {displayedDevices.map((dev, idx) => {
+                const centerLat = currentPrediction?.coordinates?.lat ?? 30.4167;
+                const centerLng = currentPrediction?.coordinates?.lng ?? 79.3167;
+                const deltaLat = dev.lat - centerLat;
+                const deltaLng = dev.lng - centerLng;
+                const normY = 50 - (deltaLat / 0.06) * 32;
+                const normX = 50 + (deltaLng / 0.06) * 32;
+                const topPercent = isNaN(normY) ? (25 + (idx * 12) % 55) : Math.max(12, Math.min(84, normY));
+                const leftPercent = isNaN(normX) ? (20 + (idx * 15) % 60) : Math.max(12, Math.min(84, normX));
                 return (
                   <div
                     key={dev.device_uuid}
                     onClick={() => setSelectedDevice(dev)}
                     style={{
                       position: 'absolute',
-                      top: `${Math.max(15, Math.min(80, topPercent))}%`,
-                      left: `${Math.max(15, Math.min(80, leftPercent))}%`,
+                      top: `${topPercent}%`,
+                      left: `${leftPercent}%`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -637,32 +679,43 @@ export default function GovernmentCommandPortal() {
               })}
 
               {/* Rescue Cluster Search Perimeters */}
-              {clusters.map((c, i) => (
-                <div
-                  key={c.cluster_id}
-                  style={{
-                    position: 'absolute',
-                    top: i === 0 ? '42%' : '68%',
-                    left: i === 0 ? '38%' : '65%',
-                    width: 140,
-                    height: 140,
-                    borderRadius: '50%',
-                    border: '2px dashed #ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    pointerEvents: 'none',
-                    animation: 'pulse 3s infinite',
-                  }}
-                >
-                  <span style={{ fontSize: 9, fontWeight: 900, color: '#fca5a5' }}>
-                    CLUSTER #{c.cluster_id} ({c.total_people} STRANDED)
-                  </span>
-                  <span style={{ fontSize: 8, color: '#f87171' }}>{c.priority}</span>
-                </div>
-              ))}
+              {clusters.map((c, i) => {
+                const centerLat = currentPrediction?.coordinates?.lat ?? 30.4167;
+                const centerLng = currentPrediction?.coordinates?.lng ?? 79.3167;
+                const clusterDeltaLat = c.center_lat - centerLat;
+                const clusterDeltaLng = c.center_lng - centerLng;
+                const cNormY = 50 - (clusterDeltaLat / 0.06) * 32;
+                const cNormX = 50 + (clusterDeltaLng / 0.06) * 32;
+                const cTop = isNaN(cNormY) ? (i === 0 ? 42 : (30 + i * 22) % 70) : Math.max(15, Math.min(78, cNormY));
+                const cLeft = isNaN(cNormX) ? (i === 0 ? 38 : (25 + i * 25) % 70) : Math.max(15, Math.min(78, cNormX));
+                return (
+                  <div
+                    key={c.cluster_id}
+                    style={{
+                      position: 'absolute',
+                      top: `${cTop}%`,
+                      left: `${cLeft}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: 140,
+                      height: 140,
+                      borderRadius: '50%',
+                      border: '2px dashed #ef4444',
+                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                      pointerEvents: 'none',
+                      animation: 'pulse 3s infinite',
+                    }}
+                  >
+                    <span style={{ fontSize: 9, fontWeight: 900, color: '#fca5a5' }}>
+                      CLUSTER #{c.cluster_id} ({c.total_people} STRANDED)
+                    </span>
+                    <span style={{ fontSize: 8, color: '#f87171' }}>{c.priority}</span>
+                  </div>
+                );
+              })}
             </div>
 
             <div style={styles.mapFooterBanner}>
@@ -674,6 +727,72 @@ export default function GovernmentCommandPortal() {
               <span style={{ color: '#38bdf8', fontWeight: 700 }}>LIVE GPS RESOLUTION: 4.2m RMS</span>
             </div>
           </div>
+
+          {/* Citizen Tactical Dossier Drawer (Triggered on Citizen Selection) */}
+          {selectedDevice && (
+            <div style={styles.citizenDossierCard}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: 9, color: '#38bdf8', fontWeight: 800, letterSpacing: '0.8px' }}>
+                    TACTICAL CITIZEN DOSSIER (LIVE RADAR TARGET)
+                  </span>
+                  <h3 style={{ fontSize: 14, fontWeight: 900, color: '#ffffff', marginTop: 1 }}>
+                    {selectedDevice.name || selectedDevice.device_uuid}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedDevice(null)}
+                  style={styles.dossierCloseBtn}
+                  title="Dismiss Dossier"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={styles.dossierGrid}>
+                <div style={styles.dossierItem}>
+                  <span style={styles.dossierLabel}>STATUS</span>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 900,
+                    color: selectedDevice.isUnresponsiveDanger ? '#f87171' : selectedDevice.status === 'SOS' ? '#ef4444' : selectedDevice.status === 'HELPING' ? '#38bdf8' : '#34d399'
+                  }}>
+                    {selectedDevice.isUnresponsiveDanger ? '🚨 UNRESPONSIVE DANGER' : selectedDevice.status || 'ACTIVE'}
+                  </span>
+                </div>
+                <div style={styles.dossierItem}>
+                  <span style={styles.dossierLabel}>LAST KNOWN GPS</span>
+                  <span style={{ color: '#e0f2fe', fontWeight: 700, fontSize: 11 }}>
+                    {selectedDevice.lat.toFixed(4)}° N, {selectedDevice.lng.toFixed(4)}° E
+                  </span>
+                </div>
+                <div style={styles.dossierItem}>
+                  <span style={styles.dossierLabel}>BATTERY &amp; ALTITUDE</span>
+                  <span style={{ color: (selectedDevice.battery_level || 85) < 30 ? '#ef4444' : '#34d399', fontWeight: 800, fontSize: 11 }}>
+                    {selectedDevice.battery_level || 85}% • {selectedDevice.altitude || 1450}m Elev
+                  </span>
+                </div>
+                <div style={styles.dossierItem}>
+                  <span style={styles.dossierLabel}>ZONE SECTOR &amp; SYNC</span>
+                  <span style={{ color: '#cbd5e1', fontSize: 11 }}>
+                    {selectedDevice.zone_id || 'chamoli_01'} • {new Date(selectedDevice.last_synced_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                <button
+                  style={styles.dossierDispatchBtn}
+                  onClick={() => {
+                    handleDispatchSquad(1, 'HELICOPTER');
+                    setActionNotice(`🚁 Rescue extraction routed to ${selectedDevice.name || selectedDevice.device_uuid} at (${selectedDevice.lat.toFixed(4)}, ${selectedDevice.lng.toFixed(4)})`);
+                  }}
+                >
+                  🚁 DISPATCH RESCUE TEAM DIRECTLY TO CITIZEN
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* AI Inference & Physical Telemetry Factor Breakdown */}
           <div style={styles.aiBreakdownCard}>
@@ -707,9 +826,12 @@ export default function GovernmentCommandPortal() {
                 </span>
               </div>
               <div style={styles.sensorItem}>
-                <span style={styles.sensorLabel}>RIVER DISCHARGE / LEVEL</span>
+                <span style={styles.sensorLabel}>RIVER STAGE &amp; DISCHARGE</span>
                 <span style={styles.sensorValue}>
-                  {currentPrediction.sensors?.river_discharge_m3s || 1420} m³/s
+                  {currentPrediction.sensors?.river_water_level_m ? `${currentPrediction.sensors.river_water_level_m}m` : '6.4m'}
+                  <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, marginLeft: 4 }}>
+                    ({currentPrediction.sensors?.river_discharge_m3s ?? 0} m³/s)
+                  </span>
                 </span>
               </div>
               <div style={styles.sensorItem}>
@@ -1359,5 +1481,55 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #1e293b',
     display: 'flex',
     flexDirection: 'column',
+  },
+  citizenDossierCard: {
+    backgroundColor: '#0f172a',
+    border: '1px solid #38bdf8',
+    borderRadius: 12,
+    padding: '12px 14px',
+    marginTop: 10,
+    boxShadow: '0 4px 20px rgba(56, 189, 248, 0.15)',
+  },
+  dossierCloseBtn: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: '2px 6px',
+  },
+  dossierGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: 8,
+    marginTop: 8,
+  },
+  dossierItem: {
+    backgroundColor: '#030712',
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: '1px solid #1e293b',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  dossierLabel: {
+    fontSize: 8,
+    fontWeight: 800,
+    color: '#64748b',
+    letterSpacing: '0.4px',
+  },
+  dossierDispatchBtn: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    border: '1px solid #ef4444',
+    color: '#ffffff',
+    padding: '8px 12px',
+    borderRadius: 8,
+    fontSize: 11,
+    fontWeight: 900,
+    cursor: 'pointer',
+    textAlign: 'center',
   },
 };

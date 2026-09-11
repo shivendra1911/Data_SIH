@@ -9,9 +9,12 @@ import os
 import sys
 import io
 import math
+import warnings
 import joblib
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Model path resolution
 DEFAULT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "neernetra_model_local.pkl")

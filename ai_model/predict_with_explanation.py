@@ -53,11 +53,19 @@ if __name__ == "__main__":
         print("Error: All inputs must be numeric.")
         sys.exit(1)
         
-    model_path = "neernetra_model_local.pkl"
-    if not os.path.exists(model_path):
-        print(f"Error: {model_path} not found.")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, "neernetra_model_local.pkl"),
+        os.path.join(base_dir, "..", "backend", "neernetra_model.pkl"),
+        "neernetra_model_local.pkl"
+    ]
+    model_path = next((p for p in candidates if os.path.exists(p)), None)
+    if not model_path:
+        print("Error: neernetra model file not found in ai_model or backend.")
         sys.exit(1)
         
+    import warnings
+    warnings.filterwarnings("ignore")
     model = joblib.load(model_path)
     X_input = np.array([[rain, soil, slope, river, seismic]])
     proba = model.predict_proba(X_input)[0][1]

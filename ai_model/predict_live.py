@@ -1,14 +1,19 @@
 """Quick script to run live predictions using the trained model on real-time data"""
-import sys, io, os, joblib, pandas as pd, numpy as np
+import sys, io, os, warnings, joblib, pandas as pd, numpy as np
+warnings.filterwarnings("ignore")
 if sys.platform == "win32":
     if hasattr(sys.stdout, 'buffer'):
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-FEATURES = ["rainfall_mm_hr","soil_moisture_pct","terrain_slope_deg","river_water_level_m","seismic_magnitude"]
-model = joblib.load(os.path.join("..","backend","neernetra_model.pkl"))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FEATURES = ["rainfall_mm_hr", "soil_moisture_pct", "terrain_slope_deg", "river_water_level_m", "seismic_magnitude"]
+model_path = os.path.join(BASE_DIR, "..", "backend", "neernetra_model.pkl")
+if not os.path.exists(model_path):
+    model_path = os.path.join(BASE_DIR, "neernetra_model_local.pkl")
+model = joblib.load(model_path)
 
 import glob
-rt_files = sorted(glob.glob("realtime_data_*.csv"))
+rt_files = sorted(glob.glob(os.path.join(BASE_DIR, "realtime_data_*.csv")))
 if not rt_files:
     print("No realtime data found"); exit()
 
