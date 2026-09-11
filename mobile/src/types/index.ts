@@ -30,4 +30,32 @@ export interface MeshPeer {
   name: string;
   signalStrength: number; // dBm e.g. -45
   relayedPacketsCount: number;
+  role?: string;
+  location?: string;
+  flag?: string;
+  timestamp?: string;
+}
+
+export interface CitizenBeaconItem {
+  id: string;
+  name: string;
+  role: string;
+  status: SOSStatus;
+  location: string;
+  countryFlag: string;
+  distance: string;
+  sosType?: SOSType;
+  timestamp: string;
+  selected?: boolean;
+}
+
+export interface MapClusterMarker {
+  id: string;
+  number: number;
+  lat: number;
+  lng: number;
+  xPercent: number;
+  yPercent: number;
+  active: boolean;
+  label: string;
 }

@@ -2,27 +2,29 @@ import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
-  Text,
-  ScrollView,
   SafeAreaView,
   StatusBar,
+  ScrollView,
   RefreshControl,
-  TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ZonePrediction, NetworkMode } from '../types';
 import { fetchCurrentPrediction, flushOfflineSOSQueue } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
 import { meshManager } from '../services/meshService';
-import { AlertHeader } from '../components/AlertHeader';
-import { MeshStatusBadge } from '../components/MeshStatusBadge';
+
+import { TopPillNav } from '../components/TopPillNav';
+import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
+import { MapSessionCard } from '../components/MapSessionCard';
+import { PeopleBeaconCard } from '../components/PeopleBeaconCard';
+import { DarkSessionDrawer } from '../components/DarkSessionDrawer';
 import { TriageModal } from '../components/TriageModal';
-import { EmergencyGuide } from '../components/EmergencyGuide';
-import { Shield, PhoneCall, RefreshCw } from 'lucide-react-native';
+import { MeshStatusBadge } from '../components/MeshStatusBadge';
 
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
 export const HomeScreen: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'telemetry' | 'rescue' | 'map'>('telemetry');
   const [prediction, setPrediction] = useState<ZonePrediction | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -81,7 +83,7 @@ export const HomeScreen: React.FC = () => {
   const handleSyncQueue = async () => {
     setSyncing(true);
     try {
-      const synced = await flushOfflineSOSQueue();
+      await flushOfflineSOSQueue();
       await checkOfflineQueue();
     } finally {
       setSyncing(false);
@@ -90,30 +92,23 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#030712" />
+      <StatusBar barStyle="dark-content" backgroundColor="#eaebe5" />
 
-      {/* Top Navbar */}
-      <View style={styles.navbar}>
-        <View style={styles.brandRow}>
-          <Shield size={26} color="#38bdf8" />
-          <View>
-            <Text style={styles.brandTitle}>NEERNETRA</Text>
-            <Text style={styles.brandSubtitle}>Flash Flood Edge Dispatch</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} activeOpacity={0.7}>
-          <RefreshCw size={18} color="#94a3b8" />
-        </TouchableOpacity>
-      </View>
+      {/* Top Navigation Pill Bar */}
+      <TopPillNav
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+        onFilterPress={onRefresh}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f59e0b" />
         }
       >
-        {/* Connectivity & Mesh Status */}
+        {/* Connection Status Badge */}
         <MeshStatusBadge
           mode={networkMode}
           peerCount={peerCount}
@@ -122,27 +117,37 @@ export const HomeScreen: React.FC = () => {
           syncing={syncing}
         />
 
-        {/* Live Prediction & Risk Header */}
-        <AlertHeader prediction={prediction} loading={loading} />
+        {/* Tab 1: Telemetry & Overview (Gauge + Map + People + Dark Drawer) */}
+        {activeTab === 'telemetry' && (
+          <>
+            <SecurityGaugeCard prediction={prediction} />
+            <MapSessionCard />
+            <PeopleBeaconCard beacons={[]} />
+            <DarkSessionDrawer />
+          </>
+        )}
 
-        {/* Triage SOS Beacon Panel */}
-        <TriageModal
-          deviceUuid={deviceUuid}
-          networkMode={networkMode}
-          onStatusSubmitted={() => checkOfflineQueue()}
-        />
+        {/* Tab 2: Triage Beacon & Action Panel */}
+        {activeTab === 'rescue' && (
+          <>
+            <TriageModal
+              deviceUuid={deviceUuid}
+              networkMode={networkMode}
+              onStatusSubmitted={() => checkOfflineQueue()}
+            />
+            <PeopleBeaconCard beacons={[]} />
+            <DarkSessionDrawer />
+          </>
+        )}
 
-        {/* Emergency Helpline Strip */}
-        <View style={styles.helplineCard}>
-          <PhoneCall size={20} color="#f87171" />
-          <View style={styles.helplineTextContainer}>
-            <Text style={styles.helplineTitle}>NDRF National Disaster Helpline</Text>
-            <Text style={styles.helplineNumber}>1078 / 011-24363260 (Toll Free)</Text>
-          </View>
-        </View>
-
-        {/* Offline Survival Protocol */}
-        <EmergencyGuide />
+        {/* Tab 3: Full Map Session Focus */}
+        {activeTab === 'map' && (
+          <>
+            <MapSessionCard />
+            <SecurityGaugeCard prediction={prediction} />
+            <DarkSessionDrawer />
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -151,69 +156,9 @@ export const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#030712',
-  },
-  navbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937',
-    backgroundColor: '#030712',
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brandTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  brandSubtitle: {
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  refreshBtn: {
-    padding: 8,
-    backgroundColor: '#111827',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#1f2937',
+    backgroundColor: '#eaebe5', // Warm light ivory/gray backdrop matching the reference image!
   },
   scrollContent: {
-    paddingBottom: 30,
-  },
-  helplineCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1f1315',
-    borderColor: '#7f1d1d',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    gap: 12,
-  },
-  helplineTextContainer: {
-    flex: 1,
-  },
-  helplineTitle: {
-    color: '#fca5a5',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  helplineNumber: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 2,
+    paddingBottom: 40,
   },
 });
