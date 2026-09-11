@@ -142,7 +142,14 @@ export default function NationalSentinelPage() {
       <div className="relative z-10">
         <ScrollVideoHero
           onEnterCommandCenter={() => {
-            document.getElementById("sentinel-overview")?.scrollIntoView({ behavior: "smooth" });
+            const el = document.getElementById("sentinel-overview");
+            if (el) {
+              if ((window as any).__lenis) {
+                (window as any).__lenis.scrollTo(el);
+              } else {
+                el.scrollIntoView({ behavior: "smooth" });
+              }
+            }
           }}
         />
       </div>
@@ -172,7 +179,7 @@ export default function NationalSentinelPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
               href="/radar"
-              className="bg-slate-950/25 backdrop-blur-md p-4 rounded-2xl border border-white/20 hover:border-emerald-400/80 transition flex items-center justify-between group shadow-xl text-white"
+              className="p-4 rounded-2xl border border-white/20 hover:border-emerald-400/80 bg-white/5 hover:bg-white/10 transition flex items-center justify-between group shadow-lg text-white"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
@@ -195,7 +202,7 @@ export default function NationalSentinelPage() {
 
             <Link
               href="/rescue"
-              className="bg-slate-950/25 backdrop-blur-md p-4 rounded-2xl border border-white/20 hover:border-rose-400/80 transition flex items-center justify-between group shadow-xl text-white"
+              className="p-4 rounded-2xl border border-white/20 hover:border-rose-400/80 bg-white/5 hover:bg-white/10 transition flex items-center justify-between group shadow-lg text-white"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-400/40 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
@@ -217,8 +224,8 @@ export default function NationalSentinelPage() {
             </Link>
           </div>
 
-          {/* Section 1: Pan-India Autonomous Sentinel Basin Radar (Spacious Full Grid) */}
-          <div className="rounded-2xl bg-slate-950/25 backdrop-blur-md border border-white/20 p-4 sm:p-5 shadow-xl space-y-4 text-white">
+          {/* Section 1: Pan-India Autonomous Sentinel Basin Surveillance (12 Basins) */}
+          <div className="space-y-4 text-white">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-3">
               <div>
                 <h2 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -272,7 +279,7 @@ export default function NationalSentinelPage() {
             {/* Left 7 Cols: Multi-Horizon Forecast Simulation & Directives */}
             <div className="lg:col-span-7 space-y-4">
               {/* Multi-Horizon Surge Forecast Simulation */}
-              <div className="rounded-2xl bg-slate-950/25 backdrop-blur-md border border-white/20 p-4 shadow-xl space-y-3 text-white">
+              <div className="space-y-3 text-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-indigo-400" />

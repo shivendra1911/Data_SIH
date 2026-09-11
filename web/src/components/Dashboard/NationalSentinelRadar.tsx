@@ -126,7 +126,7 @@ export default function NationalSentinelRadar({
   }
 
   return (
-    <div className="w-full bg-slate-950/25 backdrop-blur-md rounded-xl border border-white/15 px-4 lg:px-6 py-3.5 space-y-3 shadow-md">
+    <div className="w-full space-y-3 text-white">
       {/* Top Banner: Status + Autonomous Mode Controller */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 max-w-[1800px] mx-auto">
         <div className="flex flex-wrap items-center gap-3">

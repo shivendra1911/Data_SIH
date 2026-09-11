@@ -34,11 +34,19 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
     if (onEnterCommandCenter) {
       onEnterCommandCenter();
     } else {
-      const el = document.getElementById("command-center");
+      const el = document.getElementById("command-center") || document.getElementById("sentinel-overview");
       if (el) {
-        el.scrollIntoView({ behavior: "smooth" });
+        if ((window as any).__lenis) {
+          (window as any).__lenis.scrollTo(el);
+        } else {
+          el.scrollIntoView({ behavior: "smooth" });
+        }
       } else {
-        window.scrollTo({ top: window.innerHeight * 0.85, behavior: "smooth" });
+        if ((window as any).__lenis) {
+          (window as any).__lenis.scrollTo(window.innerHeight * 0.85);
+        } else {
+          window.scrollTo({ top: window.innerHeight * 0.85, behavior: "smooth" });
+        }
       }
     }
   };

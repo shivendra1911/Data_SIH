@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { PredictionResponse } from "@/lib/types";
@@ -71,9 +71,9 @@ export default function PredictionPanel({
   };
 
   return (
-    <div className="tilt-card rounded-2xl bg-slate-950/25 backdrop-blur-md shadow-xl overflow-hidden flex flex-col h-full border border-white/20 text-white">
+    <div className="flex flex-col h-full space-y-4 text-white">
       {/* Top Header */}
-      <div className="px-5 py-3.5 border-b border-white/15 flex items-center justify-between bg-white/5 relative z-10">
+      <div className="flex items-center justify-between relative z-10 pb-1">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shadow-xs text-violet-300">
             <Cpu className="w-4 h-4" aria-hidden />
@@ -105,7 +105,7 @@ export default function PredictionPanel({
         </button>
       </div>
 
-      <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
+      <div className="space-y-4 flex-1 flex flex-col justify-between relative z-10">
         {/* Main Risk Status Banner */}
         <div
           className={`p-4 rounded-xl border ${statusCardStyle} flex flex-col sm:flex-row items-center justify-between gap-4 transition backdrop-blur-md shadow-sm`}

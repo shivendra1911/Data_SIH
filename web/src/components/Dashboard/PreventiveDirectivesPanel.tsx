@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { HazardZone } from "@/lib/types";
@@ -92,9 +92,9 @@ export default function PreventiveDirectivesPanel({
   const pendingCount = directives.filter((d) => !d.executed).length;
 
   return (
-    <div className="tilt-card rounded-2xl bg-slate-950/25 backdrop-blur-md shadow-xl overflow-hidden flex flex-col h-full border border-white/20 text-white">
+    <div className="flex flex-col h-full space-y-3 text-white">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-white/15 flex items-center justify-between bg-white/5 relative z-10">
+      <div className="flex items-center justify-between relative z-10 pb-1">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center shadow-xs text-red-400">
             <ShieldAlert className="w-4 h-4" aria-hidden />
@@ -117,7 +117,7 @@ export default function PreventiveDirectivesPanel({
       </div>
 
       {/* Directives List */}
-      <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto relative z-10 flex-1">
+      <div className="space-y-3 max-h-[420px] overflow-y-auto relative z-10 flex-1">
         {directives.map((directive) => {
           const isImmediate = directive.priority === "IMMEDIATE";
 

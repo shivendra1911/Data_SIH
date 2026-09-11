@@ -98,11 +98,11 @@ export function useVideoScrub(videoSrc: string) {
   // Recompute span on resize and orientationchange
   useEffect(() => {
     const updateSpan = () => {
-      const container = containerRef.current;
-      const totalScroll = container
-        ? container.offsetHeight - window.innerHeight
-        : (document.documentElement.scrollHeight - window.innerHeight);
-      scrollSpanRef.current = totalScroll > 0 ? totalScroll : 1;
+      const totalScroll = Math.max(
+        1,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
+      scrollSpanRef.current = totalScroll;
     };
 
     updateSpan();
@@ -143,11 +143,10 @@ export function useVideoScrub(videoSrc: string) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const getProgress = () => {
-      const container = containerRef.current;
-      const totalScroll = container
-        ? container.offsetHeight - window.innerHeight
-        : (document.documentElement.scrollHeight - window.innerHeight);
-      if (totalScroll <= 0) return 0;
+      const totalScroll = Math.max(
+        1,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
       return Math.min(1, Math.max(0, window.scrollY / totalScroll));
     };
 
