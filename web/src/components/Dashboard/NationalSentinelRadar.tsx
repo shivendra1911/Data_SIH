@@ -22,6 +22,7 @@ interface NationalSentinelRadarProps {
   onSelectZoneById: (zoneId: string) => void;
   autoDispatchEnabled: boolean;
   onToggleAutoDispatch: () => void;
+  compact?: boolean;
 }
 
 export default function NationalSentinelRadar({
@@ -32,12 +33,97 @@ export default function NationalSentinelRadar({
   onSelectZoneById,
   autoDispatchEnabled,
   onToggleAutoDispatch,
+  compact = false,
 }: NationalSentinelRadarProps) {
   const criticalCount = scanData?.critical_zones_count ?? 0;
   const warningCount = scanData?.warning_zones_count ?? 0;
-  const totalScanned = scanData?.total_zones_scanned ?? 12;
-
   const recentDispatches = scanData?.recent_auto_sos_dispatches ?? [];
+
+  if (compact) {
+    return (
+      <div className="space-y-2.5 p-1">
+        {/* Compact Top Status */}
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/60 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+            </span>
+            <span className="font-bold text-slate-900 uppercase text-[11px]">Pan-India Sentinel (12 Basins)</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-800 border border-red-200">
+              {criticalCount} RED
+            </span>
+          </div>
+
+          <button
+            onClick={onRefreshScan}
+            disabled={loading}
+            className="h-[28px] px-2 rounded-lg bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-[11px] font-medium flex items-center gap-1 shadow-2xs"
+          >
+            <RefreshCw className={`w-3 h-3 text-indigo-600 ${loading ? "animate-spin" : ""}`} />
+            <span>Rescan</span>
+          </button>
+        </div>
+
+        {/* 12-Basin Compact Grid */}
+        <div className="grid grid-cols-2 gap-2 max-h-[560px] overflow-y-auto pr-1">
+          {scanData?.zones.map((zone) => {
+            const isSelected = selectedZone.id === zone.zone_id;
+            const isRed = zone.alert_color === "RED";
+            const isOrange = zone.alert_color === "ORANGE";
+
+            return (
+              <button
+                key={zone.zone_id}
+                onClick={() => onSelectZoneById(zone.zone_id)}
+                className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between shadow-2xs ${
+                  isSelected
+                    ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400/70"
+                    : isRed
+                    ? "bg-red-50/90 border-red-200 hover:border-red-400"
+                    : isOrange
+                    ? "bg-amber-50/90 border-amber-200 hover:border-amber-400"
+                    : "bg-white/85 border-slate-200/80 hover:border-slate-300"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[9px] font-bold uppercase text-slate-500 truncate">
+                      {zone.state}
+                    </span>
+                    <span
+                      className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
+                        isRed
+                          ? "bg-red-600 text-white"
+                          : isOrange
+                          ? "bg-amber-500 text-slate-950"
+                          : "bg-emerald-600 text-white"
+                      }`}
+                    >
+                      {zone.flood_probability_percent.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  <div className="text-xs font-bold text-slate-950 line-clamp-1">
+                    {zone.zone_name.split("(")[0].trim()}
+                  </div>
+                </div>
+
+                <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100">
+                  <span>Stage: <strong className="text-slate-900 font-semibold">{zone.river_level_m.toFixed(1)}m</strong></span>
+                  {zone.auto_dispatched && (
+                    <span className="text-red-600 font-bold flex items-center gap-0.5">
+                      <Radio className="w-2.5 h-2.5 animate-ping" /> SOS
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full glass-panel border-b border-white/60 px-4 lg:px-8 py-3.5 space-y-3 shadow-md">
@@ -61,27 +147,21 @@ export default function NationalSentinelRadar({
               </span>
             </div>
           </div>
-
-          <span className="text-slate-400 hidden md:inline">|</span>
-
-          <span className="text-xs text-slate-700 font-bold">
-            Active Scan: {totalScanned} River Basins • 8 States Across India
-          </span>
         </div>
 
-        {/* Right: Auto-SOS Toggle & Scan Button */}
+        {/* Right side controls */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={onToggleAutoDispatch}
-            aria-label="Toggle autonomous SOS dispatch"
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 min-h-[44px] border shadow-sm ${
+            aria-label="Toggle autonomous SOS auto-dispatch mode"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 min-h-[36px] ${
               autoDispatchEnabled
-                ? "bg-emerald-100/90 text-emerald-900 border-emerald-400"
-                : "bg-white/80 text-slate-700 border-slate-300 hover:bg-white"
+                ? "bg-red-600 text-white shadow-xs"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            <BellRing className={`w-3.5 h-3.5 ${autoDispatchEnabled ? "text-emerald-700 animate-pulse" : "text-slate-400"}`} aria-hidden />
-            <span>Autonomous Auto-SOS: {autoDispatchEnabled ? "ARMED" : "MANUAL"}</span>
+            <Zap className={`w-3.5 h-3.5 ${autoDispatchEnabled ? "fill-white" : ""}`} aria-hidden />
+            <span>{autoDispatchEnabled ? "Auto-SOS Active" : "Auto-SOS Off"}</span>
           </button>
 
           <button
@@ -96,25 +176,25 @@ export default function NationalSentinelRadar({
         </div>
       </div>
 
-      {/* Autonomous Alert Notification Ticker (When an Auto-SOS was dispatched) */}
+      {/* Autonomous Alert Notification Ticker */}
       {recentDispatches.length > 0 && (
-        <div className="max-w-[1800px] mx-auto p-3.5 rounded-2xl bg-red-100/90 border border-red-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
-          <div className="flex items-center gap-2.5 text-xs text-red-950">
+        <div className="max-w-[1800px] mx-auto p-3 rounded-xl bg-red-100/90 border border-red-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2 text-xs text-red-950">
             <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse shrink-0" aria-hidden />
             <div>
-              <strong className="font-black text-red-900">🚨 AUTONOMOUS ZERO-MINUTE SOS DISPATCHED:</strong>{" "}
-              <span className="font-semibold">{recentDispatches[0].message}</span>
+              <strong className="font-bold text-red-900">🚨 AUTONOMOUS ZERO-MINUTE SOS:</strong>{" "}
+              <span className="font-medium">{recentDispatches[0].message}</span>
             </div>
           </div>
-          <span className="text-[11px] font-bold text-red-800 whitespace-nowrap bg-white/70 px-2 py-0.5 rounded-lg border border-red-200">
-            Auto-pushed to ~{recentDispatches[0].target_nodes_count} citizen devices
+          <span className="text-[11px] font-semibold text-red-800 whitespace-nowrap bg-white/70 px-2 py-0.5 rounded-lg border border-red-200">
+            Pushed to ~{recentDispatches[0].target_nodes_count} devices
           </span>
         </div>
       )}
 
       {/* Horizontal All-India Threat Radar Ribbon */}
       <div className="max-w-[1800px] mx-auto overflow-x-auto pb-1">
-        <div className="flex items-stretch gap-2.5 min-w-max">
+        <div className="flex items-stretch gap-2 min-w-max">
           {scanData?.zones.map((zone) => {
             const isSelected = selectedZone.id === zone.zone_id;
             const isRed = zone.alert_color === "RED";
@@ -124,23 +204,23 @@ export default function NationalSentinelRadar({
               <button
                 key={zone.zone_id}
                 onClick={() => onSelectZoneById(zone.zone_id)}
-                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between w-[200px] min-h-[80px] shadow-sm ${
+                className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between w-[180px] shadow-xs ${
                   isSelected
-                    ? "bg-violet-100/90 border-violet-500 ring-2 ring-violet-400 shadow-md"
+                    ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400/70"
                     : isRed
-                    ? "backdrop-blur-md bg-red-50/80 border-red-300 hover:bg-red-100/90"
+                    ? "bg-red-50/80 border-red-200 hover:bg-red-100"
                     : isOrange
-                    ? "backdrop-blur-md bg-amber-50/80 border-amber-300 hover:bg-amber-100/90"
-                    : "backdrop-blur-md bg-white/75 border-white/80 hover:bg-white/95"
+                    ? "bg-amber-50/80 border-amber-200 hover:bg-amber-100"
+                    : "bg-white/80 border-slate-200 hover:bg-white"
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-600 truncate max-w-[110px]">
+                    <span className="text-[9px] font-bold uppercase text-slate-500 truncate max-w-[100px]">
                       {zone.state}
                     </span>
                     <span
-                      className={`text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase shadow-xs ${
+                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
                         isRed
                           ? "bg-red-600 text-white"
                           : isOrange
@@ -152,18 +232,16 @@ export default function NationalSentinelRadar({
                     </span>
                   </div>
 
-                  <div className="text-xs font-black text-slate-950 line-clamp-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <div className="text-xs font-bold text-slate-950 line-clamp-1">
                     {zone.zone_name.split("(")[0].trim()}
                   </div>
                 </div>
 
-                <div className="mt-1.5 flex items-center justify-between text-[10px]">
-                  <span className="text-slate-600 font-semibold">
-                    Stage: <strong className="text-slate-900 font-black">{zone.river_level_m.toFixed(1)}m</strong>
-                  </span>
+                <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Stage: <strong className="text-slate-900">{zone.river_level_m.toFixed(1)}m</strong></span>
                   {zone.auto_dispatched && (
-                    <span className="text-red-700 font-black flex items-center gap-0.5 bg-red-100 px-1 rounded">
-                      <Radio className="w-2.5 h-2.5 animate-ping" aria-hidden /> SOS
+                    <span className="text-red-700 font-bold flex items-center gap-0.5">
+                      <Radio className="w-2.5 h-2.5 animate-ping" /> SOS
                     </span>
                   )}
                 </div>

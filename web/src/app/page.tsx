@@ -72,6 +72,10 @@ import {
   Sliders,
   Layers,
   Sparkles,
+  Truck,
+  Globe,
+  Activity,
+  Crosshair,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -99,6 +103,7 @@ export default function DashboardPage() {
   const [sentinelScan, setSentinelScan] = useState<NationalSentinelScan | null>(null);
   const [loadingScan, setLoadingScan] = useState<boolean>(false);
   const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(true);
+  const [consoleTab, setConsoleTab] = useState<"CITIZENS" | "RESPONDERS" | "AI_RISK" | "RADAR">("CITIZENS");
 
   // Active zone data derivations
   const activeSafeRoutes: SafeEvacuationRoute[] =
@@ -268,6 +273,17 @@ export default function DashboardPage() {
               const newItems = data.events.filter((e: any) => !existingIds.has(e.id));
               if (newItems.length > 0) {
                 if (soundEnabled) playAlertSound();
+                // Immediately focus map on the new victim from the mobile app!
+                setMapCenter([newItems[0].lat, newItems[0].lng]);
+                setMapZoom(15);
+                setConsoleTab("CITIZENS");
+                // Immediately re-fetch citizens
+                fetch("/api/citizen/locations")
+                  .then((r) => r.json())
+                  .then((d) => {
+                    if (d.citizens) setCitizens(d.citizens);
+                  })
+                  .catch(() => {});
                 return [...newItems, ...prev];
               }
               return prev;
@@ -275,7 +291,7 @@ export default function DashboardPage() {
           }
         }
       } catch {}
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [soundEnabled, playAlertSound]);
@@ -362,8 +378,15 @@ export default function DashboardPage() {
   const handleAndroidSOSArrival = (event: SOSEvent) => {
     setSOSEvents((prev) => [event, ...prev]);
     setMapCenter([event.lat, event.lng]);
-    setMapZoom(14);
+    setMapZoom(15);
+    setConsoleTab("CITIZENS");
     if (soundEnabled) playAlertSound();
+    fetch("/api/citizen/locations")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.citizens) setCitizens(d.citizens);
+      })
+      .catch(() => {});
   };
 
   // Adjust risk calculation based on horizon slider
@@ -418,164 +441,190 @@ export default function DashboardPage() {
           onToggleSound={() => setSoundEnabled((prev) => !prev)}
         />
 
-        {/* 1.5 Autonomous All-India Sentinel Radar & Multi-Basin Threat Matrix */}
-        <NationalSentinelRadar
-          scanData={sentinelScan}
-          loading={loadingScan}
-          onRefreshScan={runNationalScan}
-          selectedZone={selectedZone}
-          onSelectZoneById={handleSelectZoneById}
-          autoDispatchEnabled={autoDispatchEnabled}
-          onToggleAutoDispatch={() => setAutoDispatchEnabled((prev) => !prev)}
-        />
-
-        {/* 2. Executive Real-Time Telemetry Ribbon */}
+        {/* 2. Executive Real-Time Telemetry Ribbon (Slim Single Row) */}
         <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
 
+        {/* 3. Primary Mission Control Cockpit (High-Density Dual-Pane Stage) */}
+        <main className="flex-1 p-3 sm:p-4 lg:p-5 max-w-[1800px] mx-auto w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            {/* LEFT PANE (7 cols): Tactical GIS Radar Map & Real-Time Hydrograph */}
+            <div className="lg:col-span-7 flex flex-col space-y-3.5">
+              {/* Tactical Solid Map Container */}
+              <div className="tilt-card w-full h-[520px] lg:h-[560px] rounded-2xl overflow-hidden border border-white/70 shadow-sm relative bg-white">
+                {/* Floating Map Status Overlay */}
+                <div className="absolute top-3 left-3 z-[400] flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+                  <span className="text-xs font-bold text-slate-900">{selectedZone.name}</span>
+                  <span
+                    className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
+                      displayedRisk >= 75
+                        ? "bg-red-600 text-white"
+                        : displayedRisk >= 55
+                        ? "bg-amber-500 text-slate-950"
+                        : "bg-emerald-600 text-white"
+                    }`}
+                  >
+                    {displayedRisk.toFixed(0)}% FLOOD RISK
+                  </span>
+                </div>
 
-      {/* 3. Primary Command Workspace */}
-      <main className="flex-1 p-3 sm:p-5 lg:p-6 space-y-5 max-w-[1750px] mx-auto w-full">
-        {/* Audio Alert Dispatcher & Ground Directives Bar */}
-        <AccessibleVoiceCard
-          activeZone={selectedZone}
-          riskPercent={displayedRisk}
-        />
-
-        {/* Multi-Horizon Scrubber */}
-        <ForecastHorizonSlider
-          currentHorizon={forecastHorizon}
-          onSelectHorizon={(h) => setForecastHorizon(h)}
-        />
-
-        {/* Primary Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          <div className="lg:col-span-8 flex flex-col">
-            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-white/60 shadow-lg relative bg-white">
-              <MapWrapper
-                center={mapCenter}
-                zoom={mapZoom}
-                sosEvents={sosEvents}
-                clusters={clusters}
-                activeZone={selectedZone}
-                citizens={activeCitizens}
-                safeRoutes={activeSafeRoutes}
-                responders={activeResponders}
-                selectedEventId={selectedEventId}
-                onSelectEvent={handleSelectEvent}
-                onDispatchCluster={handleDispatchCluster}
-              />
-            </div>
-          </div>
-
-          {/* AI Neural Predictive Engine */}
-          <div className="lg:col-span-4 flex flex-col">
-            <PredictionPanel
-              prediction={
-                prediction
-                  ? {
-                      ...prediction,
-                      flood_probability_percent: displayedRisk,
-                      alert_color:
-                        displayedRisk >= 75
-                          ? "RED"
-                          : displayedRisk >= 55
-                          ? "ORANGE"
-                          : displayedRisk >= 35
-                          ? "YELLOW"
-                          : "GREEN",
-                    }
-                  : null
-              }
-              loading={loadingPrediction}
-              onRefresh={() => loadZoneData(selectedZone)}
-            />
-          </div>
-        </div>
-
-        {/* Primary Row 2: Inundation Hydrograph (7 cols) + Preventive Directives Matrix (5 cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Hydrograph & Lead Time Countdown */}
-          <div className="lg:col-span-7">
-            <HydrographPanel activeZone={selectedZone} />
-          </div>
-
-          {/* Preventive Action Directives */}
-          <div className="lg:col-span-5">
-            <PreventiveDirectivesPanel activeZone={selectedZone} />
-          </div>
-        </div>
-
-        {/* Primary Row 3: Citizen Distress Telemetry Matrix (Live GPS vs Last Known Offline) */}
-        <CitizenTrackingMatrix
-          citizens={activeCitizens}
-          onFocusCoordinates={(coords) => handleFocusCoords(coords[0], coords[1])}
-          onDispatchToCitizen={(cit) => {
-            const foundResp = activeResponders[0];
-            if (foundResp) handleDispatchResponderUnit(foundResp);
-          }}
-        />
-
-        {/* Primary Row 4: Emergency Response Grid (Ambulances, Police & NDRF/SDRF) */}
-        <EmergencyResponderGrid
-          responders={activeResponders}
-          zoneName={selectedZone.name}
-          onDispatchUnit={handleDispatchResponderUnit}
-          onMultiAgencyDispatch={handleMultiAgencyDispatch}
-        />
-
-        {/* Primary Row 5: Tactical Distress Beacons & Automated K-Means Rescue Triage */}
-        <div className="tilt-card rounded-2xl glass-panel border border-white/60 p-4 space-y-4 shadow-sm mx-0">
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-600">
-                <LifeBuoy className="w-4 h-4" aria-hidden />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  Field Distress Beacons & Rescue Triage
-                </h3>
-                <p className="text-xs text-gray-500">
-                  BLE Mesh Relay Network • Latency &lt;450ms • Active Nodes: {sosEvents.length}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowRescueLayer((prev) => !prev)}
-              aria-label={showRescueLayer ? "Collapse triage feed" : "Expand field telemetry"}
-              className="btn-ghost text-xs"
-            >
-              <span>{showRescueLayer ? "Collapse" : "Expand Field Telemetry"}</span>
-              {showRescueLayer ? (
-                <ChevronUp className="w-3.5 h-3.5" aria-hidden />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" aria-hidden />
-              )}
-            </button>
-          </div>
-
-          {showRescueLayer && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 relative z-10">
-              <div className="lg:col-span-6">
-                <ClusterTriagePanel
+                <MapWrapper
+                  center={mapCenter}
+                  zoom={mapZoom}
+                  sosEvents={sosEvents}
                   clusters={clusters}
-                  onDispatch={handleDispatchCluster}
-                  onFocusCoordinates={handleFocusCoords}
+                  activeZone={selectedZone}
+                  citizens={activeCitizens}
+                  safeRoutes={activeSafeRoutes}
+                  responders={activeResponders}
+                  selectedEventId={selectedEventId}
+                  onSelectEvent={handleSelectEvent}
+                  onDispatchCluster={handleDispatchCluster}
                 />
               </div>
 
-              <div className="lg:col-span-6">
-                <LiveSOSFeed
-                  events={sosEvents}
-                  citizens={citizens}
-                  onSelectEvent={handleSelectEvent}
-                  onToggleRescued={handleToggleRescued}
-                />
+              {/* Inundation Hydrograph & Early Warning Countdown */}
+              <div className="rounded-2xl glass-panel border border-white/60 p-3.5 shadow-sm">
+                <HydrographPanel activeZone={selectedZone} />
               </div>
             </div>
-          )}
-        </div>
-      </main>
+
+            {/* RIGHT PANE (5 cols): Docked High-Density Operations Console */}
+            <div className="lg:col-span-5 flex flex-col">
+              <div className="rounded-2xl glass-panel border border-white/60 p-3.5 shadow-sm flex flex-col h-full min-h-[780px]">
+                {/* Segmented Tab Switcher */}
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 border border-slate-200 mb-2.5 text-xs">
+                  <button
+                    onClick={() => setConsoleTab("CITIZENS")}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 ${
+                      consoleTab === "CITIZENS"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Radio className="w-3.5 h-3.5 text-red-600" />
+                    <span>SOS ({activeCitizens.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setConsoleTab("RESPONDERS")}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 ${
+                      consoleTab === "RESPONDERS"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Truck className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Rescue ({activeResponders.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setConsoleTab("AI_RISK")}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 ${
+                      consoleTab === "AI_RISK"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5 text-amber-600" />
+                    <span>AI Risk</span>
+                  </button>
+
+                  <button
+                    onClick={() => setConsoleTab("RADAR")}
+                    className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 ${
+                      consoleTab === "RADAR"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Basins (12)</span>
+                  </button>
+                </div>
+
+                {/* Live Mobile Stream Sync Status Chip */}
+                <div className="mb-2.5 px-2.5 py-1.5 rounded-lg bg-indigo-50/80 border border-indigo-200/80 flex items-center justify-between text-[11px] text-indigo-900">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Mobile Sync Active: 172.16.184.105:3000</span>
+                  </span>
+                  <button
+                    onClick={() => setIsMobileModalOpen(true)}
+                    className="text-[10px] font-bold text-indigo-700 hover:underline"
+                  >
+                    API Spec
+                  </button>
+                </div>
+
+                {/* Tab Content Panes */}
+                <div className="flex-1 overflow-y-auto">
+                  {consoleTab === "CITIZENS" && (
+                    <CitizenTrackingMatrix
+                      citizens={activeCitizens}
+                      compact={true}
+                      onFocusCoordinates={(coords) => handleFocusCoords(coords[0], coords[1])}
+                      onDispatchToCitizen={(cit) => {
+                        const foundResp = activeResponders[0];
+                        if (foundResp) handleDispatchResponderUnit(foundResp);
+                      }}
+                    />
+                  )}
+
+                  {consoleTab === "RESPONDERS" && (
+                    <EmergencyResponderGrid
+                      responders={activeResponders}
+                      zoneName={selectedZone.name}
+                      compact={true}
+                      onDispatchUnit={handleDispatchResponderUnit}
+                      onMultiAgencyDispatch={handleMultiAgencyDispatch}
+                    />
+                  )}
+
+                  {consoleTab === "AI_RISK" && (
+                    <div className="space-y-3">
+                      <PredictionPanel
+                        prediction={
+                          prediction
+                            ? {
+                                ...prediction,
+                                flood_probability_percent: displayedRisk,
+                                alert_color:
+                                  displayedRisk >= 75
+                                    ? "RED"
+                                    : displayedRisk >= 55
+                                    ? "ORANGE"
+                                    : displayedRisk >= 35
+                                    ? "YELLOW"
+                                    : "GREEN",
+                              }
+                            : null
+                        }
+                        loading={loadingPrediction}
+                        onRefresh={() => loadZoneData(selectedZone)}
+                      />
+                      <PreventiveDirectivesPanel activeZone={selectedZone} />
+                    </div>
+                  )}
+
+                  {consoleTab === "RADAR" && (
+                    <NationalSentinelRadar
+                      scanData={sentinelScan}
+                      loading={loadingScan}
+                      onRefreshScan={runNationalScan}
+                      selectedZone={selectedZone}
+                      onSelectZoneById={handleSelectZoneById}
+                      autoDispatchEnabled={autoDispatchEnabled}
+                      onToggleAutoDispatch={() => setAutoDispatchEnabled((prev) => !prev)}
+                      compact={true}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
 
       {/* Android Pairing Bridge Station Modal */}
       <MobilePairingModal
@@ -636,7 +685,7 @@ export default function DashboardPage() {
           <span className="text-gray-300">|</span>
           <span className="flex items-center gap-1.5 text-violet-600 font-medium">
             <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
-            Android Bridge: 172.16.183.190:3000
+            Android Bridge: 172.16.184.105:3000
           </span>
           <span className="text-gray-300">|</span>
           <span className="text-gray-600">Emergency: NDRF 1078 &bull; SDMA 1070</span>

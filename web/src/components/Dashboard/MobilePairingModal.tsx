@@ -27,17 +27,23 @@ export default function MobilePairingModal({
 
   if (!isOpen) return null;
 
-  const localIp = "172.16.183.190";
+  const localIp = "172.16.184.105";
   const triggerUrl = `http://${localIp}:3000/api/sos/trigger`;
   const predictionUrl = `http://${localIp}:3000/api/prediction/current?zone_id=chamoli_01`;
+  const safeRoutesUrl = `http://${localIp}:3000/api/routes/safe?zone_id=chamoli_01`;
 
   const sampleJson = {
     device_uuid: "pixel8-field-node-01",
+    name: "Priyanshu (Mobile APK)",
+    phone: "+91 98765 43210",
     lat: 30.5582,
     lng: 79.5651,
     status: "SOS",
-    sos_type: "TRAPPED IN RIVER FLASH FLOOD",
+    sos_type: "TRAPPED IN FLASH FLOOD",
+    battery_pct: 82,
+    medical_distress: "WATER_RISING",
     is_mesh_relayed: true,
+    zone_id: "chamoli_01",
   };
 
   const copyToClipboard = (text: string, field: string) => {

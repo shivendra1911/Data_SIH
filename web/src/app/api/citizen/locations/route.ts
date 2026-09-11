@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { INITIAL_CITIZEN_LOCATIONS } from "@/lib/constants";
 import { CitizenLocation } from "@/lib/types";
 
+// Unified global in-memory store for citizen telemetry
+declare global {
+  var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
+}
+
+if (!global.__NEERNETRA_CITIZENS__) {
+  global.__NEERNETRA_CITIZENS__ = [...INITIAL_CITIZEN_LOCATIONS];
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
-
-let citizenStore: CitizenLocation[] = [...INITIAL_CITIZEN_LOCATIONS];
 
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
@@ -20,7 +27,7 @@ export async function GET(req: NextRequest) {
   const statusFilter = searchParams.get("status");
   const isLiveFilter = searchParams.get("is_live");
 
-  let result = citizenStore;
+  let result = global.__NEERNETRA_CITIZENS__ || [];
   if (zoneIdFilter) {
     result = result.filter((c) => !c.zone_id || c.zone_id === zoneIdFilter);
   }
@@ -51,9 +58,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const device_uuid = body.device_uuid || `node-${Math.random().toString(36).substring(2, 7)}`;
     const newCitizen: CitizenLocation = {
-      id: body.id || `cit-${Date.now()}`,
-      device_uuid: body.device_uuid || `node-${Math.random().toString(36).substring(2, 7)}`,
+      id: body.id || `cit-${device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+      device_uuid,
+      name: body.name || `Citizen [${device_uuid.slice(0, 8)}]`,
+      phone: body.phone || "+91 98765 43210",
       lat: Number(body.lat) || 30.5573,
       lng: Number(body.lng) || 79.5642,
       is_live: body.is_live !== undefined ? Boolean(body.is_live) : true,
@@ -62,11 +72,24 @@ export async function POST(req: NextRequest) {
       drift_radius_m: Number(body.drift_radius_m) || (body.is_live ? 0 : 300),
       battery_pct: Number(body.battery_pct) || 80,
       status: body.status || "SOS",
-      sos_type: body.sos_type || "DISTRESS SIGNAL",
+      sos_type: body.sos_type || "MOBILE DISTRESS BEACON",
       mesh_hops: Number(body.mesh_hops) || 0,
+      zone_id: body.zone_id || "chamoli_01",
+      medical_distress: body.medical_distress || "WATER_RISING",
     };
 
-    citizenStore = [newCitizen, ...citizenStore];
+    const existingIndex = global.__NEERNETRA_CITIZENS__!.findIndex(
+      (c) => c.device_uuid === device_uuid || c.id === newCitizen.id
+    );
+
+    if (existingIndex >= 0) {
+      global.__NEERNETRA_CITIZENS__![existingIndex] = {
+        ...global.__NEERNETRA_CITIZENS__![existingIndex],
+        ...newCitizen,
+      };
+    } else {
+      global.__NEERNETRA_CITIZENS__!.unshift(newCitizen);
+    }
 
     return NextResponse.json(
       { success: true, citizen: newCitizen },
