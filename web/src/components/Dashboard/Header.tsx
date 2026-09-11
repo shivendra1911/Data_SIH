@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -68,7 +68,7 @@ export default function Header({
   const isZeroMinuteActive = floodRiskPercent >= 75;
 
   return (
-    <header className="glass-panel border-b border-white/60 sticky top-0 z-50 px-3 sm:px-5 lg:px-6 py-2 shadow-xs backdrop-blur-md">
+    <header className="bg-slate-950/40 border-b border-white/15 sticky top-0 z-50 px-3 sm:px-5 lg:px-6 py-2 shadow-lg backdrop-blur-md text-white">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 max-w-[1800px] mx-auto w-full">
 
         {/* LEFT: Brand & Live Mobile Sync Indicator */}
@@ -84,18 +84,18 @@ export default function Header({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <Link href="/" className="text-sm font-black tracking-tight text-slate-950 hover:opacity-90 transition" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  Neer<span className="text-indigo-600">Netra</span>
+                <Link href="/" className="text-sm font-black tracking-tight text-white hover:opacity-90 transition" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  Neer<span className="text-violet-400">Netra</span>
                 </Link>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-violet-500/25 text-violet-200 border border-violet-400/40">
                   v2.4
                 </span>
                 <button
                   onClick={onOpenMobileModal}
                   title="Click to view Android APK pairing status and endpoints"
-                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
+                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 hover:bg-emerald-500/30 transition"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span>APK Sync: 172.16.184.105:3000</span>
                 </button>
               </div>
@@ -103,23 +103,23 @@ export default function Header({
           </div>
 
           {/* Mobile IST Clock (Compact) */}
-          <div className="sm:hidden flex items-center gap-1 text-[11px] font-mono text-slate-700 bg-white/70 px-2 py-1 rounded-md border border-slate-200">
-            <Clock className="w-3 h-3 text-indigo-600" />
+          <div className="sm:hidden flex items-center gap-1 text-[11px] font-mono text-slate-200 bg-white/10 px-2 py-1 rounded-md border border-white/20">
+            <Clock className="w-3 h-3 text-indigo-400" />
             <span>{currentTime || "00:00 IST"}</span>
           </div>
         </div>
 
         {/* CENTER: 3-Page Navigation Tabs */}
-        <nav aria-label="Command Center Navigation" className="flex items-center justify-center gap-1 p-1 rounded-xl bg-slate-100/95 border border-slate-200/90 text-xs font-semibold shadow-xs">
+        <nav aria-label="Command Center Navigation" className="flex items-center justify-center gap-1 p-1 rounded-xl bg-white/10 border border-white/20 text-xs font-semibold shadow-md backdrop-blur-md">
           <Link
             href="/"
             className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               pathname === "/"
-                ? "bg-white text-indigo-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-950 shadow-md font-bold"
+                : "text-slate-300 hover:text-white"
             }`}
           >
-            <Satellite className={`w-3.5 h-3.5 ${pathname === "/" ? "text-indigo-600" : "text-slate-400"}`} />
+            <Satellite className={`w-3.5 h-3.5 ${pathname === "/" ? "text-indigo-600" : "text-slate-300"}`} />
             <span>National Sentinel</span>
           </Link>
 
@@ -127,11 +127,11 @@ export default function Header({
             href="/radar"
             className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               pathname === "/radar"
-                ? "bg-white text-emerald-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-950 shadow-md font-bold"
+                : "text-slate-300 hover:text-white"
             }`}
           >
-            <Compass className={`w-3.5 h-3.5 ${pathname === "/radar" ? "text-emerald-600" : "text-slate-400"}`} />
+            <Compass className={`w-3.5 h-3.5 ${pathname === "/radar" ? "text-emerald-600" : "text-slate-300"}`} />
             <span>Tactical Radar</span>
           </Link>
 
@@ -139,11 +139,11 @@ export default function Header({
             href="/rescue"
             className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               pathname === "/rescue"
-                ? "bg-white text-rose-950 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-950 shadow-md font-bold"
+                : "text-slate-300 hover:text-white"
             }`}
           >
-            <Users className={`w-3.5 h-3.5 ${pathname === "/rescue" ? "text-rose-600" : "text-slate-400"}`} />
+            <Users className={`w-3.5 h-3.5 ${pathname === "/rescue" ? "text-rose-600" : "text-slate-300"}`} />
             <span>Rescue & Citizen Grid</span>
           </Link>
         </nav>
@@ -155,7 +155,7 @@ export default function Header({
             <label htmlFor="zone-selector" className="sr-only">
               Select India flood monitoring zone
             </label>
-            <MapPin className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 pointer-events-none" aria-hidden />
+            <MapPin className="w-3.5 h-3.5 text-violet-400 absolute left-2.5 pointer-events-none" aria-hidden />
             <select
               id="zone-selector"
               value={selectedZone.id}
@@ -163,19 +163,19 @@ export default function Header({
                 const zone = INDIA_FLOOD_ZONES.find((z) => z.id === e.target.value);
                 if (zone) onSelectZone(zone);
               }}
-              className="bg-white/90 text-slate-900 text-xs font-semibold pl-8 pr-7 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs transition h-[36px] cursor-pointer appearance-none hover:border-indigo-400"
+              className="bg-slate-900/90 text-white text-xs font-semibold pl-8 pr-7 py-1.5 rounded-lg border border-white/20 focus:outline-none focus:ring-1 focus:ring-violet-400 shadow-xs transition h-[36px] cursor-pointer appearance-none hover:border-white/40"
             >
               {INDIA_FLOOD_ZONES.map((zone) => (
-                <option key={zone.id} value={zone.id}>
+                <option key={zone.id} value={zone.id} className="bg-slate-900 text-white">
                   {zone.name} ({zone.district})
                 </option>
               ))}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2.5 pointer-events-none" aria-hidden />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" aria-hidden />
           </div>
 
-          <div className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/80 border border-slate-200 text-slate-800 text-xs font-mono font-medium shadow-xs h-[36px]">
-            <Clock className="w-3.5 h-3.5 text-indigo-600" aria-hidden />
+          <div className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/10 border border-white/20 text-slate-200 text-xs font-mono font-medium shadow-xs h-[36px]">
+            <Clock className="w-3.5 h-3.5 text-violet-400" aria-hidden />
             <span>{currentTime || "00:00:00 IST"}</span>
           </div>
 
