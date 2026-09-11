@@ -135,7 +135,7 @@ export const HomeScreen: React.FC = () => {
   const checkOfflineQueue = async () => {
     const queue = await getOfflineSOSQueue();
     setQueuedCount(queue.length);
-    setPeerCount(meshManager.getActivePeersCount());
+    setPeerCount(meshEngine.getConnectedPeers().length);
     const cachedLoc = await getLastKnownLocation();
     setLastLocation(cachedLoc);
   };

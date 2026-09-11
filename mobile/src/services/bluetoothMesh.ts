@@ -68,7 +68,7 @@ function decodePacket(base64: string): {
 
 // ─── Core BLE Mesh Manager ───────────────────────────────────────────────────
 class NeerNetraBLEMesh {
-  private manager: BleManager;
+  private manager: BleManager | null = null;
   private connectedDevices: Map<string, Device> = new Map();
   private activePeers: Map<string, MeshPeer> = new Map();
   private chatMessages: MeshChatMessage[] = [];
@@ -85,11 +85,18 @@ class NeerNetraBLEMesh {
   public onStateChange?: (state: string) => void;
 
   constructor() {
-    this.manager = new BleManager();
-    this.setupStateListener();
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        this.manager = new BleManager();
+        this.setupStateListener();
+      } catch (e) {
+        console.warn('[BLE Mesh] Could not instantiate BleManager:', e);
+      }
+    }
   }
 
   private setupStateListener() {
+    if (!this.manager) return;
     this.manager.onStateChange((state) => {
       console.log('[BLE Mesh] Bluetooth state:', state);
       if (this.onStateChange) this.onStateChange(state);
@@ -146,9 +153,13 @@ class NeerNetraBLEMesh {
       return false;
     }
 
-    const state = await this.manager.state();
-    if (state === State.PoweredOn) {
-      await this.startMesh();
+    if (this.manager) {
+      const state = await this.manager.state();
+      if (state === State.PoweredOn) {
+        await this.startMesh();
+      }
+    } else {
+      console.log('[BLE Mesh] Web preview mode — skipping native BLE manager state check.');
     }
 
     return true;
@@ -169,7 +180,7 @@ class NeerNetraBLEMesh {
 
   // ── Central: Scan for NeerNetra peers ─────────────────────────────────────
   private async startScanning() {
-    if (this.isScanning) return;
+    if (this.isScanning || !this.manager) return;
     this.isScanning = true;
 
     console.log('[BLE Mesh] Scanning for NeerNetra peers...');
@@ -195,14 +206,14 @@ class NeerNetraBLEMesh {
 
     // Restart scan every 30 seconds to find new peers
     this.scanTimer = setInterval(() => {
-      this.manager.stopDeviceScan();
+      this.manager?.stopDeviceScan();
       this.isScanning = false;
       setTimeout(() => this.startScanning(), 1000);
     }, 30000);
   }
 
   stopScanning() {
-    this.manager.stopDeviceScan();
+    this.manager?.stopDeviceScan();
     this.isScanning = false;
     if (this.scanTimer) {
       clearInterval(this.scanTimer);
@@ -498,7 +509,7 @@ class NeerNetraBLEMesh {
     this.connectedDevices.forEach((d) => d.cancelConnection().catch(() => {}));
     this.connectedDevices.clear();
     this.activePeers.clear();
-    this.manager.destroy();
+    this.manager?.destroy();
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
