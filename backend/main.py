@@ -68,6 +68,11 @@ dispatched_rescues_db: List[Dict[str, Any]] = []
 # Active emergency broadcasts
 active_broadcasts_db: List[Dict[str, Any]] = []
 
+# Registered Firebase Cloud Messaging (FCM) push tokens
+registered_push_tokens: Dict[str, Dict[str, Any]] = {}
+FIREBASE_KEY_PATH = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+firebase_initialized = False
+
 # 10 Monitored Himalayan Target Zones
 ALL_ZONES_CONFIG = {
     "chamoli_01":    {"name": "Chamoli",         "lat": 30.4167, "lng": 79.3167, "river": "Alaknanda"},
@@ -320,9 +325,22 @@ class SensorUpdatePayload(BaseModel):
     soil_moisture: float
     river_discharge_m3s: float
 
+class PushTokenRegistration(BaseModel):
+    device_uuid: str
+    fcm_token: str
+    zone_id: Optional[str] = "chamoli_01"
+
+class FCMTestPayload(BaseModel):
+    zone_id: str = "chamoli_01"
+    title: Optional[str] = "🚨 NeerNetra SIH Emergency Test"
+    body: Optional[str] = "Evacuate immediately! GLOF sensor trigger active."
+    token: Optional[str] = None
+    dry_run: bool = False
+
 @app.on_event("startup")
-def load_ml_model():
-    global model_clf
+def startup_services():
+    global model_clf, firebase_initialized
+    # 1. Load ML Model
     if os.path.exists(MODEL_PATH):
         try:
             model_clf = joblib.load(MODEL_PATH)
@@ -331,6 +349,86 @@ def load_ml_model():
             print(f"[Backend Startup] Failed to load model: {e}")
     else:
         print(f"[Backend Startup] Model file not found at {MODEL_PATH}. Using algorithmic fallback.")
+
+    # 2. Initialize Firebase Admin SDK
+    if os.path.exists(FIREBASE_KEY_PATH):
+        try:
+            import firebase_admin
+            from firebase_admin import credentials
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(FIREBASE_KEY_PATH)
+                firebase_admin.initialize_app(cred)
+            firebase_initialized = True
+            print(f"[Firebase Admin] Initialized successfully with {FIREBASE_KEY_PATH}")
+        except Exception as fb_err:
+            print(f"[Firebase Admin] Initialization warning: {fb_err}")
+    else:
+        print(f"[Firebase Admin] Notice: serviceAccountKey.json not present at {FIREBASE_KEY_PATH}")
+
+def send_firebase_fcm_alert(
+    zone_id: str,
+    title: str,
+    body: str,
+    data_payload: Optional[Dict[str, str]] = None,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Broadcasts FCM push alerts to:
+    1) Topic: zone_{zone_id}
+    2) All registered device FCM tokens for this zone
+    """
+    if not firebase_initialized:
+        return {"status": "skipped", "reason": "Firebase Admin SDK not initialized"}
+
+    clean_zone = zone_id.lower()
+    summary = {
+        "status": "completed",
+        "zone_id": zone_id,
+        "topic_dispatched": False,
+        "multicast_success_count": 0,
+        "multicast_failure_count": 0,
+        "errors": []
+    }
+
+    try:
+        from firebase_admin import messaging
+
+        # 1. Broadcast to Zone Topic
+        try:
+            topic_msg = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data=data_payload or {},
+                topic=f"zone_{clean_zone}"
+            )
+            msg_res = messaging.send(topic_msg, dry_run=dry_run)
+            summary["topic_dispatched"] = True
+            summary["topic_message_id"] = msg_res
+        except Exception as topic_err:
+            summary["errors"].append(f"Topic broadcast error: {str(topic_err)}")
+
+        # 2. Multicast to registered devices in this zone
+        target_tokens = [
+            info["fcm_token"] for info in registered_push_tokens.values()
+            if info.get("zone_id", "").lower() == clean_zone and info.get("fcm_token")
+        ]
+
+        if target_tokens:
+            try:
+                multicast_msg = messaging.MulticastMessage(
+                    notification=messaging.Notification(title=title, body=body),
+                    data=data_payload or {},
+                    tokens=target_tokens
+                )
+                res = messaging.send_each_for_multicast(multicast_msg, dry_run=dry_run)
+                summary["multicast_success_count"] = res.success_count
+                summary["multicast_failure_count"] = res.failure_count
+            except Exception as multi_err:
+                summary["errors"].append(f"Multicast error: {str(multi_err)}")
+
+    except Exception as general_err:
+        summary["errors"].append(f"General FCM error: {str(general_err)}")
+
+    return summary
 
 def run_zone_inference(zone_id: str, sensors: Dict[str, Any]) -> Dict[str, Any]:
     try:
@@ -675,13 +773,69 @@ def broadcast_red_zone_alert(zone_id: str = "chamoli_01"):
     }
     active_broadcasts_db.append(broadcast_entry)
 
+    # Dispatch Cloud Push Alert via Firebase Cloud Messaging (FCM)
+    fcm_summary = send_firebase_fcm_alert(
+        zone_id=zone_id,
+        title=f"🚨 EMERGENCY RED ALERT: FLASH FLOOD IN {zone_id.upper()}",
+        body=f"Critical evacuation warning! Immediate flash flood risk detected in {zone_id}. Head to high ground immediately.",
+        data_payload={"alert_color": "RED", "zone_id": zone_id, "priority": "CRITICAL"}
+    )
+
     return {
         "success": True,
         "broadcast_status": "DISPATCHED",
         "affected_zone": zone_id,
         "priority": "RED_ZONE_CRITICAL",
         "broadcast": broadcast_entry,
+        "fcm_dispatch": fcm_summary,
         "message": f"EMERGENCY RED ALERT DISPATCHED TO ALL DEVICES IN {zone_id.upper()} RANGE"
+    }
+
+@app.post("/api/telemetry/register-push-token")
+def register_push_token(payload: PushTokenRegistration):
+    """
+    Registers or updates an FCM device token from a mobile device for real-time push alerts.
+    """
+    clean_zone = payload.zone_id.lower() if payload.zone_id else "chamoli_01"
+    registered_push_tokens[payload.device_uuid] = {
+        "device_uuid": payload.device_uuid,
+        "fcm_token": payload.fcm_token,
+        "zone_id": clean_zone,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    print(f"[FCM Registry] Device {payload.device_uuid[:10]} registered for zone {clean_zone}")
+    return {
+        "success": True,
+        "message": f"Device {payload.device_uuid} registered for zone {clean_zone}",
+        "total_registered_devices": len(registered_push_tokens)
+    }
+
+@app.get("/api/telemetry/push-tokens")
+def get_registered_push_tokens():
+    """
+    Returns list of registered mobile devices and their push registration status.
+    """
+    return {
+        "total_registered_devices": len(registered_push_tokens),
+        "devices": list(registered_push_tokens.values())
+    }
+
+@app.post("/api/alerts/test-fcm")
+def test_fcm_broadcast(payload: FCMTestPayload):
+    """
+    Test endpoint for Firebase Cloud Messaging push dispatch (supports dry_run=True).
+    """
+    fcm_summary = send_firebase_fcm_alert(
+        zone_id=payload.zone_id,
+        title=payload.title,
+        body=payload.body,
+        data_payload={"zone_id": payload.zone_id, "test": "true"},
+        dry_run=payload.dry_run
+    )
+    return {
+        "success": True,
+        "firebase_initialized": firebase_initialized,
+        "fcm_summary": fcm_summary
     }
 
 @app.get("/api/alerts/active")

@@ -1,8 +1,19 @@
+import { Platform } from 'react-native';
 import { ZonePrediction, SOSPayload } from '../types';
-import { getOfflineSOSQueue, clearOfflineSOSQueue, saveSOSToOfflineQueue } from './offlineStorage';
+import { getOfflineSOSQueue, clearOfflineSOSQueue, setOfflineSOSQueue, saveSOSToOfflineQueue } from './offlineStorage';
 
-// Default API URL fallback to standard local backend URL if env var is missing
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+// Dynamic API URL: on Android emulator 10.0.2.2 points to host, otherwise localhost
+const getBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000';
+  }
+  return 'http://localhost:8000';
+};
+
+const BASE_URL = getBaseUrl();
 
 export const fetchCurrentPrediction = async (zoneId: string = 'chamoli_01'): Promise<ZonePrediction> => {
   try {
@@ -62,8 +73,10 @@ export const flushOfflineSOSQueue = async (): Promise<number> => {
 
   console.log(`[API Service] Attempting sync for ${queue.length} offline queued items...`);
   let syncedCount = 0;
+  const remainingQueue: SOSPayload[] = [];
 
-  for (const item of queue) {
+  for (let i = 0; i < queue.length; i++) {
+    const item = queue[i];
     try {
       const res = await fetch(`${BASE_URL}/api/sos/trigger`, {
         method: 'POST',
@@ -72,16 +85,39 @@ export const flushOfflineSOSQueue = async (): Promise<number> => {
       });
       if (res.ok) {
         syncedCount++;
+      } else {
+        remainingQueue.push(item);
       }
     } catch {
-      // Break loop if still offline
+      // Network drop: keep current and remaining items in queue
+      remainingQueue.push(...queue.slice(i));
       break;
     }
   }
 
-  if (syncedCount === queue.length) {
-    await clearOfflineSOSQueue();
-  }
-
+  await setOfflineSOSQueue(remainingQueue);
   return syncedCount;
 };
+
+export const registerPushTokenApi = async (
+  deviceUuid: string,
+  fcmToken: string,
+  zoneId: string = 'chamoli_01'
+): Promise<boolean> => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/telemetry/register-push-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_uuid: deviceUuid,
+        fcm_token: fcmToken,
+        zone_id: zoneId,
+      }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('[API Service] Failed to register push token with backend:', error);
+    return false;
+  }
+};
+

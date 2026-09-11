@@ -19,7 +19,7 @@ import {
   getLastKnownLocation,
   syncCurrentLocationToBackend,
 } from '../services/locationTracker';
-import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
+import { triggerRedZoneEmergencyAlert, registerForPushNotificationsAsync } from '../services/pushNotification';
 import {
   startRedZoneDangerTimer,
   markUserAsSafeConfirmed,
@@ -37,6 +37,7 @@ import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
 import { OfflineMapContainer } from '../components/OfflineMapContainer';
 import { SOSBigButton } from '../components/SOSBigButton';
+import { EmergencyGuide } from '../components/EmergencyGuide';
 import { Navigation } from 'lucide-react-native';
 
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
@@ -72,6 +73,7 @@ export const HomeScreen: React.FC = () => {
       }
       setDeviceUuid(storedUuid);
       start5MinPeriodicLocationTracker(storedUuid, 'chamoli_01');
+      registerForPushNotificationsAsync(storedUuid, 'chamoli_01');
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
 
@@ -164,6 +166,23 @@ export const HomeScreen: React.FC = () => {
       lat,
       lng,
       status: 'SAFE',
+      is_mesh_relayed: networkMode === 'BLE_MESH',
+      timestamp: new Date().toISOString(),
+    });
+    await checkOfflineQueue();
+  };
+
+  // Citizen taps "I AM HELPING" (Good Samaritan / Volunteer Mode)
+  const handleConfirmHelping = async () => {
+    setSosStatus('HELPING');
+    const lat = lastLocation ? lastLocation.lat : 30.5573;
+    const lng = lastLocation ? lastLocation.lng : 79.5642;
+
+    await sendSOSPayload({
+      device_uuid: deviceUuid,
+      lat,
+      lng,
+      status: 'HELPING',
       is_mesh_relayed: networkMode === 'BLE_MESH',
       timestamp: new Date().toISOString(),
     });
@@ -272,15 +291,19 @@ export const HomeScreen: React.FC = () => {
             {/* Flood risk gauge */}
             <SecurityGaugeCard prediction={prediction} />
 
-            {/* Primary SOS + I AM SAFE buttons */}
+            {/* Primary SOS + I AM SAFE / HELPING buttons */}
             <SOSBigButton
               onSOSTrigger={handleSOSTrigger}
               onConfirmSafe={handleConfirmSafe}
+              onConfirmHelping={handleConfirmHelping}
               currentStatus={sosStatus}
             />
 
             {/* Nearby citizens needing / offering help */}
             <NearbyVictimsHelpCard />
+
+            {/* Offline survival guidelines & protocol */}
+            <EmergencyGuide />
           </>
         )}
 
@@ -312,6 +335,7 @@ export const HomeScreen: React.FC = () => {
             <SOSBigButton
               onSOSTrigger={handleSOSTrigger}
               onConfirmSafe={handleConfirmSafe}
+              onConfirmHelping={handleConfirmHelping}
               currentStatus={sosStatus}
             />
 

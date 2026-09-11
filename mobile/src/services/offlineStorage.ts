@@ -38,3 +38,17 @@ export const clearOfflineSOSQueue = async (): Promise<void> => {
     console.error('[OfflineStorage] Failed to clear SOS queue:', error);
   }
 };
+
+export const setOfflineSOSQueue = async (queue: SOSPayload[]): Promise<void> => {
+  try {
+    if (queue.length === 0) {
+      await AsyncStorage.removeItem(QUEUE_KEY);
+    } else {
+      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    }
+    console.log(`[OfflineStorage] SOS Queue updated: ${queue.length} items remaining`);
+  } catch (error) {
+    console.error('[OfflineStorage] Failed to set SOS queue:', error);
+  }
+};
+

@@ -34,9 +34,9 @@ def run_integration_tests():
         print(f"[FAIL] Could not import FastAPI app: {e}")
         return False
 
-    client = TestClient(app)
-    tests_passed = 0
-    total_tests = 9
+    with TestClient(app) as client:
+        tests_passed = 0
+        total_tests = 10
 
     # 1. Health & Status
     print("\n[TEST 1] Verifying Backend Root & Health Status...")
@@ -157,6 +157,29 @@ def run_integration_tests():
     assert alerts_res.status_code == 200
     assert len(alerts_res.json()["alerts"]) > 0
     print(f"  --> Emergency Broadcast Broadcasted to all phones in CHAMOLI_01 sector.")
+    tests_passed += 1
+
+    # 10. Firebase Cloud Messaging (FCM) Push Token Registration & Alert Dispatch
+    print("\n[TEST 10] Verifying Firebase Cloud Messaging (FCM) Push Registration & Broadcast...")
+    reg_res = client.post("/api/telemetry/register-push-token", json={
+        "device_uuid": "dev_test_phone_178",
+        "fcm_token": "fcm_token_dry_run_device_node",
+        "zone_id": "chamoli_01"
+    })
+    assert reg_res.status_code == 200
+    assert reg_res.json()["success"] is True
+
+    fcm_test_res = client.post("/api/alerts/test-fcm", json={
+        "zone_id": "chamoli_01",
+        "title": "🚨 GLOF High Risk Push",
+        "body": "Evacuate Chamoli basin immediately.",
+        "dry_run": True
+    })
+    assert fcm_test_res.status_code == 200
+    fcm_data = fcm_test_res.json()
+    assert fcm_data["success"] is True
+    assert fcm_data["firebase_initialized"] is True
+    print(f"  --> Firebase FCM Push Broadcast Verified! Topic Sent: {fcm_data['fcm_summary']['topic_dispatched']}")
     tests_passed += 1
 
     print("\n" + "=" * 75)

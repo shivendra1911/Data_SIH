@@ -43,3 +43,55 @@ export const triggerRedZoneEmergencyAlert = async (zoneName: string, probability
     console.warn('[NotificationService] Failed to dispatch notification:', error);
   }
 };
+
+/**
+ * Request notification permissions and register the device FCM token with backend.
+ */
+export const registerForPushNotificationsAsync = async (
+  deviceUuid: string,
+  zoneId: string = 'chamoli_01'
+): Promise<string | null> => {
+  try {
+    await setupEmergencyNotificationChannels();
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.warn('[NotificationService] Notification permission not granted by user.');
+      return null;
+    }
+
+    // Attempt to retrieve the native device push token (FCM token on Android)
+    let pushToken: string | null = null;
+    try {
+      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+      pushToken = deviceTokenData.data;
+      console.log('[NotificationService] Acquired native device FCM push token:', pushToken);
+    } catch (deviceTokenErr) {
+      console.log('[NotificationService] Native token fallback, attempting Expo push token:', deviceTokenErr);
+      try {
+        const expoTokenData = await Notifications.getExpoPushTokenAsync();
+        pushToken = expoTokenData.data;
+        console.log('[NotificationService] Acquired Expo push token:', pushToken);
+      } catch (expoTokenErr) {
+        console.warn('[NotificationService] Could not acquire push token:', expoTokenErr);
+      }
+    }
+
+    if (pushToken) {
+      const { registerPushTokenApi } = require('./api');
+      await registerPushTokenApi(deviceUuid, pushToken, zoneId);
+    }
+
+    return pushToken;
+  } catch (err) {
+    console.warn('[NotificationService] Error initializing push notifications:', err);
+    return null;
+  }
+};

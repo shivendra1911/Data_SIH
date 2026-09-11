@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Tomorrow.io Weather",
+    "status": 200,
+    "latency_ms": 946,
+    "ok": true,
+    "sample": "{\"data\":{\"time\":\"2026-09-11T13:59:00Z\",\"values\":{\"altimeterSetting\":1021.57,\"cloudBase\":2.1,\"cloudCeiling\":null,\"cloudCover\":7.03,\"dewPoint\""
+  },
+  {
+    "name": "Open-Elevation",
+    "status": 200,
+    "latency_ms": 1738,
+    "ok": true,
+    "sample": "{\"results\":[{\"latitude\":30.5573,\"longitude\":79.5642,\"elevation\":1790.0}]}"
+  },
+  {
+    "name": "USGS Earthquake",
+    "status": 200,
+    "latency_ms": 1332,
+    "ok": true,
+    "sample": "{\"type\":\"FeatureCollection\",\"metadata\":{\"generated\":1789135177000,\"url\":\"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&lat"
+  },
+  {
+    "name": "NASA POWER Climate",
+    "status": 200,
+    "latency_ms": 1331,
+    "ok": true,
+    "sample": "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[79.317,30.417,3184.08]},\"properties\":{\"parameter\":{\"PRECTOTCORR\":{\"20240901\":7.0"
+  },
+  {
+    "name": "OSM Overpass Shelters",
+    "status": 200,
+    "latency_ms": 2150,
+    "ok": true,
+    "sample": "{   \"version\": 0.6,   \"generator\": \"Overpass API 0.7.62.11 87bfad18\",   \"osm3s\": {     \"timestamp_osm_base\": \"2026-09-11T13:58:36Z\",     \"co"
+  }
+]
