@@ -1,0 +1,354 @@
+"use client";
+
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import Header from "@/components/Dashboard/Header";
+import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
+import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
+import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
+import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
+import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
+import {
+  INDIA_FLOOD_ZONES,
+  SAFE_EVACUATION_ROUTES,
+  INITIAL_CITIZEN_LOCATIONS,
+  EMERGENCY_RESPONDERS_GRID,
+} from "@/lib/constants";
+import {
+  HazardZone,
+  CitizenLocation,
+  EmergencyResponder,
+  SafeEvacuationRoute,
+} from "@/lib/types";
+import {
+  Users,
+  Smartphone,
+  Truck,
+  Compass,
+  ArrowRight,
+  Radio,
+  Wifi,
+  ShieldCheck,
+  CheckCircle2,
+  AlertOctagon,
+  Volume2,
+} from "lucide-react";
+
+export default function RescueCitizenGridPage() {
+  const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
+  const [citizens, setCitizens] = useState<CitizenLocation[]>(INITIAL_CITIZEN_LOCATIONS);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
+  const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
+  const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
+  const [dispatchNotice, setDispatchNotice] = useState<string | null>(null);
+
+  const prevCitizenCountRef = useRef<number>(INITIAL_CITIZEN_LOCATIONS.length);
+
+  const activeResponders: EmergencyResponder[] =
+    EMERGENCY_RESPONDERS_GRID[selectedZone.id] ||
+    EMERGENCY_RESPONDERS_GRID["chamoli_01"] ||
+    [];
+
+  const activeSafeRoutes: SafeEvacuationRoute[] =
+    SAFE_EVACUATION_ROUTES[selectedZone.id] ||
+    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
+    [];
+
+
+  const playAlertSound = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+      } catch {}
+    }
+  }, []);
+
+  // Poll shared in-memory Node store for incoming mobile phone distress signals
+  useEffect(() => {
+    const fetchCitizens = async () => {
+      try {
+        const res = await fetch("/api/citizen/locations");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.citizens && Array.isArray(data.citizens)) {
+            setCitizens(data.citizens);
+            if (data.citizens.length > prevCitizenCountRef.current) {
+              // New citizen SOS arrived from mobile APK
+              if (soundEnabled) playAlertSound();
+              setDispatchNotice(`🚨 New Emergency SOS received from mobile device! Plotted to rescue queue.`);
+              setTimeout(() => setDispatchNotice(null), 5000);
+            }
+            prevCitizenCountRef.current = data.citizens.length;
+          }
+        }
+      } catch (err) {
+        console.warn("Error fetching citizen telemetry:", err);
+      }
+    };
+
+    fetchCitizens();
+    const interval = setInterval(fetchCitizens, 2000);
+    return () => clearInterval(interval);
+  }, [soundEnabled, playAlertSound]);
+
+  const handleDispatchResponderUnit = async (responder: EmergencyResponder) => {
+    try {
+      const res = await fetch("/api/responders/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responder_id: responder.id,
+          zone_id: selectedZone.id,
+          incident_description: `Immediate flood evacuation dispatch for ${responder.unit_name}`,
+        }),
+      });
+      if (res.ok) {
+        setDispatchNotice(`✓ Dispatched ${responder.unit_name} to flood sector. ETA: ~${responder.eta_minutes} mins.`);
+        setTimeout(() => setDispatchNotice(null), 4000);
+      }
+    } catch (e) {
+      console.warn("Dispatch error:", e);
+    }
+  };
+
+  const handleMultiAgencyDispatch = async () => {
+    try {
+      const res = await fetch("/api/responders/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zone_id: selectedZone.id,
+          agency_type: "ALL",
+          incident_description: `MULTI-AGENCY PRIORITY DISPATCH: All available 108 Ambulances, Police QRTs & NDRF units mobilized.`,
+        }),
+      });
+      if (res.ok) {
+        setDispatchNotice(`🚨 MULTI-AGENCY DISPATCH EXECUTED: All 108 ALS, Police, and NDRF units mobilized for ${selectedZone.name}.`);
+        setTimeout(() => setDispatchNotice(null), 5000);
+      }
+    } catch (e) {
+      console.warn("Multi-agency dispatch error:", e);
+    }
+  };
+
+  const sosCitizens = citizens.filter((c) => c.status === "SOS");
+  const liveCount = citizens.filter((c) => c.is_live).length;
+  const offlineCount = citizens.length - liveCount;
+
+  return (
+    <div className="relative min-h-screen flex flex-col bg-transparent text-slate-950 font-sans selection:bg-violet-600 selection:text-white">
+      {/* Background Video */}
+      <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
+        <video
+          src="/download.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          className="w-full h-full object-cover scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/40 to-slate-950/75 pointer-events-none" />
+      </div>
+
+      <div className="relative z-10 min-h-screen flex flex-col bg-transparent">
+        <Header
+          selectedZone={selectedZone}
+          onSelectZone={setSelectedZone}
+          onSimulateSOS={() => {
+            if (soundEnabled) playAlertSound();
+          }}
+          onOpenMobileModal={() => setIsMobileModalOpen(true)}
+          onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
+          onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
+          floodRiskPercent={selectedZone.currentRisk}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled((p) => !p)}
+        />
+
+        {/* Live Mobile APK LAN Synchronization Bar */}
+        <div className="glass-panel border-b border-white/60 px-4 lg:px-6 py-2.5 backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-bold">Active Mobile Wi-Fi Sync:</span>
+                <code className="font-mono bg-white/80 px-1.5 py-0.2 rounded border border-emerald-200">
+                  172.16.184.105:3000
+                </code>
+              </div>
+
+              <div className="flex items-center gap-2 text-slate-700">
+                <span className="font-semibold">Registered Distress Beacons:</span>
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-extrabold text-[11px]">
+                  {sosCitizens.length} SOS Active
+                </span>
+                <span className="text-slate-500 text-[11px]">
+                  ({liveCount} Live GPS &bull; {offlineCount} Last Known Offline)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsMobileModalOpen(true)}
+                className="btn-solid-dark text-xs h-[34px] px-3.5 flex items-center gap-1.5"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-indigo-300" />
+                <span>Pair Android Device / Test Packet</span>
+              </button>
+              <Link
+                href="/radar"
+                className="btn-solid-primary text-xs h-[34px] px-3.5 flex items-center gap-1.5"
+              >
+                <Compass className="w-3.5 h-3.5" />
+                <span>Open Tactical Radar</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Dispatch Notification Alert */}
+        {dispatchNotice && (
+          <div className="max-w-[1800px] mx-auto w-full px-4 pt-3">
+            <div className="p-3 rounded-xl bg-indigo-900/90 text-white border border-indigo-500/80 shadow-md backdrop-blur-md flex items-center justify-between text-xs font-semibold animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>{dispatchNotice}</span>
+              </div>
+              <button
+                onClick={() => setDispatchNotice(null)}
+                className="text-slate-300 hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Operational Stage */}
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-[1800px] mx-auto w-full space-y-6">
+          
+          {/* Section 1: Citizen Distress Telemetry Matrix */}
+          <div className="rounded-2xl glass-panel border border-white/70 p-4 sm:p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+              <div>
+                <h2 className="text-base font-black text-slate-950 uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <Users className="w-4 h-4 text-rose-600" />
+                  Citizen Distress Telemetry Matrix (Live GPS vs Last Known Location)
+                </h2>
+                <p className="text-xs text-slate-600">
+                  Real-time distress signals transmitted from citizen mobile devices. Distinguishes live GPS pings from offline last-known beacons with estimated flood drift radii and multi-hop BLE mesh lineages.
+                </p>
+              </div>
+
+              <span className="text-xs font-mono font-medium text-slate-500">
+                Auto-Synchronized every 2000ms &bull; Sector: {selectedZone.name}
+              </span>
+            </div>
+
+            <CitizenTrackingMatrix
+              citizens={citizens}
+              compact={false}
+              onFocusCoordinates={() => {
+                // Navigate to radar page centered on these coords
+                window.location.href = "/radar";
+              }}
+              onDispatchToCitizen={(cit) => {
+                const foundResp = activeResponders[0];
+                if (foundResp) handleDispatchResponderUnit(foundResp);
+              }}
+            />
+          </div>
+
+          {/* Section 2: Emergency Response Grid (108 ALS, Police, NDRF) */}
+          <div className="rounded-2xl glass-panel border border-white/70 p-4 sm:p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+              <div>
+                <h2 className="text-base font-black text-slate-950 uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <Truck className="w-4 h-4 text-indigo-600" />
+                  Emergency Responder Fleet & Multi-Agency Dispatch Grid
+                </h2>
+                <p className="text-xs text-slate-600">
+                  Surrounding 108 Advanced Life Support (ALS) Ambulances, State Police Thanas, and NDRF Battalions with mountain transit ETAs, equipment lists, and hotlines.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleMultiAgencyDispatch}
+                  className="btn-solid-danger text-xs h-[34px] px-3.5 flex items-center gap-1.5 shadow-sm"
+                >
+                  <AlertOctagon className="w-3.5 h-3.5" />
+                  <span>Execute Multi-Agency Dispatch</span>
+                </button>
+              </div>
+            </div>
+
+            <EmergencyResponderGrid
+              responders={activeResponders}
+              zoneName={selectedZone.name}
+              compact={false}
+              onDispatchUnit={handleDispatchResponderUnit}
+              onMultiAgencyDispatch={handleMultiAgencyDispatch}
+            />
+          </div>
+
+        </main>
+      </div>
+
+      {/* Modals */}
+      <MobilePairingModal
+        isOpen={isMobileModalOpen}
+        onClose={() => setIsMobileModalOpen(false)}
+        onSimulateAndroidSOS={() => {
+          if (soundEnabled) playAlertSound();
+        }}
+      />
+
+      <RegionalAlertBroadcastModal
+        isOpen={isRegionalModalOpen}
+        onClose={() => setIsRegionalModalOpen(false)}
+        activeZone={selectedZone}
+        riskPercent={selectedZone.currentRisk}
+      />
+
+      <SafeRouteGuidelineModal
+        isOpen={isGuidelineModalOpen}
+        onClose={() => setIsGuidelineModalOpen(false)}
+        activeZone={selectedZone}
+        safeRoutes={activeSafeRoutes}
+        onBroadcastGuidelines={() => {
+          if (soundEnabled) playAlertSound();
+        }}
+      />
+
+      {/* Footer */}
+      <footer className="border-t border-white/60 glass-panel px-6 py-4 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 mt-8">
+        <div className="font-semibold text-slate-900">
+          NeerNetra &bull; Citizen Rescue Fleet Operations &bull; SIH 2026 PS: SIH26192
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block pulse-green" />
+            Mobile Sync Server: 172.16.184.105:3000
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-600">NDRF: 1078 &bull; SDMA: 1070 &bull; Ambulance: 108</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
