@@ -71,20 +71,20 @@ export default function LiveSOSFeed({
   });
 
   return (
-    <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
+    <div className="rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-[600px] border border-white/60">
       {/* Header */}
-      <div className="p-4 border-b border-gray-100 space-y-3 bg-white">
+      <div className="p-4 border-b border-white/60 space-y-3 bg-white/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
             </span>
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               Live Citizen Triage Feed
             </h2>
           </div>
-          <div className="text-[11px] font-semibold text-gray-500">
+          <div className="text-[11px] font-bold text-slate-700">
             {events.length} Active Signals
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function LiveSOSFeed({
           <label htmlFor="sos-feed-search" className="sr-only">
             Search by UUID or triage report
           </label>
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
+          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
           <input
             id="sos-feed-search"
             name="sos_feed_search"
@@ -103,7 +103,7 @@ export default function LiveSOSFeed({
             aria-label="Search by UUID or incident description"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 min-h-[40px]"
+            className="w-full bg-white/90 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-950 font-medium placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 min-h-[44px] shadow-xs"
           />
         </div>
 

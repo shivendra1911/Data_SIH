@@ -44,12 +44,12 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
 
   return (
     <div
-      className={`tilt-card rounded-2xl border transition-all duration-200 overflow-hidden bg-white ${
+      className={`tilt-card rounded-2xl transition-all duration-200 overflow-hidden glass-panel shadow-md border ${
         isRed
-          ? "border-red-200 shadow-red-50 shadow-md"
+          ? "border-red-300"
           : isOrange
-          ? "border-amber-200"
-          : "border-gray-200"
+          ? "border-amber-300"
+          : "border-white/60"
       }`}
     >
       <div className="p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
@@ -58,12 +58,10 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
           <button
             onClick={handleSpeak}
             aria-label={isSpeaking ? "Stop voice broadcast" : "Start voice emergency broadcast"}
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition min-h-[44px] shadow-sm ${
+            className={`btn-solid-danger flex items-center gap-2.5 text-xs shadow-md ${
               isSpeaking
-                ? "bg-amber-400 text-gray-900 ring-4 ring-amber-400/30 animate-pulse"
-                : isRed
-                ? "bg-red-600 hover:bg-red-500 text-white"
-                : "bg-violet-700 hover:bg-violet-600 text-white"
+                ? "bg-amber-400 text-slate-950 ring-4 ring-amber-400/40 animate-pulse"
+                : ""
             }`}
           >
             {isSpeaking ? (
@@ -80,10 +78,10 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
           </button>
 
           <div className="hidden sm:block">
-            <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-0.5">
+            <div className="text-[10px] uppercase tracking-widest text-slate-600 font-extrabold mb-0.5">
               Civil Defense Voice Dispatch
             </div>
-            <p className="text-xs font-medium text-gray-700 line-clamp-1">
+            <p className="text-xs font-bold text-slate-900 line-clamp-1">
               {isRed
                 ? "CRITICAL: Low-lying riverbanks must evacuate uphill immediately."
                 : isOrange
@@ -93,28 +91,28 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
           </div>
         </div>
 
-        {/* Right: Hotlines & Toggle */}
+        {/* Right: Solid Action Hotlines & Toggle */}
         <div className="flex flex-wrap items-center gap-2">
           <a href="tel:1078" aria-label="Call NDRF emergency 1078"
-            className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1.5 transition min-h-[40px]">
-            <PhoneCall className="w-3 h-3" aria-hidden />
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
+            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
             <span>NDRF 1078</span>
           </a>
           <a href="tel:1070" aria-label="Call SDMA emergency 1070"
-            className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-1.5 transition min-h-[40px]">
-            <PhoneCall className="w-3 h-3" aria-hidden />
+            className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
+            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
             <span>SDMA 1070</span>
           </a>
           <a href="tel:108" aria-label="Call ambulance 108"
-            className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-1.5 transition min-h-[40px]">
-            <PhoneCall className="w-3 h-3" aria-hidden />
+            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
+            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
             <span>Ambulance 108</span>
           </a>
           <button
             onClick={() => setIsExpanded((prev) => !prev)}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? "Hide evacuation checklist" : "Show evacuation checklist"}
-            className="btn-ghost text-xs"
+            className="px-3.5 py-2 rounded-xl bg-white/90 hover:bg-white text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]"
           >
             <span>{isExpanded ? "Hide Checklist" : "Evacuation Checklist"}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" aria-hidden /> : <ChevronDown className="w-3.5 h-3.5" aria-hidden />}

@@ -50,25 +50,25 @@ export default function PreventiveDirectivesPanel({
   const pendingCount = directives.filter((d) => !d.executed).length;
 
   return (
-    <div className="tilt-card rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <div className="tilt-card rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-full border border-white/60">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-white relative z-10">
+      <div className="px-5 py-3.5 border-b border-white/60 flex items-center justify-between bg-white/40 relative z-10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center">
-            <ShieldAlert className="w-4 h-4 text-red-600" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-red-100 border border-red-300 flex items-center justify-center shadow-xs">
+            <ShieldAlert className="w-4 h-4 text-red-700" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               Pre-Disaster Mitigation Directives
             </h2>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] font-semibold text-slate-600">
               Autonomous Dam Buffer, Highway Diversions & Evacuation Orders
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 uppercase">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 uppercase shadow-xs">
             {pendingCount} Orders Pending
           </span>
         </div>
@@ -84,53 +84,53 @@ export default function PreventiveDirectivesPanel({
               key={directive.id}
               className={`p-3.5 rounded-xl border transition-all ${
                 directive.executed
-                  ? "bg-gray-50 border-gray-200 opacity-75"
+                  ? "backdrop-blur-md bg-white/50 border-slate-200 opacity-80"
                   : isImmediate
-                  ? "bg-red-50/40 border-red-200 shadow-sm"
-                  : "bg-white border-gray-200"
+                  ? "backdrop-blur-md bg-red-50/80 border-red-300 shadow-sm"
+                  : "backdrop-blur-md bg-white/70 border-white/80 shadow-xs"
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-gray-50 border border-gray-200 shrink-0 mt-0.5">
+                  <div className="p-2 rounded-xl bg-white/90 border border-slate-200 shrink-0 mt-0.5 shadow-xs">
                     {getCategoryIcon(directive.category)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-900 tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <span className="text-xs font-black text-slate-950 tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {directive.title}
                       </span>
                       <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-xs ${
                           directive.priority === "IMMEDIATE"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-800"
+                            ? "bg-red-600 text-white"
+                            : "bg-amber-500 text-slate-950"
                         }`}
                       >
                         {directive.priority}
                       </span>
                     </div>
 
-                    <p className="text-xs text-gray-700 mt-1 leading-relaxed">
+                    <p className="text-xs text-slate-800 font-medium mt-1 leading-relaxed">
                       {directive.action}
                     </p>
 
-                    <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
-                      <span>Execution Deadline: <strong className="text-red-600 font-semibold">{directive.deadline}</strong></span>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-600 font-semibold">
+                      <span>Execution Deadline: <strong className="text-red-700 font-black">{directive.deadline}</strong></span>
                       <span>•</span>
-                      <span>Target Sector: <strong className="text-gray-700">{directive.category}</strong></span>
+                      <span>Target Sector: <strong className="text-slate-900 font-black">{directive.category}</strong></span>
                     </div>
                   </div>
                 </div>
 
-                {/* Authorization Toggle Button */}
+                {/* Solid Authorization Toggle Button */}
                 <button
                   onClick={() => handleAuthorize(directive.id)}
                   aria-label={directive.executed ? "Order executed" : "Authorize dispatch directive"}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition min-h-[44px] shrink-0 flex items-center justify-center gap-1.5 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition min-h-[44px] shrink-0 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm ${
                     directive.executed
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-violet-700 hover:bg-violet-600 text-white shadow-sm active:scale-95"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "btn-solid-primary"
                   }`}
                 >
                   {directive.executed ? (

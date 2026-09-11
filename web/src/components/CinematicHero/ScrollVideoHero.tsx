@@ -13,12 +13,21 @@ interface ScrollVideoHeroProps {
 export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHeroProps) {
   const { containerRef, videoRef, canvasRef, isCanvasLive } = useVideoScrub(VIDEO_URL);
   const [navMounted, setNavMounted] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setNavMounted(true);
     }, 150);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const scrollToCommandCenter = () => {
@@ -29,14 +38,18 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
       if (el) {
         el.scrollIntoView({ behavior: "smooth" });
       } else {
-        window.scrollTo({ top: window.innerHeight * 0.9, behavior: "smooth" });
+        window.scrollTo({ top: window.innerHeight * 0.85, behavior: "smooth" });
       }
     }
   };
 
+  // Dynamic in-and-out text animation calculation based on scroll progress
+  const heroTextOpacity = Math.max(0, 1 - scrollY / 350);
+  const heroTextTranslateY = -Math.min(60, scrollY * 0.28);
+
   return (
-    <div ref={containerRef} className="relative w-full h-[75vh] min-h-[540px] max-h-[780px] bg-slate-950 overflow-hidden">
-      {/* Background Video (Kept exactly as requested) */}
+    <div ref={containerRef} className="relative w-full h-[75vh] min-h-[540px] max-h-[780px] bg-transparent overflow-hidden">
+      {/* Background Video (Hardware-accelerated WebCodecs fallback) */}
       <video
         ref={videoRef}
         src={VIDEO_URL}
@@ -58,27 +71,27 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         }`}
       />
 
-      {/* Gradient Scrim for high legibility */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/40 to-slate-950/85 pointer-events-none" />
+      {/* Subtle Gradient Scrim for high legibility */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/65 via-slate-950/35 to-slate-950/80 pointer-events-none" />
 
       {/* Top Navbar */}
       <nav className="absolute top-0 left-0 right-0 z-30 px-6 sm:px-10 pt-6 pb-4 flex items-center justify-between pointer-events-auto">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center text-white backdrop-blur-md">
+          <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white backdrop-blur-xl shadow-md">
             <ShieldAlert className="w-5 h-5" aria-hidden />
           </div>
-          <span className="text-sm font-bold text-white tracking-widest uppercase" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            NeerNetra
+          <span className="text-base font-black text-white tracking-widest uppercase" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            Neer<span className="text-violet-400">Netra</span>
           </span>
-          <span className="hidden sm:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200 border border-violet-400/30 uppercase">
+          <span className="hidden sm:inline-flex text-[10px] font-bold px-2.5 py-1 rounded-full bg-violet-500/25 text-violet-200 border border-violet-400/40 uppercase tracking-wider backdrop-blur-md">
             All-India Sentinel
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-white text-xs">
+          <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-xl text-white text-xs shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="font-semibold text-[11px] uppercase tracking-wider">
+            <span className="font-bold text-[11px] uppercase tracking-wider">
               12 River Basins Scanning
             </span>
           </div>
@@ -86,7 +99,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
           <button
             onClick={scrollToCommandCenter}
             aria-label="Jump to Command Center"
-            className="px-4 py-2 rounded-xl bg-violet-700 hover:bg-violet-600 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg min-h-[44px]"
+            className="btn-solid-primary text-xs"
           >
             <span>Command Center</span>
             <ArrowDown className="w-3.5 h-3.5" aria-hidden />
@@ -94,41 +107,41 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         </div>
       </nav>
 
-      {/* Hero Foreground Content — Concise, Actionable, No 2-page marketing filler */}
+      {/* Hero Foreground Content — With Smooth In-and-Out Scroll Animation */}
       <div className="absolute inset-0 z-20 flex flex-col justify-center items-center text-center px-6 sm:px-8 max-w-4xl mx-auto pointer-events-auto">
         <div
-          className="space-y-4 transition-all duration-700"
+          className="space-y-4 transition-all duration-300 ease-out"
           style={{
-            opacity: navMounted ? 1 : 0,
-            transform: navMounted ? "translateY(0)" : "translateY(20px)",
+            opacity: navMounted ? heroTextOpacity : 0,
+            transform: `translateY(${navMounted ? heroTextTranslateY : 20}px)`,
           }}
         >
           {/* Status Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/25 backdrop-blur-md text-white text-xs">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/20 border border-white/30 backdrop-blur-xl text-white text-xs shadow-md">
             <Zap className="w-3.5 h-3.5 text-amber-300 animate-pulse" aria-hidden />
             <span className="font-bold text-[11px] uppercase tracking-wider">
               Autonomous Flash Flood Detection & Auto-SOS System
             </span>
           </div>
 
-          {/* Main Title */}
+          {/* Main Title with Rabto Typography */}
           <h1
-            className="text-3xl sm:text-5xl lg:text-6xl font-light text-white uppercase tracking-tight leading-tight"
+            className="text-3xl sm:text-5xl lg:text-6xl font-light text-white uppercase tracking-tight leading-tight drop-shadow-md"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
             Predicting Flash Floods Across India <br className="hidden sm:inline" />
-            <span className="font-bold text-violet-300">With Autonomous SOS Response</span>
+            <span className="font-extrabold text-violet-300 drop-shadow-lg">With Autonomous SOS Response</span>
           </h1>
 
-          <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-100 max-w-2xl mx-auto leading-relaxed drop-shadow">
             Real-time physics-informed AI evaluating Himalayan valleys, Northeast floodplains, and Western Ghats catchments simultaneously. Autonomously dispatches emergency evacuation alerts to citizen devices upon threshold breach.
           </p>
 
-          {/* Action CTAs */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          {/* Solid Action CTA Button (Rabto style) */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
             <button
               onClick={scrollToCommandCenter}
-              className="px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs uppercase tracking-wider transition shadow-xl hover:shadow-violet-500/25 flex items-center gap-2 min-h-[48px]"
+              className="btn-solid-primary text-xs sm:text-sm font-bold uppercase tracking-wider shadow-2xl hover:shadow-violet-600/40 min-h-[48px] px-8 py-3"
             >
               <span>Explore Live Command Radar</span>
               <ArrowDown className="w-4 h-4" aria-hidden />

@@ -53,6 +53,7 @@ import {
 import { fetchActiveClusters, fetchCurrentPrediction } from "@/lib/api";
 import { subscribeToSOSEvents } from "@/lib/supabase";
 import { useRabtoTilt } from "@/lib/useRabtoTilt";
+import { useScrollReveal } from "@/lib/useScrollReveal";
 import {
   ChevronDown,
   ChevronUp,
@@ -66,6 +67,8 @@ import {
 export default function DashboardPage() {
   // Initialize Rabto FX 60fps 3D tilt physics & radial spotlight engine
   useRabtoTilt();
+  // Initialize scroll-driven in-and-out typography animations
+  useScrollReveal();
 
   const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
@@ -291,16 +294,33 @@ export default function DashboardPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="min-h-screen flex flex-col bg-white text-gray-900 font-sans selection:bg-violet-100 selection:text-violet-800">
-      {/* 0. Vectrus-Style 500vh WebCodecs Hardware-Accelerated Video Scrub Hero */}
-      <ScrollVideoHero
-        onEnterCommandCenter={() => {
-          document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" });
-        }}
-      />
+    <div className="relative min-h-screen flex flex-col bg-transparent text-slate-950 font-sans selection:bg-violet-600 selection:text-white">
+      {/* Persistent Fixed Full-Screen Background Video for Continuous Scroll Animation */}
+      <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
+        <video
+          src="/download.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          className="w-full h-full object-cover scale-105"
+        />
+        {/* Subtle Gradient Scrim for WCAG AA Contrast & Frosted Glass Transparency */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/40 to-slate-950/75 pointer-events-none" />
+      </div>
+
+      {/* 0. Hero Section with Scroll In/Out Animations */}
+      <div className="relative z-10">
+        <ScrollVideoHero
+          onEnterCommandCenter={() => {
+            document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
+      </div>
 
       {/* Primary Command Operations Center */}
-      <div id="command-center" className="min-h-screen flex flex-col bg-gray-50 dot-grid relative">
+      <div id="command-center" className="relative z-10 min-h-screen flex flex-col bg-transparent">
         {/* 1. Tactical Command Header */}
         <Header
           selectedZone={selectedZone}
@@ -347,7 +367,7 @@ export default function DashboardPage() {
         {/* Primary Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-8 flex flex-col">
-            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-gray-200 shadow-sm relative bg-white">
+            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-white/60 shadow-lg relative bg-white">
               <MapWrapper
                 center={mapCenter}
                 zoom={mapZoom}
@@ -401,7 +421,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Primary Row 3: Tactical Distress Beacons & Automated K-Means Rescue Triage */}
-        <div className="card tilt-card border border-gray-200 rounded-2xl bg-white p-4 space-y-4 shadow-sm mx-0">
+        <div className="tilt-card rounded-2xl glass-panel border border-white/60 p-4 space-y-4 shadow-sm mx-0">
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-600">
@@ -472,11 +492,11 @@ export default function DashboardPage() {
       </div>
 
       {/* Floating Quick-Switch Pill */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-white border border-gray-200 rounded-full p-1.5 shadow-xl backdrop-blur-md">
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 glass-panel border border-white/60 rounded-full p-1.5 shadow-xl">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           aria-label="Scroll to cinematic overview"
-          className="px-4 py-2 rounded-full text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition flex items-center gap-1.5 min-h-[44px]"
+          className="px-4 py-2 rounded-full text-xs font-semibold text-slate-800 hover:text-slate-950 hover:bg-white/60 transition flex items-center gap-1.5 min-h-[44px]"
         >
           <ChevronUp className="w-3.5 h-3.5" aria-hidden />
           <span>Overview</span>
@@ -484,7 +504,7 @@ export default function DashboardPage() {
         <button
           onClick={() => document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" })}
           aria-label="Jump to command center dashboard"
-          className="px-4 py-2 rounded-full bg-violet-700 hover:bg-violet-600 text-white text-xs font-bold uppercase transition flex items-center gap-1.5 min-h-[44px]"
+          className="px-4 py-2 rounded-full btn-solid-primary text-xs font-bold uppercase transition flex items-center gap-1.5 min-h-[44px]"
         >
           <span>Command Center</span>
           <ChevronDown className="w-3.5 h-3.5" aria-hidden />
@@ -492,8 +512,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white px-6 py-5 text-center text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="font-semibold text-gray-700">
+      <footer className="border-t border-white/60 glass-panel px-6 py-5 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="font-semibold text-slate-900">
           NeerNetra — India Flash Flood Early Warning System &bull; SIH 2026 PS: SIH26192
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">

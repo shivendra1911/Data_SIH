@@ -71,21 +71,21 @@ export default function PredictionPanel({
   };
 
   return (
-    <div className="tilt-card rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <div className="tilt-card rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-full border border-white/60">
       {/* Top Header */}
-      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-white relative z-10">
+      <div className="px-5 py-3.5 border-b border-white/60 flex items-center justify-between bg-white/40 relative z-10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-violet-50 border border-violet-200 flex items-center justify-center">
-            <Cpu className="w-4 h-4 text-violet-600" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-violet-100 border border-violet-300 flex items-center justify-center shadow-xs">
+            <Cpu className="w-4 h-4 text-violet-700" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               <span>AI Hydrological Risk Engine</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-semibold">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-300 font-bold">
                 94.8% ACCURACY
               </span>
             </h2>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] font-semibold text-slate-600">
               Physics-Informed Random Forest + Cryo-Seismic Telemetry
             </p>
           </div>
@@ -95,10 +95,10 @@ export default function PredictionPanel({
           onClick={onRefresh}
           disabled={loading}
           aria-label="Refresh AI prediction telemetry"
-          className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 transition disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center border border-gray-200"
+          className="p-2 rounded-xl bg-white/90 hover:bg-white text-slate-800 transition disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center border border-slate-300 shadow-sm active:scale-95"
         >
           <RefreshCw
-            className={`w-3.5 h-3.5 text-gray-600 ${loading ? "animate-spin text-violet-600" : ""}`}
+            className={`w-3.5 h-3.5 text-slate-700 ${loading ? "animate-spin text-violet-600" : ""}`}
             aria-hidden
           />
         </button>
@@ -107,7 +107,7 @@ export default function PredictionPanel({
       <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
         {/* Main Risk Status Banner */}
         <div
-          className={`p-4 rounded-xl border ${statusCardStyle} flex flex-col sm:flex-row items-center justify-between gap-4 transition`}
+          className={`p-4 rounded-xl border ${statusCardStyle} flex flex-col sm:flex-row items-center justify-between gap-4 transition backdrop-blur-md shadow-sm`}
         >
           <div className="space-y-1.5 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-2">
@@ -124,24 +124,24 @@ export default function PredictionPanel({
               >
                 {prediction.alert_color} ALERT
               </span>
-              <span className="text-[11px] text-gray-600 uppercase font-semibold">
+              <span className="text-[11px] text-slate-800 uppercase font-black">
                 Zone: {prediction.zone_id}
               </span>
             </div>
 
-            <h3 className="text-sm font-bold text-gray-900 tracking-tight">
+            <h3 className="text-sm font-black text-slate-950 tracking-tight">
               {prediction.primary_trigger}
             </h3>
-            <p className="text-[11px] text-gray-500 font-medium">
+            <p className="text-[11px] text-slate-600 font-bold">
               Telemetry Synchronized: {new Date(prediction.last_updated).toLocaleTimeString()} IST
             </p>
           </div>
 
           {/* Probability Gauge Box */}
-          <div className="relative flex flex-col items-center justify-center min-w-[130px] p-3 rounded-xl bg-white border border-gray-200 shadow-sm">
-            <div className="text-3xl font-black tracking-tight text-gray-900 flex items-baseline" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <div className="relative flex flex-col items-center justify-center min-w-[130px] p-3 rounded-xl bg-white/95 border border-white shadow-md">
+            <div className="text-3xl font-black tracking-tight text-slate-950 flex items-baseline" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               {prob.toFixed(1)}
-              <span className="text-sm font-bold text-red-500 ml-0.5">%</span>
+              <span className="text-sm font-bold text-red-600 ml-0.5">%</span>
             </div>
             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
               Flood Probability
@@ -200,20 +200,20 @@ export default function PredictionPanel({
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             {/* 1. Rain */}
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 relative hover:border-violet-300 transition">
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase font-bold">
+            <div className="p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/80 relative hover:border-violet-400 transition shadow-xs">
+              <div className="flex items-center justify-between text-slate-600 text-[10px] uppercase font-bold">
                 <span>Rainfall</span>
                 <button
                   onClick={() => toggleTooltip("rain")}
                   aria-label="Rainfall sensor information"
-                  className="text-gray-400 hover:text-violet-600 p-0.5"
+                  className="text-slate-400 hover:text-violet-600 p-0.5"
                 >
                   <HelpCircle className="w-3 h-3" aria-hidden />
                 </button>
               </div>
-              <div className="text-sm font-black text-gray-900 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div className="text-sm font-black text-slate-950 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {telemetry.rainfall_mm.toFixed(1)}{" "}
-                <span className="text-[9px] text-gray-500 font-normal">mm/h</span>
+                <span className="text-[9px] text-slate-500 font-normal">mm/h</span>
               </div>
               {activeTooltip === "rain" && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 p-2.5 rounded-xl bg-white border border-gray-200 text-[10px] text-gray-700 shadow-xl">
@@ -223,20 +223,20 @@ export default function PredictionPanel({
             </div>
 
             {/* 2. Soil Moisture */}
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 relative hover:border-violet-300 transition">
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase font-bold">
+            <div className="p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/80 relative hover:border-violet-400 transition shadow-xs">
+              <div className="flex items-center justify-between text-slate-600 text-[10px] uppercase font-bold">
                 <span>Soil Sat.</span>
                 <button
                   onClick={() => toggleTooltip("soil")}
                   aria-label="Soil saturation sensor information"
-                  className="text-gray-400 hover:text-violet-600 p-0.5"
+                  className="text-slate-400 hover:text-violet-600 p-0.5"
                 >
                   <HelpCircle className="w-3 h-3" aria-hidden />
                 </button>
               </div>
-              <div className="text-sm font-black text-gray-900 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div className="text-sm font-black text-slate-950 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {telemetry.soil_moisture_pct.toFixed(0)}
-                <span className="text-[9px] text-gray-500 font-normal">%</span>
+                <span className="text-[9px] text-slate-500 font-normal">%</span>
               </div>
               {activeTooltip === "soil" && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 p-2.5 rounded-xl bg-white border border-gray-200 text-[10px] text-gray-700 shadow-xl">
@@ -246,20 +246,20 @@ export default function PredictionPanel({
             </div>
 
             {/* 3. Slope */}
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 relative hover:border-violet-300 transition">
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase font-bold">
+            <div className="p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/80 relative hover:border-violet-400 transition shadow-xs">
+              <div className="flex items-center justify-between text-slate-600 text-[10px] uppercase font-bold">
                 <span>Slope</span>
                 <button
                   onClick={() => toggleTooltip("slope")}
                   aria-label="Terrain slope sensor information"
-                  className="text-gray-400 hover:text-violet-600 p-0.5"
+                  className="text-slate-400 hover:text-violet-600 p-0.5"
                 >
                   <HelpCircle className="w-3 h-3" aria-hidden />
                 </button>
               </div>
-              <div className="text-sm font-black text-gray-900 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div className="text-sm font-black text-slate-950 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {telemetry.slope_deg.toFixed(0)}
-                <span className="text-[9px] text-gray-500 font-normal">°</span>
+                <span className="text-[9px] text-slate-500 font-normal">°</span>
               </div>
               {activeTooltip === "slope" && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 p-2.5 rounded-xl bg-white border border-gray-200 text-[10px] text-gray-700 shadow-xl">
@@ -269,20 +269,20 @@ export default function PredictionPanel({
             </div>
 
             {/* 4. River Level */}
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 relative hover:border-violet-300 transition">
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase font-bold">
+            <div className="p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/80 relative hover:border-violet-400 transition shadow-xs">
+              <div className="flex items-center justify-between text-slate-600 text-[10px] uppercase font-bold">
                 <span>River Stage</span>
                 <button
                   onClick={() => toggleTooltip("river")}
                   aria-label="River stage sensor information"
-                  className="text-gray-400 hover:text-violet-600 p-0.5"
+                  className="text-slate-400 hover:text-violet-600 p-0.5"
                 >
                   <HelpCircle className="w-3 h-3" aria-hidden />
                 </button>
               </div>
-              <div className="text-sm font-black text-gray-900 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div className="text-sm font-black text-slate-950 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {telemetry.river_level_m.toFixed(1)}
-                <span className="text-[9px] text-gray-500 font-normal">m</span>
+                <span className="text-[9px] text-slate-500 font-normal">m</span>
               </div>
               {activeTooltip === "river" && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 p-2.5 rounded-xl bg-white border border-gray-200 text-[10px] text-gray-700 shadow-xl">
@@ -292,20 +292,20 @@ export default function PredictionPanel({
             </div>
 
             {/* 5. Seismic */}
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 relative hover:border-violet-300 transition">
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase font-bold">
+            <div className="p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/80 relative hover:border-violet-400 transition shadow-xs">
+              <div className="flex items-center justify-between text-slate-600 text-[10px] uppercase font-bold">
                 <span>Seismic</span>
                 <button
                   onClick={() => toggleTooltip("seismic")}
                   aria-label="Cryo-seismic sensor information"
-                  className="text-gray-400 hover:text-violet-600 p-0.5"
+                  className="text-slate-400 hover:text-violet-600 p-0.5"
                 >
                   <HelpCircle className="w-3 h-3" aria-hidden />
                 </button>
               </div>
-              <div className="text-sm font-black text-gray-900 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div className="text-sm font-black text-slate-950 mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 {telemetry.seismic_mag.toFixed(1)}
-                <span className="text-[9px] text-gray-500 font-normal">M</span>
+                <span className="text-[9px] text-slate-500 font-normal">M</span>
               </div>
               {activeTooltip === "seismic" && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 p-2.5 rounded-xl bg-white border border-gray-200 text-[10px] text-gray-700 shadow-xl">

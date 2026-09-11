@@ -27,16 +27,16 @@ export default function ForecastHorizonSlider({
   onSelectHorizon,
 }: ForecastHorizonSliderProps) {
   return (
-    <div className="tilt-card rounded-2xl bg-white border border-gray-200 p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-sm">
+    <div className="tilt-card rounded-2xl glass-panel p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-md border border-white/60">
       <div className="flex items-center gap-2.5 relative z-10">
-        <div className="w-8 h-8 rounded-xl bg-violet-50 border border-violet-200 flex items-center justify-center">
-          <FastForward className="w-4 h-4 text-violet-600" aria-hidden />
+        <div className="w-8 h-8 rounded-xl bg-violet-100 border border-violet-300 flex items-center justify-center shadow-xs">
+          <FastForward className="w-4 h-4 text-violet-700" aria-hidden />
         </div>
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-900 block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <span className="text-xs font-black uppercase tracking-wider text-slate-950 block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             Multi-Horizon Surge Forecast Simulation
           </span>
-          <span className="text-[11px] text-gray-500">
+          <span className="text-[11px] font-semibold text-slate-600">
             Temporal Hydrodynamic Wave Propagation
           </span>
         </div>
@@ -51,14 +51,14 @@ export default function ForecastHorizonSlider({
               key={h.id}
               onClick={() => onSelectHorizon(h.id)}
               aria-pressed={isSelected}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap min-h-[44px] flex flex-col items-center justify-center ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap min-h-[44px] flex flex-col items-center justify-center active:scale-[0.98] ${
                 isSelected
-                  ? "bg-violet-700 text-white font-bold shadow-sm"
-                  : "bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200"
+                  ? "btn-solid-primary shadow-md"
+                  : "backdrop-blur-md bg-white/70 hover:bg-white text-slate-800 border border-slate-300 shadow-xs"
               }`}
             >
               <span>{h.label}</span>
-              <span className={`text-[9px] ${isSelected ? "text-violet-200" : "text-gray-400"}`}>{h.sub}</span>
+              <span className={`text-[9px] font-medium ${isSelected ? "text-violet-100" : "text-slate-500"}`}>{h.sub}</span>
             </button>
           );
         })}

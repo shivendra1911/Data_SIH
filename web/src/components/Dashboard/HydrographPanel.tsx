@@ -86,44 +86,44 @@ export default function HydrographPanel({ activeZone }: HydrographPanelProps) {
   );
 
   return (
-    <div className="tilt-card rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <div className="tilt-card rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-full border border-white/60">
       {/* Top Bar with Lead Time Countdown */}
-      <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white relative z-10">
+      <div className="px-5 py-4 border-b border-white/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/40 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-700">
+          <div className="w-9 h-9 rounded-xl bg-violet-100 border border-violet-300 flex items-center justify-center text-violet-700 shadow-xs">
             <Waves className="w-5 h-5" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               Inundation Hydrograph & Flood Wave Arrival
-              <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-semibold">
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-300 font-bold">
                 KINEMATIC WAVE ML
               </span>
             </h2>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] font-semibold text-slate-600">
               India-WRIS Station Gauge Telemetry + Upstream Catchment Runoff Model
             </p>
           </div>
         </div>
 
         {/* Lead Time Countdown Clock */}
-        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-red-50 border border-red-200 shadow-sm">
-          <div className="flex items-center gap-1.5 text-red-700">
-            <Clock className="w-4 h-4 animate-pulse" aria-hidden />
-            <span className="text-[10px] uppercase font-bold tracking-wider">
+        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-red-100/90 border border-red-300 shadow-sm">
+          <div className="flex items-center gap-1.5 text-red-800">
+            <Clock className="w-4 h-4 animate-pulse text-red-600" aria-hidden />
+            <span className="text-[10px] uppercase font-black tracking-wider">
               Evacuation Window:
             </span>
           </div>
 
-          <div className="flex items-baseline gap-1 font-black text-red-600 text-lg" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <div className="flex items-baseline gap-1 font-black text-red-700 text-lg" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             <span>{countdown.hours}</span>
-            <span className="text-xs text-gray-400 font-normal">h</span>
-            <span className="text-gray-300">:</span>
+            <span className="text-xs text-slate-600 font-bold">h</span>
+            <span className="text-slate-400">:</span>
             <span>{countdown.minutes}</span>
-            <span className="text-xs text-gray-400 font-normal">m</span>
-            <span className="text-gray-300">:</span>
+            <span className="text-xs text-slate-600 font-bold">m</span>
+            <span className="text-slate-400">:</span>
             <span>{countdown.seconds}</span>
-            <span className="text-xs text-gray-400 font-normal">s</span>
+            <span className="text-xs text-slate-600 font-bold">s</span>
           </div>
         </div>
       </div>
@@ -131,7 +131,7 @@ export default function HydrographPanel({ activeZone }: HydrographPanelProps) {
       <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
         {/* Quick Metric Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+          <div className="p-3 rounded-xl backdrop-blur-md bg-white/70 border border-white/80 shadow-xs">
             <span className="text-[10px] font-bold uppercase text-gray-500 block">
               Current Stage
             </span>

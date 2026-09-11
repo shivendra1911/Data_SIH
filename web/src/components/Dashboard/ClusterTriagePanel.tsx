@@ -19,28 +19,28 @@ export default function ClusterTriagePanel({
   const pendingClusters = clusters.filter((c) => !c.dispatched).length;
 
   return (
-    <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+    <div className="rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-full border border-white/60">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-white">
+      <div className="px-5 py-3.5 border-b border-white/60 flex items-center justify-between bg-white/40">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
-            <Users className="w-4 h-4 text-amber-600" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shadow-xs">
+            <Users className="w-4 h-4 text-amber-700" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               Autonomous Rescue Clusters
             </h2>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] font-semibold text-slate-600">
               K-Means Geospatial Density Triage (/api/sos/clusters)
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 shadow-xs">
             {pendingClusters} Pending
           </span>
-          <span className="text-[11px] font-semibold text-gray-700">
+          <span className="text-[11px] font-black text-slate-900">
             {totalStranded} Stranded
           </span>
         </div>
@@ -130,7 +130,7 @@ export default function ClusterTriagePanel({
                     <button
                       onClick={() => onDispatch(cluster.cluster_id)}
                       aria-label={`Dispatch NDRF rescue team to cluster ${cluster.cluster_id}`}
-                      className="w-full bg-red-600 hover:bg-red-500 active:scale-[0.99] text-white font-semibold py-2 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm min-h-[44px]"
+                      className="btn-solid-danger w-full text-xs shadow-md"
                     >
                       <ShieldAlert className="w-4 h-4" aria-hidden />
                       <span>Dispatch Rescue Team</span>

@@ -24,15 +24,15 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
     seismic_mag: 4.2,
   };
 
-  // Tile base classes — Rabto light design system
-  const tile = "tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-gray-200 hover:border-violet-300 hover:shadow-sm transition";
+  // Tile base classes — Rabto frosted glass architecture
+  const tile = "tilt-card flex items-center gap-2.5 p-2.5 rounded-xl backdrop-blur-md bg-white/70 hover:bg-white/95 border border-white/70 shadow-sm hover:shadow-md transition-all text-in-out is-visible";
   const iconBox = (color: string) =>
     `w-8 h-8 rounded-lg flex items-center justify-center shrink-0 relative z-10 ${color}`;
-  const label = "text-[10px] uppercase tracking-wider text-gray-500 font-semibold";
-  const value = "text-sm font-black text-gray-900 flex items-baseline gap-1.5";
+  const label = "text-[10px] uppercase tracking-wider text-slate-600 font-bold";
+  const value = "text-sm font-black text-slate-950 flex items-baseline gap-1.5";
 
   return (
-    <div className="w-full bg-white border-y border-gray-200 px-4 lg:px-8 py-2.5">
+    <div className="w-full glass-panel border-y border-white/60 px-4 lg:px-8 py-2.5 shadow-sm">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-[1800px] mx-auto text-xs">
 
         {/* River Stage */}
