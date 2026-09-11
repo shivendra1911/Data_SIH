@@ -1,176 +1,179 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { SOSStatus, SOSType } from '../types';
-import { Phone, MessageSquare, AlertCircle, Activity, MapPin, HeartHandshake, ShieldCheck } from 'lucide-react-native';
-
-export interface NearbyVictim {
-  id: string;
-  name: string;
-  distanceMeters: number;
-  status: SOSStatus;
-  sosType: SOSType;
-  locationName: string;
-  batteryPercent: number;
-  lastActiveTime: string;
-  isUnresponsive?: boolean;
-}
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { AlertCircle, Phone, MessageSquare, MapPin, Battery, Clock } from 'lucide-react-native';
+import { MeshPeer, SOSStatus } from '../types';
+import { meshEngine } from '../services/bluetoothMesh';
 
 interface NearbyVictimsHelpCardProps {
-  onCallVictim?: (victim: NearbyVictim) => void;
-  onMessageVictim?: (victim: NearbyVictim) => void;
+  onCallVictim?: (peer: MeshPeer) => void;
+  onMessageVictim?: (peer: MeshPeer) => void;
 }
+
+const statusColor = (status?: SOSStatus) => {
+  if (status === 'SOS') return '#ef4444';
+  if (status === 'HELPING') return '#3b82f6';
+  return '#10b981';
+};
+
+const statusLabel = (peer: MeshPeer) => {
+  if (!peer.status || peer.status === 'SAFE') return 'SAFE';
+  if (peer.status === 'SOS') return 'SOS';
+  return 'HELPING';
+};
 
 export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
   onCallVictim,
   onMessageVictim,
 }) => {
-  const [filter, setFilter] = useState<'ALL' | 'SOS' | 'SAFE'>('ALL');
+  const [peers, setPeers] = useState<MeshPeer[]>([]);
+  const [filter, setFilter] = useState<'ALL' | 'SOS'>('ALL');
 
-  const victims: NearbyVictim[] = [
-    {
-      id: 'vic_1',
-      name: 'Ramesh Kumar',
-      distanceMeters: 120,
-      status: 'SOS',
-      sosType: 'TRAPPED',
-      locationName: 'Chamoli Bridge Slope',
-      batteryPercent: 42,
-      lastActiveTime: '2 mins ago',
-      isUnresponsive: true, // Unresponsive after 5 min countdown!
-    },
-    {
-      id: 'vic_2',
-      name: 'Sunita Devi & Family',
-      distanceMeters: 340,
-      status: 'SOS',
-      sosType: 'MEDICAL',
-      locationName: 'Joshimath Ridge Road',
-      batteryPercent: 78,
-      lastActiveTime: 'Just now',
-      isUnresponsive: false,
-    },
-    {
-      id: 'vic_3',
-      name: 'Vikram Singh',
-      distanceMeters: 510,
-      status: 'HELPING',
-      sosType: 'EVACUATION',
-      locationName: 'Sector 1 Hilltop Shelter',
-      batteryPercent: 91,
-      lastActiveTime: '4 mins ago',
-      isUnresponsive: false,
-    },
-  ];
+  useEffect(() => {
+    // Initial load
+    setPeers(meshEngine.getConnectedPeers());
 
-  const filteredList = victims.filter((v) => {
-    if (filter === 'SOS') return v.status === 'SOS';
-    if (filter === 'SAFE') return v.status === 'SAFE' || v.status === 'HELPING';
+    // Refresh every 10 seconds to pick up new peers
+    const interval = setInterval(() => {
+      setPeers(meshEngine.getConnectedPeers());
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const filtered = peers.filter((p) => {
+    if (filter === 'SOS') return p.status === 'SOS';
     return true;
   });
 
-  const getStatusColor = (v: NearbyVictim) => {
-    if (v.isUnresponsive || v.status === 'SOS') return '#ef4444';
-    if (v.status === 'HELPING') return '#3b82f6';
-    return '#10b981';
-  };
+  const sosCriticalCount = peers.filter((p) => p.status === 'SOS').length;
 
   return (
     <View style={styles.card}>
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <AlertCircle size={20} color="#ef4444" />
-          <Text style={styles.title}>NEARBY PEOPLE NEEDING HELP</Text>
+          <AlertCircle size={18} color="#ef4444" />
+          <View>
+            <Text style={styles.title}>NEARBY PEOPLE IN RANGE</Text>
+            <Text style={styles.subtitle}>
+              {peers.length} Bluetooth mesh peers detected
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.filterPillGroup}>
+        {/* Filter Pills */}
+        <View style={styles.filterGroup}>
           <TouchableOpacity
-            style={[styles.filterPill, filter === 'ALL' && styles.filterPillActive]}
+            style={[styles.filterPill, filter === 'ALL' && styles.filterActive]}
             onPress={() => setFilter('ALL')}
           >
-            <Text style={[styles.filterText, filter === 'ALL' && styles.filterTextActive]}>All</Text>
+            <Text style={[styles.filterText, filter === 'ALL' && styles.filterTextActive]}>
+              All
+            </Text>
           </TouchableOpacity>
-
           <TouchableOpacity
-            style={[styles.filterPill, filter === 'SOS' && styles.filterPillActiveRed]}
+            style={[styles.filterPill, filter === 'SOS' && styles.filterActiveRed]}
             onPress={() => setFilter('SOS')}
           >
-            <Text style={[styles.filterText, filter === 'SOS' && styles.filterTextActive]}>🚨 SOS</Text>
+            <Text style={[styles.filterText, filter === 'SOS' && styles.filterTextWhite]}>
+              {sosCriticalCount > 0 ? `🚨 SOS (${sosCriticalCount})` : 'SOS'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={styles.subtitle}>
-        Connect directly with nearby citizens & volunteer responders via offline Bluetooth mesh call or text.
+      {/* Description */}
+      <Text style={styles.desc}>
+        Contact nearby citizens directly over offline Bluetooth mesh — no internet needed.
       </Text>
 
-      {/* List of Nearby Citizens */}
-      <View style={styles.listContainer}>
-        {filteredList.map((item) => {
-          const isDanger = item.isUnresponsive || item.status === 'SOS';
-
-          return (
-            <View
-              key={item.id}
-              style={[
-                styles.itemCard,
-                isDanger ? styles.dangerCard : styles.standardCard,
-              ]}
-            >
-              <View style={styles.itemTop}>
-                <View style={styles.nameBlock}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.victimName}>{item.name}</Text>
-                    {item.isUnresponsive && (
-                      <View style={styles.unresponsiveBadge}>
-                        <Text style={styles.unresponsiveText}>5-MIN UNRESPONSIVE</Text>
-                      </View>
-                    )}
+      {/* Peer List */}
+      <View style={styles.list}>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              {filter === 'SOS'
+                ? 'No SOS signals detected nearby.'
+                : 'Scanning for nearby Bluetooth mesh peers...'}
+            </Text>
+          </View>
+        ) : (
+          filtered.map((peer) => {
+            const isDanger = peer.status === 'SOS';
+            const color = statusColor(peer.status);
+            return (
+              <View
+                key={peer.id}
+                style={[styles.itemCard, isDanger ? styles.dangerCard : styles.normalCard]}
+              >
+                {/* Top row: name + status badge */}
+                <View style={styles.itemTop}>
+                  <View style={styles.nameCol}>
+                    <Text style={styles.peerName}>{peer.name}</Text>
+                    <View style={styles.metaRow}>
+                      <MapPin size={11} color="#64748b" />
+                      <Text style={styles.metaText}>
+                        {peer.distanceMeters ? `${peer.distanceMeters}m away` : peer.location || 'Near you'}
+                        {'  •  '}
+                        {peer.signalStrength} dBm
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.metaRow}>
-                    <MapPin size={12} color="#64748b" />
-                    <Text style={styles.metaText}>
-                      {item.locationName} • <Text style={styles.distBold}>{item.distanceMeters}m away</Text>
-                    </Text>
+                  <View style={[styles.statusBadge, { backgroundColor: color + '22', borderColor: color }]}>
+                    <Text style={[styles.statusText, { color }]}>{statusLabel(peer)}</Text>
                   </View>
                 </View>
 
-                <View style={[styles.needTag, { backgroundColor: getStatusColor(item) + '20', borderColor: getStatusColor(item) }]}>
-                  <Text style={[styles.needText, { color: getStatusColor(item) }]}>
-                    {item.sosType || item.status}
-                  </Text>
+                {/* Role */}
+                {peer.role && (
+                  <Text style={styles.roleText}>{peer.role}</Text>
+                )}
+
+                {/* Action buttons */}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={styles.callBtn}
+                    onPress={() => {
+                      if (onCallVictim) onCallVictim(peer);
+                      else
+                        Alert.alert(
+                          'BLE Walkie-Talkie',
+                          `Connecting to ${peer.name} over P2P Bluetooth intercom...`
+                        );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Phone size={13} color="#ffffff" />
+                    <Text style={styles.callBtnText}>Call over Mesh</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.msgBtn}
+                    onPress={() => {
+                      if (onMessageVictim) onMessageVictim(peer);
+                      else
+                        Alert.alert(
+                          'Mesh Chat',
+                          `Opening BLE offline text chat with ${peer.name}...`
+                        );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <MessageSquare size={13} color="#0f172a" />
+                    <Text style={styles.msgBtnText}>Send Message</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              {/* Action Buttons for Citizens to help each other */}
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.callMeshBtn}
-                  onPress={() => {
-                    if (onCallVictim) onCallVictim(item);
-                    else Alert.alert('Offline Mesh Call', `Calling ${item.name} over Bluetooth Walkie-Talkie Mesh...`);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Phone size={14} color="#ffffff" />
-                  <Text style={styles.btnText}>Call over Mesh</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.chatMeshBtn}
-                  onPress={() => {
-                    if (onMessageVictim) onMessageVictim(item);
-                    else Alert.alert('Offline Chat', `Opening BLE Mesh text chat with ${item.name}...`);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <MessageSquare size={14} color="#0f172a" />
-                  <Text style={styles.chatBtnText}>Send Message</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </View>
     </View>
   );
@@ -182,73 +185,94 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     marginHorizontal: 16,
-    marginVertical: 10,
+    marginVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
   },
   title: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     color: '#0f172a',
-    letterSpacing: -0.2,
+    letterSpacing: 0.4,
   },
-  filterPillGroup: {
+  subtitle: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  filterGroup: {
     flexDirection: 'row',
     backgroundColor: '#f1f5f9',
     borderRadius: 14,
     padding: 2,
+    gap: 2,
   },
   filterPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  filterPillActive: {
+  filterActive: {
     backgroundColor: '#ffffff',
   },
-  filterPillActiveRed: {
+  filterActiveRed: {
     backgroundColor: '#ef4444',
   },
   filterText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: '#64748b',
   },
   filterTextActive: {
     color: '#0f172a',
-    fontWeight: '800',
   },
-  subtitle: {
+  filterTextWhite: {
+    color: '#ffffff',
+  },
+  desc: {
     fontSize: 11,
-    color: '#64748b',
+    color: '#94a3b8',
     marginBottom: 14,
     lineHeight: 16,
   },
-  listContainer: {
+  list: {
     gap: 10,
+  },
+  emptyState: {
+    padding: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
   },
   itemCard: {
     borderRadius: 16,
     padding: 14,
     borderWidth: 1.5,
   },
-  standardCard: {
+  normalCard: {
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
   },
@@ -260,90 +284,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  nameBlock: {
+  nameCol: {
     flex: 1,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  victimName: {
-    fontSize: 14,
+  peerName: {
+    fontSize: 13,
     fontWeight: '800',
     color: '#0f172a',
-  },
-  unresponsiveBadge: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  unresponsiveText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '900',
+    marginBottom: 3,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
   },
   metaText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#64748b',
   },
-  distBold: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  needTag: {
+  statusBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1,
   },
-  needText: {
+  statusText: {
     fontSize: 10,
     fontWeight: '900',
+  },
+  roleText: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   actionRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 4,
   },
-  callMeshBtn: {
+  callBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#059669',
     borderRadius: 10,
     paddingVertical: 8,
   },
-  btnText: {
+  callBtnText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
-  chatMeshBtn: {
+  msgBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#e2e8f0',
     borderRadius: 10,
     paddingVertical: 8,
   },
-  chatBtnText: {
+  msgBtnText: {
     color: '#0f172a',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
 });
