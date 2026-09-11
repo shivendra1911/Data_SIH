@@ -39,7 +39,12 @@ import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdo
 import { OfflineMapContainer } from '../components/OfflineMapContainer';
 import { SOSBigButton } from '../components/SOSBigButton';
 import { EmergencyGuide } from '../components/EmergencyGuide';
-import { Navigation } from 'lucide-react-native';
+import { Navigation, Languages } from 'lucide-react-native';
+import { TouchableOpacity } from 'react-native';
+import { EvacuationShelter, LanguageMode } from '../types';
+import { getNearestEvacuationShelter } from '../services/evacuationShelters';
+import { SafeShelterCompassCard } from '../components/SafeShelterCompassCard';
+import { t } from '../services/i18n';
 
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
@@ -58,6 +63,16 @@ export const HomeScreen: React.FC = () => {
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
   const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
   const [userName] = useState<string>('Citizen');
+  const [language, setLanguage] = useState<LanguageMode>('en');
+  const [nearestShelter, setNearestShelter] = useState<EvacuationShelter | null>(null);
+
+  useEffect(() => {
+    const lat = lastLocation ? lastLocation.lat : 30.5573;
+    const lng = lastLocation ? lastLocation.lng : 79.5642;
+    const alt = lastLocation && lastLocation.altitude ? lastLocation.altitude : 1450.0;
+    const shelter = getNearestEvacuationShelter(lat, lng, alt);
+    setNearestShelter(shelter);
+  }, [lastLocation]);
 
   useEffect(() => {
     let isMounted = true;
@@ -289,6 +304,36 @@ export const HomeScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f59e0b" />
         }
       >
+        {/* Bilingual Hindi/English Emergency Language Switcher */}
+        <View style={styles.langBar}>
+          <View style={styles.langLeft}>
+            <Languages size={14} color="#0284c7" />
+            <Text style={styles.langLabel}>
+              {language === 'hi' ? 'भाषा / LANGUAGE:' : 'LANGUAGE / भाषा:'}
+            </Text>
+          </View>
+          <View style={styles.langBtnGroup}>
+            <TouchableOpacity
+              style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+              onPress={() => setLanguage('en')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>
+                English
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langBtn, language === 'hi' && styles.langBtnActive]}
+              onPress={() => setLanguage('hi')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.langBtnText, language === 'hi' && styles.langBtnTextActive]}>
+                हिन्दी
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Network / Mesh status badge (always visible) */}
         <MeshStatusBadge
           mode={networkMode}
@@ -317,6 +362,9 @@ export const HomeScreen: React.FC = () => {
           <>
             {/* Flood risk gauge */}
             <SecurityGaugeCard prediction={prediction} />
+
+            {/* Offline High-Ground Evacuation Shelter Guide */}
+            <SafeShelterCompassCard shelter={nearestShelter} language={language} />
 
             {/* Primary SOS + I AM SAFE / HELPING buttons */}
             <SOSBigButton
@@ -357,6 +405,9 @@ export const HomeScreen: React.FC = () => {
               peers={peers}
               isRedZone={isRedZone}
             />
+
+            {/* Safe Evacuation Shelter Navigation Card */}
+            <SafeShelterCompassCard shelter={nearestShelter} language={language} />
 
             {/* Still show SOS buttons so citizen can act from map tab */}
             <SOSBigButton
@@ -414,5 +465,53 @@ const styles = StyleSheet.create({
   boldCoords: {
     color: '#0f172a',
     fontWeight: '800',
+  },
+  langBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 6,
+  },
+  langLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  langLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.5,
+  },
+  langBtnGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 2,
+    gap: 2,
+  },
+  langBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  langBtnActive: {
+    backgroundColor: '#0284c7',
+  },
+  langBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  langBtnTextActive: {
+    color: '#ffffff',
   },
 });

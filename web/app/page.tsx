@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Shield,
   AlertOctagon,
@@ -19,8 +20,31 @@ import {
   Compass,
   AlertTriangle,
   Flame,
-  Check
+  Check,
+  Languages,
+  Map as MapIcon
 } from 'lucide-react';
+
+const LeafletGisMap = dynamic(() => import('../components/LeafletGisMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      minHeight: 460,
+      backgroundColor: '#0f172a',
+      borderRadius: 16,
+      color: '#38bdf8',
+      fontSize: 13,
+      fontWeight: 700,
+      gap: 8,
+    }}>
+      <span>🗺️ Loading Himalayan Topographic GIS Tiles...</span>
+    </div>
+  ),
+});
 
 interface CitizenLiveLocation {
   device_uuid: string;
@@ -131,6 +155,9 @@ export default function GovernmentCommandPortal() {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<CitizenLiveLocation | null>(null);
   const [filterZoneOnly, setFilterZoneOnly] = useState<boolean>(false);
+  const [mapMode, setMapMode] = useState<'gis' | 'radar'>('gis');
+  const [language, setLanguage] = useState<'en' | 'hi'>('en');
+  const [shelters, setShelters] = useState<any[]>([]);
 
   const displayedDevices = filterZoneOnly
     ? liveDevices.filter(d => (d.zone_id || 'chamoli_01').toLowerCase() === selectedZone.toLowerCase())
@@ -186,6 +213,7 @@ export default function GovernmentCommandPortal() {
             zone_id: data.selected_zone.zone_id,
             zone_name: data.selected_zone.zone_name,
             sensors: data.selected_zone.sensors,
+            cwc_gauge: data.selected_zone.cwc_gauge,
             last_updated: data.timestamp
           });
         }
@@ -193,6 +221,7 @@ export default function GovernmentCommandPortal() {
         if (Array.isArray(data.live_devices)) setLiveDevices(data.live_devices);
         if (Array.isArray(data.clusters)) setClusters(data.clusters);
         if (Array.isArray(data.dispatches)) setDispatches(data.dispatches);
+        if (Array.isArray(data.shelters)) setShelters(data.shelters);
         setBackendOnline(true);
       }
 
@@ -321,7 +350,9 @@ export default function GovernmentCommandPortal() {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h1 style={styles.title}>NEERNETRA — GOVERNMENT EMERGENCY COMMAND PORTAL</h1>
+              <h1 style={styles.title}>
+                {language === 'hi' ? 'नीरनेत्र — राष्ट्रीय आपदा आपातकालीन कमांड पोर्टल' : 'NEERNETRA — GOVERNMENT EMERGENCY COMMAND PORTAL'}
+              </h1>
               <span style={{
                 ...styles.connBadge,
                 backgroundColor: backendOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
@@ -337,16 +368,62 @@ export default function GovernmentCommandPortal() {
               </span>
             </div>
             <p style={styles.subtitle}>
-              NDRF National Disaster Rescue Tracker & Himalayan Glacial Outburst AI Telemetry System
+              {language === 'hi'
+                ? 'एनडीआरएफ राष्ट्रीय आपदा बचाव ट्रैकर एवं हिमालयी हिमनद झील विस्फोट एआई टेलीमेट्री प्रणाली'
+                : 'NDRF National Disaster Rescue Tracker & Himalayan Glacial Outburst AI Telemetry System'}
             </p>
           </div>
         </div>
 
         <div style={styles.headerRight}>
+          {/* Bilingual Language Switcher */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: 10,
+            padding: 2,
+            gap: 2,
+          }}>
+            <button
+              onClick={() => setLanguage('en')}
+              style={{
+                backgroundColor: language === 'en' ? '#0284c7' : 'transparent',
+                color: language === 'en' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 8,
+                padding: '5px 10px',
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLanguage('hi')}
+              style={{
+                backgroundColor: language === 'hi' ? '#0284c7' : 'transparent',
+                color: language === 'hi' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 8,
+                padding: '5px 10px',
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              हिन्दी
+            </button>
+          </div>
+
           {/* Quick Zone Selector */}
           <div style={styles.zoneSelectorBox}>
             <Compass style={{ width: 16, height: 16, color: '#38bdf8' }} />
-            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>MONITORED SECTOR:</span>
+            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>
+              {language === 'hi' ? 'निगरानी क्षेत्र:' : 'MONITORED SECTOR:'}
+            </span>
             <select
               style={styles.zoneDropdown}
               value={selectedZone}
@@ -393,7 +470,11 @@ export default function GovernmentCommandPortal() {
             title="Broadcast emergency evacuation siren to all citizen phones in this zone"
           >
             <BellRing style={{ width: 16, height: 16, color: '#ffffff' }} />
-            <span>{broadcastPending ? 'TRANSMITTING...' : 'TRIGGER RED BROADCAST'}</span>
+            <span>
+              {broadcastPending
+                ? (language === 'hi' ? 'प्रसारित हो रहा है...' : 'TRANSMITTING...')
+                : (language === 'hi' ? 'रेड अलर्ट सायरन प्रसारित करें' : 'TRIGGER RED BROADCAST')}
+            </span>
           </button>
 
           <button style={styles.refreshBtn} onClick={() => fetchAllData()} title="Refresh live telemetry">
@@ -614,140 +695,209 @@ export default function GovernmentCommandPortal() {
 
         {/* Center Canvas: Tactical Himalayan Geospatial Map */}
         <section style={styles.centerCol}>
-          <div style={styles.cardHeader}>
-            <Radio style={{ width: 18, height: 18, color: '#f59e0b' }} />
-            <h2 style={styles.cardTitle}>TACTICAL HIMALAYAN GEOSPATIAL RADAR — {currentPrediction.zone_name?.toUpperCase()}</h2>
+          <div style={{ ...styles.cardHeader, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {mapMode === 'gis' ? (
+                <MapIcon style={{ width: 18, height: 18, color: '#38bdf8' }} />
+              ) : (
+                <Radio style={{ width: 18, height: 18, color: '#f59e0b' }} />
+              )}
+              <h2 style={styles.cardTitle}>
+                {mapMode === 'gis'
+                  ? (language === 'hi' ? 'लाइव स्थलाकृतिक जीआईएस मानचित्र' : 'LIVE TOPOGRAPHIC GIS MAP')
+                  : (language === 'hi' ? 'सामरिक हिमालयी रडार' : 'TACTICAL HIMALAYAN GEOSPATIAL RADAR')}
+                {' — '}
+                {currentPrediction.zone_name?.toUpperCase()}
+              </h2>
+            </div>
+
+            {/* View Mode Switcher: GIS Map vs Vector Radar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setMapMode('gis')}
+                style={{
+                  backgroundColor: mapMode === 'gis' ? '#0284c7' : '#1e293b',
+                  color: mapMode === 'gis' ? '#ffffff' : '#94a3b8',
+                  border: '1px solid #38bdf8',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                🗺️ {language === 'hi' ? 'जीआईएस मैप' : 'GIS MAP'}
+              </button>
+              <button
+                onClick={() => setMapMode('radar')}
+                style={{
+                  backgroundColor: mapMode === 'radar' ? '#0284c7' : '#1e293b',
+                  color: mapMode === 'radar' ? '#ffffff' : '#94a3b8',
+                  border: '1px solid #38bdf8',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                📡 {language === 'hi' ? 'वेक्टर रडार' : 'RADAR'}
+              </button>
+            </div>
           </div>
 
           <div style={styles.mapCanvasContainer}>
-            {/* Topographic Contour Radar Simulation */}
-            <div style={styles.mapCanvasGrid}>
-              {/* River Line Simulation */}
-              <svg style={styles.riverSvg} viewBox="0 0 800 500">
-                <path
-                  d="M 50,450 Q 200,380 350,300 T 600,180 T 780,50"
-                  fill="none"
-                  stroke="#0284c7"
-                  strokeWidth="8"
-                  strokeOpacity="0.4"
-                />
-                <path
-                  d="M 250,500 Q 300,380 350,300 T 500,220"
-                  fill="none"
-                  stroke="#0369a1"
-                  strokeWidth="5"
-                  strokeOpacity="0.3"
-                />
-                <text x="360" y="290" fill="#38bdf8" fontSize="11" fontWeight="700">Alaknanda River Corridor</text>
-                <text x="610" y="170" fill="#38bdf8" fontSize="10" fontWeight="600">Dhauliganga Confluence</text>
-              </svg>
+            {mapMode === 'gis' ? (
+              <LeafletGisMap
+                centerLat={currentPrediction.coordinates?.lat ?? 30.4167}
+                centerLng={currentPrediction.coordinates?.lng ?? 79.3167}
+                zoom={12}
+                zoneName={currentPrediction.zone_name}
+                liveDevices={displayedDevices}
+                clusters={clusters}
+                shelters={shelters}
+                onSelectDevice={(d) => setSelectedDevice(d)}
+                onDispatchSquad={(cid, sq) => handleDispatchSquad(cid, sq)}
+                language={language}
+              />
+            ) : (
+              <>
+                {/* Topographic Contour Radar Simulation */}
+                <div style={styles.mapCanvasGrid}>
+                  {/* River Line Simulation */}
+                  <svg style={styles.riverSvg} viewBox="0 0 800 500">
+                    <path
+                      d="M 50,450 Q 200,380 350,300 T 600,180 T 780,50"
+                      fill="none"
+                      stroke="#0284c7"
+                      strokeWidth="8"
+                      strokeOpacity="0.4"
+                    />
+                    <path
+                      d="M 250,500 Q 300,380 350,300 T 500,220"
+                      fill="none"
+                      stroke="#0369a1"
+                      strokeWidth="5"
+                      strokeOpacity="0.3"
+                    />
+                    <text x="360" y="290" fill="#38bdf8" fontSize="11" fontWeight="700">Alaknanda River Corridor</text>
+                    <text x="610" y="170" fill="#38bdf8" fontSize="10" fontWeight="600">Dhauliganga Confluence</text>
+                  </svg>
 
-              {/* Monitored Sector Hotspots */}
-              <div style={styles.sectorPin1}>
-                <div style={{
-                  ...styles.pinPulseRed,
-                  backgroundColor: currentPrediction.alert_color === 'RED' ? '#ef4444' : '#10b981',
-                  boxShadow: currentPrediction.alert_color === 'RED' ? '0 0 20px #ef4444' : '0 0 10px #10b981'
-                }} />
-                <div style={styles.pinLabelBox}>
-                  <span style={styles.pinSectorName}>{currentPrediction.zone_name}</span>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    color: currentPrediction.alert_color === 'RED' ? '#f87171' : '#34d399'
-                  }}>
-                    {currentPrediction.flood_probability_percent}% RISK ({currentPrediction.alert_color})
-                  </span>
-                </div>
-              </div>
-
-              {/* Citizen Pins on Map */}
-              {displayedDevices.map((dev) => {
-                const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
-                const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
-                const pos = projectGeoToRadar(dev.lat, dev.lng, centerLat, centerLng);
-                return (
-                  <div
-                    key={dev.device_uuid}
-                    onClick={() => setSelectedDevice(dev)}
-                    style={{
-                      position: 'absolute',
-                      top: `${pos.top}%`,
-                      left: `${pos.left}%`,
-                      transform: 'translate(-50%, -50%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      cursor: 'pointer',
-                      zIndex: 10,
-                    }}
-                  >
+                  {/* Monitored Sector Hotspots */}
+                  <div style={styles.sectorPin1}>
                     <div style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: '50%',
-                      backgroundColor: dev.status === 'SOS' || dev.isUnresponsiveDanger ? '#ef4444' : dev.status === 'HELPING' ? '#38bdf8' : '#10b981',
-                      border: '2px solid #ffffff',
-                      boxShadow: dev.status === 'SOS' ? '0 0 14px #ef4444' : '0 0 6px rgba(0,0,0,0.5)',
+                      ...styles.pinPulseRed,
+                      backgroundColor: currentPrediction.alert_color === 'RED' ? '#ef4444' : '#10b981',
+                      boxShadow: currentPrediction.alert_color === 'RED' ? '0 0 20px #ef4444' : '0 0 10px #10b981'
                     }} />
-                    <span style={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                      border: '1px solid #334155',
-                      padding: '2px 6px',
-                      borderRadius: 6,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: '#ffffff',
-                    }}>
-                      {dev.name ? dev.name.split(' ')[0] : dev.device_uuid.substring(0, 6)} ({dev.status || 'ACTIVE'})
-                    </span>
+                    <div style={styles.pinLabelBox}>
+                      <span style={styles.pinSectorName}>{currentPrediction.zone_name}</span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        color: currentPrediction.alert_color === 'RED' ? '#f87171' : '#34d399'
+                      }}>
+                        {currentPrediction.flood_probability_percent}% RISK ({currentPrediction.alert_color})
+                      </span>
+                    </div>
                   </div>
-                );
-              })}
 
-              {/* Rescue Cluster Search Perimeters */}
-              {clusters.map((c) => {
-                const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
-                const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
-                const pos = projectGeoToRadar(c.center_lat, c.center_lng, centerLat, centerLng);
-                return (
-                  <div
-                    key={c.cluster_id}
-                    style={{
-                      position: 'absolute',
-                      top: `${pos.top}%`,
-                      left: `${pos.left}%`,
-                      transform: 'translate(-50%, -50%)',
-                      width: 140,
-                      height: 140,
-                      borderRadius: '50%',
-                      border: '2px dashed #ef4444',
-                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      pointerEvents: 'none',
-                      animation: 'pulse 3s infinite',
-                    }}
-                  >
-                    <span style={{ fontSize: 9, fontWeight: 900, color: '#fca5a5' }}>
-                      CLUSTER #{c.cluster_id} ({c.total_people} STRANDED)
-                    </span>
-                    <span style={{ fontSize: 8, color: '#f87171' }}>{c.priority}</span>
+                  {/* Citizen Pins on Map */}
+                  {displayedDevices.map((dev) => {
+                    const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
+                    const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
+                    const pos = projectGeoToRadar(dev.lat, dev.lng, centerLat, centerLng);
+                    return (
+                      <div
+                        key={dev.device_uuid}
+                        onClick={() => setSelectedDevice(dev)}
+                        style={{
+                          position: 'absolute',
+                          top: `${pos.top}%`,
+                          left: `${pos.left}%`,
+                          transform: 'translate(-50%, -50%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: 'pointer',
+                          zIndex: 10,
+                        }}
+                      >
+                        <div style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          backgroundColor: dev.status === 'SOS' || dev.isUnresponsiveDanger ? '#ef4444' : dev.status === 'HELPING' ? '#38bdf8' : '#10b981',
+                          border: '2px solid #ffffff',
+                          boxShadow: dev.status === 'SOS' ? '0 0 14px #ef4444' : '0 0 6px rgba(0,0,0,0.5)',
+                        }} />
+                        <span style={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                          border: '1px solid #334155',
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#ffffff',
+                        }}>
+                          {dev.name ? dev.name.split(' ')[0] : dev.device_uuid.substring(0, 6)} ({dev.status || 'ACTIVE'})
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {/* Rescue Cluster Search Perimeters */}
+                  {clusters.map((c) => {
+                    const centerLat = currentPrediction?.coordinates?.lat ?? 30.5573;
+                    const centerLng = currentPrediction?.coordinates?.lng ?? 79.5642;
+                    const pos = projectGeoToRadar(c.center_lat, c.center_lng, centerLat, centerLng);
+                    return (
+                      <div
+                        key={c.cluster_id}
+                        style={{
+                          position: 'absolute',
+                          top: `${pos.top}%`,
+                          left: `${pos.left}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: 140,
+                          height: 140,
+                          borderRadius: '50%',
+                          border: '2px dashed #ef4444',
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          pointerEvents: 'none',
+                          animation: 'pulse 3s infinite',
+                        }}
+                      >
+                        <span style={{ fontSize: 9, fontWeight: 900, color: '#fca5a5' }}>
+                          CLUSTER #{c.cluster_id} ({c.total_people} STRANDED)
+                        </span>
+                        <span style={{ fontSize: 8, color: '#f87171' }}>{c.priority}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={styles.mapFooterBanner}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span>Layer: Topographic Contour Tile Set (Offline Vector Engine)</span>
+                    <span>•</span>
+                    <span>Alaknanda / Dhauliganga Valley Catchment</span>
                   </div>
-                );
-              })}
-            </div>
-
-            <div style={styles.mapFooterBanner}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span>Layer: Topographic Contour Tile Set (Offline Vector Engine)</span>
-                <span>•</span>
-                <span>Alaknanda / Dhauliganga Valley Catchment</span>
-              </div>
-              <span style={{ color: '#38bdf8', fontWeight: 700 }}>LIVE GPS RESOLUTION: 4.2m RMS</span>
-            </div>
+                  <span style={{ color: '#38bdf8', fontWeight: 700 }}>LIVE GPS RESOLUTION: 4.2m RMS</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Citizen Tactical Dossier Drawer (Triggered on Citizen Selection) */}
@@ -869,6 +1019,75 @@ export default function GovernmentCommandPortal() {
                 </span>
               </div>
             </div>
+
+            {/* Official Central Water Commission (CWC) Danger Calibration Gauge */}
+            {currentPrediction.cwc_gauge && (
+              <div style={{
+                marginTop: 12,
+                padding: '10px 14px',
+                backgroundColor: '#09101f',
+                border: '1px solid #1e293b',
+                borderRadius: 10,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Waves style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                    <span style={{ fontSize: 11, fontWeight: 900, color: '#e0f2fe', letterSpacing: '0.4px' }}>
+                      CWC GAUGE: {currentPrediction.cwc_gauge.gauge_station?.toUpperCase()}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 900,
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    backgroundColor: currentPrediction.cwc_gauge.severity === 'CRITICAL' || currentPrediction.cwc_gauge.severity === 'DANGER'
+                      ? 'rgba(239, 68, 68, 0.2)'
+                      : currentPrediction.cwc_gauge.severity === 'WARNING'
+                      ? 'rgba(245, 158, 11, 0.2)'
+                      : 'rgba(16, 185, 129, 0.2)',
+                    color: currentPrediction.cwc_gauge.severity === 'CRITICAL' || currentPrediction.cwc_gauge.severity === 'DANGER'
+                      ? '#ef4444'
+                      : currentPrediction.cwc_gauge.severity === 'WARNING'
+                      ? '#f59e0b'
+                      : '#10b981',
+                    border: '1px solid currentColor',
+                  }}>
+                    {currentPrediction.cwc_gauge.status}
+                  </span>
+                </div>
+
+                {/* Gauge Thresholds Metric Row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                  <span>Current Stage: <strong style={{ color: '#ffffff', fontSize: 12 }}>{currentPrediction.sensors?.river_water_level_m ?? 8.4}m</strong></span>
+                  <span>Warning (WL): <strong style={{ color: '#fde047' }}>{currentPrediction.cwc_gauge.warning_level_m}m</strong></span>
+                  <span>Danger (DL): <strong style={{ color: '#f87171' }}>{currentPrediction.cwc_gauge.danger_level_m}m</strong></span>
+                  <span>Record HFL: <strong style={{ color: '#c084fc' }}>{currentPrediction.cwc_gauge.hfl_record_m}m</strong></span>
+                </div>
+
+                {/* Visual Calibration Stage Bar */}
+                <div style={{
+                  position: 'relative',
+                  height: 10,
+                  backgroundColor: '#1e293b',
+                  borderRadius: 5,
+                  overflow: 'hidden',
+                  marginTop: 8,
+                }}>
+                  <div style={{
+                    width: `${Math.min(100, ((currentPrediction.sensors?.river_water_level_m ?? 8.4) / (currentPrediction.cwc_gauge.hfl_record_m * 1.15)) * 100)}%`,
+                    height: '100%',
+                    backgroundColor: currentPrediction.cwc_gauge.severity === 'CRITICAL' || currentPrediction.cwc_gauge.severity === 'DANGER'
+                      ? '#ef4444'
+                      : currentPrediction.cwc_gauge.severity === 'WARNING'
+                      ? '#f59e0b'
+                      : '#10b981',
+                    borderRadius: 5,
+                    transition: 'width 0.6s ease',
+                  }} />
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

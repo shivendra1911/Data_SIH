@@ -7,6 +7,7 @@ import warnings
 import joblib
 import threading
 import numpy as np
+import math
 
 warnings.filterwarnings("ignore", category=UserWarning)
 from datetime import datetime, timezone
@@ -105,6 +106,132 @@ def find_nearest_zone(lat: float, lng: float) -> str:
             min_dist = dist
             nearest_zid = zid
     return nearest_zid
+
+# Official Central Water Commission (CWC) Gauge Station Danger Thresholds
+CWC_GAUGE_THRESHOLDS: Dict[str, Dict[str, Any]] = {
+    "chamoli_01": {
+        "gauge_station": "Chamoli CWC Hydrological Station",
+        "river": "Alaknanda",
+        "warning_level_m": 6.50,
+        "danger_level_m": 8.00,
+        "hfl_record_m": 10.20,
+        "hfl_date": "2013-06-17",
+        "catchment_area_sqkm": 2400
+    },
+    "joshimath_01": {
+        "gauge_station": "Vishnuprayag / Joshimath CWC Site",
+        "river": "Dhauliganga",
+        "warning_level_m": 4.50,
+        "danger_level_m": 6.00,
+        "hfl_record_m": 8.50,
+        "hfl_date": "2021-02-07",
+        "catchment_area_sqkm": 1150
+    },
+    "kedarnath_01": {
+        "gauge_station": "Gaurikund / Mandakini Gauge",
+        "river": "Mandakini Headwaters",
+        "warning_level_m": 7.00,
+        "danger_level_m": 8.50,
+        "hfl_record_m": 11.40,
+        "hfl_date": "2013-06-16",
+        "catchment_area_sqkm": 680
+    },
+    "badrinath_01": {
+        "gauge_station": "Mana / Badrinath Upper Alaknanda",
+        "river": "Alaknanda Basin",
+        "warning_level_m": 5.00,
+        "danger_level_m": 6.80,
+        "hfl_record_m": 9.10,
+        "hfl_date": "2013-06-17",
+        "catchment_area_sqkm": 820
+    },
+    "uttarkashi_01": {
+        "gauge_station": "Uttarkashi CWC Station",
+        "river": "Bhagirathi",
+        "warning_level_m": 5.50,
+        "danger_level_m": 7.00,
+        "hfl_record_m": 9.30,
+        "hfl_date": "2012-08-04",
+        "catchment_area_sqkm": 1850
+    },
+    "rudraprayag_01": {
+        "gauge_station": "Rudraprayag Sangam CWC Site",
+        "river": "Mandakini / Alaknanda",
+        "warning_level_m": 7.50,
+        "danger_level_m": 9.00,
+        "hfl_record_m": 12.10,
+        "hfl_date": "2013-06-17",
+        "catchment_area_sqkm": 4200
+    },
+    "pithoragarh_01": {
+        "gauge_station": "Dharchula CWC Site",
+        "river": "Kali",
+        "warning_level_m": 6.00,
+        "danger_level_m": 7.80,
+        "hfl_record_m": 9.80,
+        "hfl_date": "2021-10-19",
+        "catchment_area_sqkm": 3100
+    },
+    "gopeshwar_01": {
+        "gauge_station": "Balkhila Sub-basin Gauge",
+        "river": "Balkhila",
+        "warning_level_m": 4.80,
+        "danger_level_m": 6.20,
+        "hfl_record_m": 7.90,
+        "hfl_date": "2013-06-17",
+        "catchment_area_sqkm": 540
+    },
+    "nainital_01": {
+        "gauge_station": "Naini Lake Catchment Monitoring",
+        "river": "Naini Lake Basin",
+        "warning_level_m": 3.80,
+        "danger_level_m": 5.00,
+        "hfl_record_m": 6.50,
+        "hfl_date": "2021-10-19",
+        "catchment_area_sqkm": 120
+    },
+    "dehradun_01": {
+        "gauge_station": "Rispana Foothills Gauge",
+        "river": "Rispana / Bindal",
+        "warning_level_m": 4.00,
+        "danger_level_m": 5.50,
+        "hfl_record_m": 7.20,
+        "hfl_date": "2022-08-20",
+        "catchment_area_sqkm": 280
+    }
+}
+
+def get_cwc_gauge_info(zone_id: str, water_level: float) -> Dict[str, Any]:
+    """
+    Evaluates current river water level against Central Water Commission (CWC)
+    official thresholds (Warning Level, Danger Level, Historical High Flood Level).
+    """
+    base = CWC_GAUGE_THRESHOLDS.get(zone_id.lower(), CWC_GAUGE_THRESHOLDS["chamoli_01"])
+    cwc = dict(base)
+    wl = cwc["warning_level_m"]
+    dl = cwc["danger_level_m"]
+    hfl = cwc["hfl_record_m"]
+    
+    stage = round(water_level, 2)
+    if stage >= hfl:
+        status = "ABOVE_HIGH_FLOOD_LEVEL"
+        severity = "CRITICAL"
+    elif stage >= dl:
+        status = "ABOVE_DANGER_LEVEL"
+        severity = "DANGER"
+    elif stage >= wl:
+        status = "WARNING_LEVEL"
+        severity = "WARNING"
+    else:
+        status = "NORMAL_FLOW"
+        severity = "NORMAL"
+        
+    cwc["current_stage_m"] = stage
+    cwc["status"] = status
+    cwc["severity"] = severity
+    cwc["freeboard_to_danger_m"] = round(max(0.0, dl - stage), 2)
+    cwc["surge_above_danger_m"] = round(max(0.0, stage - dl), 2)
+    return cwc
 
 # Real-time sensor state per zone
 zone_sensor_state: Dict[str, Dict[str, Any]] = {
@@ -554,12 +681,15 @@ def health_check():
 @app.get("/api/prediction/current")
 def get_current_prediction(zone_id: str = Query(default="chamoli_01")):
     """
-    Returns real-time flood hazard prediction, alert classification, and physical explanation
-    using the NeerNetra inference engine. Consumed by Mobile App & Web Dashboard.
+    Returns real-time flood hazard prediction, alert classification, physical explanation,
+    and official Central Water Commission (CWC) gauge danger thresholds.
+    Consumed by Mobile App & Web Dashboard.
     """
     zone_key = zone_id.lower()
     sensors = zone_sensor_state.get(zone_key, zone_sensor_state["chamoli_01"])
     inference = run_zone_inference(zone_key, sensors)
+    water_level = sensors.get("river_water_level_m", 0.0)
+    cwc_gauge = get_cwc_gauge_info(zone_key, water_level)
 
     return {
         "zone_id": zone_id,
@@ -571,13 +701,15 @@ def get_current_prediction(zone_id: str = Query(default="chamoli_01")):
         "explanation": inference["explanation"],
         "factors": inference["factors"],
         "sensors": sensors,
+        "cwc_gauge": cwc_gauge,
         "last_updated": datetime.now(timezone.utc).isoformat()
     }
 
 @app.get("/api/prediction/zones")
 def get_all_zone_predictions():
     """
-    Returns live prediction status across all 10 Himalayan monitored zones.
+    Returns live prediction status across all 10 Himalayan monitored zones,
+    enriched with real-time CWC gauge danger thresholds.
     Provides the Web Dashboard with a multi-zone national command overview.
     """
     zones_output = []
@@ -585,6 +717,8 @@ def get_all_zone_predictions():
     for zid, zcfg in ALL_ZONES_CONFIG.items():
         sensors = zone_sensor_state.get(zid, {})
         inference = run_zone_inference(zid, sensors)
+        water_level = sensors.get("river_water_level_m", 0.0)
+        cwc_gauge = get_cwc_gauge_info(zid, water_level)
 
         zones_output.append({
             "zone_id": zid,
@@ -595,7 +729,8 @@ def get_all_zone_predictions():
             "alert_color": inference["alert_color"],
             "primary_trigger": inference["primary_trigger"],
             "explanation": inference["explanation"],
-            "sensors": sensors
+            "sensors": sensors,
+            "cwc_gauge": cwc_gauge
         })
 
     return {
@@ -1082,8 +1217,95 @@ REGIONAL_SHELTERS_DB = [
         "food_water_stocked": True,
         "status": "OPEN",
         "contact_phone": "+91-1374-222123"
+    },
+    {
+        "id": "shelter_badrinath_01",
+        "name": "Badrinath Temple Complex High Ridge Haven",
+        "zone_id": "badrinath_01",
+        "lat": 30.7450,
+        "lng": 79.4950,
+        "elevation_m": 3180.0,
+        "capacity": 750,
+        "medical_support": True,
+        "food_water_stocked": True,
+        "status": "OPEN",
+        "contact_phone": "+91-1381-222210"
+    },
+    {
+        "id": "shelter_gopeshwar_01",
+        "name": "Gopeshwar Sports Ground & District Relief Depot",
+        "zone_id": "gopeshwar_01",
+        "lat": 30.4120,
+        "lng": 79.3240,
+        "elevation_m": 1550.0,
+        "capacity": 950,
+        "medical_support": True,
+        "food_water_stocked": True,
+        "status": "OPEN",
+        "contact_phone": "+91-1372-252220"
+    },
+    {
+        "id": "shelter_pithoragarh_01",
+        "name": "Pithoragarh Naini-Saini Safe Airfield Camp",
+        "zone_id": "pithoragarh_01",
+        "lat": 29.5850,
+        "lng": 80.2220,
+        "elevation_m": 1650.0,
+        "capacity": 1100,
+        "medical_support": True,
+        "food_water_stocked": True,
+        "status": "OPEN",
+        "contact_phone": "+91-1364-224410"
+    },
+    {
+        "id": "shelter_nainital_01",
+        "name": "Nainital High-Ground Poly-Relief Enclave",
+        "zone_id": "nainital_01",
+        "lat": 29.3950,
+        "lng": 79.4580,
+        "elevation_m": 2100.0,
+        "capacity": 600,
+        "medical_support": True,
+        "food_water_stocked": True,
+        "status": "OPEN",
+        "contact_phone": "+91-1362-235120"
+    },
+    {
+        "id": "shelter_dehradun_01",
+        "name": "Dehradun Parade Ground NDRF Central Command",
+        "zone_id": "dehradun_01",
+        "lat": 30.3200,
+        "lng": 78.0380,
+        "elevation_m": 680.0,
+        "capacity": 2000,
+        "medical_support": True,
+        "food_water_stocked": True,
+        "status": "OPEN",
+        "contact_phone": "+91-135-2710334"
     }
 ]
+
+def calculate_haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculates great-circle distance between two GPS coordinates in kilometers."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2.0) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2.0) ** 2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(R * c, 2)
+
+def calculate_bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+    """Calculates forward compass azimuth/bearing from point 1 to point 2 in degrees (0-360)."""
+    y = math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2))
+    x = math.cos(math.radians(lat1)) * math.sin(math.radians(lat2)) - math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(math.radians(lon2 - lon1))
+    bearing = (math.degrees(math.atan2(y, x)) + 360) % 360
+    return int(round(bearing))
+
+def bearing_to_compass(deg: int) -> str:
+    """Converts azimuth degrees to 8-point compass quadrant string."""
+    quadrants = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
+    idx = int((deg + 22.5) / 45.0) % 8
+    return quadrants[idx]
 
 @app.get("/api/shelters/nearby")
 def get_nearby_shelters(zone_id: Optional[str] = None):
@@ -1097,6 +1319,46 @@ def get_nearby_shelters(zone_id: Optional[str] = None):
         if matched:
             return {"total": len(matched), "shelters": matched}
     return {"total": len(REGIONAL_SHELTERS_DB), "shelters": REGIONAL_SHELTERS_DB}
+
+@app.get("/api/shelters/high-ground")
+def get_high_ground_shelters(
+    current_lat: Optional[float] = Query(default=None),
+    current_lng: Optional[float] = Query(default=None),
+    current_alt: Optional[float] = Query(default=None),
+    zone_id: Optional[str] = Query(default=None)
+):
+    """
+    Returns prioritized high-ground safe havens and assembly shelters for evacuation.
+    If citizen GPS coordinates are provided, calculates real-time distance (km),
+    compass bearing, and elevation gain (+m) to safely guide uphill escape.
+    """
+    results = []
+    for s in REGIONAL_SHELTERS_DB:
+        if zone_id and s["zone_id"] != zone_id.lower():
+            continue
+        entry = dict(s)
+        if current_lat is not None and current_lng is not None:
+            dist_km = calculate_haversine_km(current_lat, current_lng, s["lat"], s["lng"])
+            bearing = calculate_bearing_deg(current_lat, current_lng, s["lat"], s["lng"])
+            compass = bearing_to_compass(bearing)
+            entry["distance_km"] = dist_km
+            entry["distance_m"] = int(dist_km * 1000)
+            entry["bearing_deg"] = bearing
+            entry["bearing_compass"] = compass
+            if current_alt is not None:
+                entry["elevation_gain_m"] = round(s["elevation_m"] - current_alt, 1)
+            else:
+                entry["elevation_gain_m"] = 0.0
+        results.append(entry)
+
+    if current_lat is not None and current_lng is not None:
+        results.sort(key=lambda x: x.get("distance_km", 9999))
+
+    return {
+        "total": len(results),
+        "nearest_shelter": results[0] if results else None,
+        "shelters": results
+    }
 
 @app.get("/api/dashboard/overview")
 def get_dashboard_overview(zone_id: str = "chamoli_01"):
@@ -1115,7 +1377,8 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
             "rainfall_mm": 25.0, "soil_moisture": 0.40,
             "slope_angle_deg": 30.0, "river_discharge_m3s": 250.0, "seismic_mag": 0.5
         })
-        zinference = run_zone_inference(zid, zsensors)
+        water_level = zsensors.get("river_water_level_m", 0.0)
+        cwc_gauge = get_cwc_gauge_info(zid, water_level)
         zones_output.append({
             "zone_id": zid,
             "zone_name": zcfg["name"],
@@ -1123,7 +1386,8 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
             "coordinates": {"lat": zcfg["lat"], "lng": zcfg["lng"]},
             "flood_probability_percent": zinference["flood_probability_percent"],
             "alert_color": zinference["alert_color"],
-            "primary_trigger": zinference["primary_trigger"]
+            "primary_trigger": zinference["primary_trigger"],
+            "cwc_gauge": cwc_gauge
         })
 
     curr_time = datetime.now(timezone.utc)
@@ -1140,6 +1404,8 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
         enriched_devices.append(dev_copy)
 
     clusters_res = get_sos_clusters(zone_key)
+    selected_water_level = sensors.get("river_water_level_m", 0.0)
+    selected_cwc_gauge = get_cwc_gauge_info(zone_key, selected_water_level)
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1147,7 +1413,8 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
             "zone_id": zone_key,
             "zone_name": ALL_ZONES_CONFIG.get(zone_key, {}).get("name", zone_id),
             "prediction": inference,
-            "sensors": sensors
+            "sensors": sensors,
+            "cwc_gauge": selected_cwc_gauge
         },
         "all_zones": zones_output,
         "live_devices": enriched_devices,

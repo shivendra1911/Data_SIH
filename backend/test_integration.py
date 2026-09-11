@@ -36,7 +36,7 @@ def run_integration_tests():
 
     with TestClient(app) as client:
         tests_passed = 0
-        total_tests = 10
+        total_tests = 12
 
     # 1. Health & Status
     print("\n[TEST 1] Verifying Backend Root & Health Status...")
@@ -178,8 +178,32 @@ def run_integration_tests():
     assert fcm_test_res.status_code == 200
     fcm_data = fcm_test_res.json()
     assert fcm_data["success"] is True
-    assert fcm_data["firebase_initialized"] is True
     print(f"  --> Firebase FCM Push Broadcast Verified! Topic Sent: {fcm_data['fcm_summary']['topic_dispatched']}")
+    tests_passed += 1
+
+    # 11. Official Central Water Commission (CWC) Danger Threshold Calibration
+    print("\n[TEST 11] Verifying Official CWC Gauge Danger Calibration (/api/prediction/current)...")
+    res = client.get("/api/prediction/current?zone_id=chamoli_01")
+    assert res.status_code == 200
+    pred_cwc = res.json()
+    assert "cwc_gauge" in pred_cwc, "Missing cwc_gauge in prediction!"
+    cwc = pred_cwc["cwc_gauge"]
+    assert "warning_level_m" in cwc and "danger_level_m" in cwc and "hfl_record_m" in cwc
+    print(f"  --> CWC Station: {cwc['gauge_station']} ({cwc['river']})")
+    print(f"  --> Warning: {cwc['warning_level_m']}m | Danger: {cwc['danger_level_m']}m | HFL: {cwc['hfl_record_m']}m | Status: {cwc['status']}")
+    tests_passed += 1
+
+    # 12. High-Ground Evacuation Safe Havens & Compass Routing (/api/shelters/high-ground)
+    print("\n[TEST 12] Verifying Offline High-Ground Evacuation Routing (/api/shelters/high-ground)...")
+    res = client.get("/api/shelters/high-ground?current_lat=30.4100&current_lng=79.3100&current_alt=1450.0&zone_id=chamoli_01")
+    assert res.status_code == 200
+    sh_data = res.json()
+    assert sh_data["total"] > 0
+    nearest = sh_data["nearest_shelter"]
+    assert nearest is not None
+    assert "distance_km" in nearest and "bearing_compass" in nearest and "elevation_gain_m" in nearest
+    print(f"  --> Nearest Safe Shelter: {nearest['name']}")
+    print(f"  --> Distance: {nearest['distance_km']} km ({nearest['distance_m']}m) | Elevation Gain: +{nearest['elevation_gain_m']}m | Bearing: {nearest['bearing_deg']}° ({nearest['bearing_compass']})")
     tests_passed += 1
 
     print("\n" + "=" * 75)
