@@ -22,32 +22,33 @@ If the AI Model outputs a **>90% Flood Probability** with a Seismic/Avalanche tr
 
 NeerNetra is built as a highly scalable **Microservices Monorepo** with 4 decoupled environments:
 
-1. **AI Model (`/ai_model`):** Python scripts that generate synthetic historical data, train the Random Forest model using `scikit-learn`, and output a trained `.pkl` binary "brain".
-2. **Backend API (`/backend`):** FastAPI Python server. Loads the `.pkl` AI model. Fetches live multi-source data (Tomorrow.io, USGS) every 15 minutes, feeds it to the AI, and saves results to Supabase (PostgreSQL).
-3. **Web Dashboard (`/web`):** Next.js 14 frontend. Connects to Supabase Realtime to stream live SOS dots onto a Leaflet map. Visualizes AI predictions.
-4. **Mobile App (`/mobile`):** React Native (Expo) app. Receives FCM pushes from Backend. Runs the Bluetooth Nearby Connections API for offline mesh.
+1. **AI Model (`/ai_model`):** Python scripts that generate hybrid training data, train the Random Forest model using `scikit-learn`, and output a trained `.pkl` binary "brain".
+2. **Backend API (`/backend`):** FastAPI Python server. Loads the `.pkl` AI model. Fetches live multi-source data (Tomorrow.io, USGS) every 15 minutes, feeds it to the AI, and saves results to Google Cloud Firestore and thread-safe in-memory cache.
+3. **Web Dashboard (`/web`):** Next.js 14 frontend. Connects to the backend to stream live SOS distress dots and citizen nodes onto the Tactical Himalayan Radar. Visualizes AI predictions and cluster triage.
+4. **Mobile App (`/mobile`):** React Native (Expo) app. Receives FCM pushes from Backend. Runs multi-hop BLE mesh relay for offline SOS.
 
 ---
 
 ## 10. COMPLETE TECH STACK
 
 **AI & Prediction (Data Science):**
-*   Python, Pandas, Scikit-Learn (Random Forest)
-*   APIs: Tomorrow.io (Rain), AgroMonitoring (Soil), Open-Elevation (Slope), USGS (Seismic)
+*   Python, Pandas, Scikit-Learn (Random Forest Classifier)
+*   APIs: Tomorrow.io (Rain), Open-Meteo, Open-Elevation (Slope), USGS (Seismic), NASA POWER
 
-**Backend (API & WebSockets):**
+**Backend (API & Cloud):**
 *   FastAPI, Uvicorn, Joblib (Model loading)
-*   Database: Supabase (PostgreSQL + PostGIS for spatial queries)
-*   Messaging: Firebase Admin SDK (FCM)
+*   Database & Cloud: Google Cloud Firestore (NoSQL Document Store)
+*   In-Memory Cache: Thread-safe `threading.RLock()` for sub-2ms ingestion
+*   Messaging: Firebase Admin SDK (FCM Topic Broadcasts & Multicast)
 
 **Mobile App (Citizen):**
-*   React Native 0.74, Expo SDK 51, Zustand
-*   Offline Maps: `@maplibre/maplibre-react-native` + Protomaps (PMTiles)
-*   Mesh: `react-native-google-nearby-connections`
+*   React Native 0.86, Expo SDK 57, TypeScript
+*   Offline Storage: `@react-native-async-storage/async-storage`
+*   Mesh: Multi-hop BLE GATT mesh relay (TTL=7, duplicate suppression)
 
 **Web Dashboard (Govt):**
-*   Next.js 14 (App Router), Tailwind CSS
-*   Maps: `react-leaflet`, `leaflet.heat`, `leaflet-markercluster`
+*   Next.js 14 (App Router), Lucide Icons
+*   Radar Engine: Offline Tactical Himalayan Vector Radar (<15KB payload)
 
 ---
 

@@ -1,4 +1,4 @@
-﻿================================================================
+================================================================
 NEERNETRA — COMPLETE API KEYS & TOOLS CREDENTIAL SHEET
 Give This to Your Agent (Me) When Building
 ================================================================
@@ -46,27 +46,18 @@ CREDENTIALS TO COLLECT AND PASTE IN .env:
 Cost: FREE (Firebase Spark plan — unlimited FCM, free auth)
 
 -------------------------------------------------------------
-2. SUPABASE (Database + Real-time + Location Storage)
+2. GOOGLE CLOUD FIRESTORE (NoSQL Document Cloud Persistence)
 -------------------------------------------------------------
 Why needed:
-  - PostgreSQL database with PostGIS for location data
-  - Real-time subscriptions → live markers on dashboard
-  - Mobile app sends GPS to Supabase → dashboard sees it instantly
-  
-Sign up: https://supabase.com (use GitHub login, instant)
-  → New project: "neernetra"
-  → Wait 2-3 minutes for setup
-  → Go to: Settings → API
-  → Copy: URL, anon (public) key, service_role (secret) key
-  → Go to: SQL Editor → run this to enable PostGIS:
-    CREATE EXTENSION IF NOT EXISTS postgis;
+  - Persistent cloud synchronization for citizen locations, SOS events, and rescue dispatches
+  - Automatically configured via serviceAccountKey.json (Firebase Admin SDK)
+  - Zero SQL setup required — collections created on first write
 
 CREDENTIALS:
-  SUPABASE_URL=https://xxxx.supabase.co
-  SUPABASE_ANON_KEY=eyJhbGci... (public, goes in mobile app too)
-  SUPABASE_SERVICE_ROLE_KEY=eyJhbGci... (SECRET, only in backend)
+  (serviceAccountKey.json file — present in backend/ folder)
+  Project ID: neernetra-e2706
 
-Cost: FREE (500MB PostgreSQL, 2GB file storage, 50MB per database)
+Cost: FREE (Firebase Spark Plan — 50,000 document reads, 20,000 document writes/day)
 
 -------------------------------------------------------------
 3. TOMORROW.IO (Rainfall Data — Core Prediction Input)
@@ -352,20 +343,14 @@ Create this file at: backend/.env
 
 ```
 # === REQUIRED — GET THESE TONIGHT ===
-FIREBASE_PROJECT_ID=neernetra-sih2026
+FIREBASE_PROJECT_ID=neernetra-e2706
 FIREBASE_WEB_API_KEY=AIzaSy_YOUR_KEY_HERE
 TOMORROW_IO_API_KEY=YOUR_KEY_HERE
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_YOUR_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_YOUR_SERVICE_KEY
-UPSTASH_REDIS_URL=https://YOUR_INSTANCE.upstash.io
-UPSTASH_REDIS_TOKEN=AX_YOUR_TOKEN
 
 # === SHOULD GET ===
 OPENWEATHER_API_KEY=YOUR_KEY_HERE
 AGROMONITORING_APP_ID=YOUR_APP_ID
 AGROMONITORING_API_KEY=YOUR_KEY_HERE
-PROTOMAPS_API_KEY=YOUR_KEY_HERE
 
 # === NO KEY NEEDED - just leave as-is ===
 OPEN_ELEVATION_URL=https://api.open-elevation.com/api/v1/lookup
@@ -388,10 +373,7 @@ Create this file at: mobile/.env
 
 ```
 # === REQUIRED ===
-EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_YOUR_KEY
-EXPO_PUBLIC_API_URL=https://neernetra-production.up.railway.app
-EXPO_PUBLIC_PROTOMAPS_API_KEY=YOUR_KEY_HERE
+EXPO_PUBLIC_API_URL=http://localhost:8000
 
 # === MAP CONFIG ===
 EXPO_PUBLIC_MAP_DEFAULT_LAT=30.4167
@@ -403,13 +385,9 @@ Create this file at: web/.env.local
 
 ```
 # === REQUIRED ===
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_YOUR_KEY
-NEXT_PUBLIC_API_URL=https://neernetra-production.up.railway.app
-NEXT_PUBLIC_PROTOMAPS_API_KEY=YOUR_KEY_HERE
+NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # SERVER-SIDE ONLY (not exposed to browser)
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_YOUR_SERVICE_KEY
 ADMIN_SECRET=neernetra_admin_2026
 ```
 
@@ -418,49 +396,36 @@ SECTION 6: CREDENTIAL COLLECTION CHECKLIST
 ================================================================
 
 Priority A - Do RIGHT NOW (blocks all development):
-[ ] Firebase project created + serviceAccountKey.json downloaded
-[ ] Firebase google-services.json downloaded (for Android)  
-[ ] Supabase project created + URL + keys copied
-[ ] Supabase: PostGIS extension enabled (run SQL)
-[ ] Tomorrow.io account + API key tested with curl/browser
-[ ] Upstash Redis created + URL + token copied
-[ ] Protomaps account + API key copied
+[x] Firebase project created + serviceAccountKey.json downloaded
+[x] Firebase google-services.json downloaded (for Android)  
+[x] Tomorrow.io account + API key tested with curl/browser
 
 Priority B - Do tonight after starting build:
 [ ] OpenWeatherMap API key (email verification may be needed)
 [ ] AgroMonitoring account created
-[ ] Railway.app account created (link GitHub)
-[ ] Vercel account created (link GitHub)
 
 Priority C - No key needed, verify these work RIGHT NOW:
-[ ] Open-Elevation test: https://api.open-elevation.com/api/v1/lookup?locations=30.5573,79.5642
-[ ] NASA POWER test: power.larc.nasa.gov/api (check in browser)
-[ ] Geofabrik: check Uttarakhand file size/availability
+[x] Open-Elevation test: https://api.open-elevation.com/api/v1/lookup?locations=30.5573,79.5642
+[x] NASA POWER test: power.larc.nasa.gov/api (check in browser)
+[x] USGS Seismic API: https://earthquake.usgs.gov/fdsnws/event/1/query
 
 ================================================================
 SECTION 7: WHO DOES WHAT (Credential Assignment)
 ================================================================
 
-SHIVENDRA — Get all API keys (your job tonight):
+SHIVENDRA — Get all API keys:
   1. Tomorrow.io account → test API → give key to Priyanshu
   2. AgroMonitoring account → get credentials → give to Priyanshu
   3. OpenWeatherMap → activate key (10 min) → give to Priyanshu
-  4. Manually look up India-WRIS for Alaknanda river level at Chamoli
-     → Write down current level → Priyanshu hardcodes for demo
 
-PRIYANSHU — Get platform keys (your job):
+PRIYANSHU — Platform & Cloud:
   1. Firebase project → download both JSON files
-  2. Supabase project → copy URL + anon key + service role key
-  3. Upstash Redis → create + copy credentials
-  4. Protomaps → create + copy key
-  5. Set up .env files in all 3 folders
-  6. Test: python -c "import firebase_admin; print('ok')"
+  2. Set up .env files in all folders
+  3. Test: python -c "import firebase_admin; print('ok')"
 
-MANAS — Verify this works on your phone:
-  1. Install: npm install react-native-google-nearby-connections
-  2. Check: does it compile? npx expo run:android
-  3. If fails: look for alternative package or write native module
-  4. Report back to Priyanshu what works
+MANAS — Mobile & BLE:
+  1. Test Expo Mobile App on physical device
+  2. Verify BLE mesh lifecycle and offline storage queue
 
 ================================================================
 SECTION 8: COST SUMMARY — TOTAL COST FOR DEMO = ₹0
@@ -469,19 +434,11 @@ SECTION 8: COST SUMMARY — TOTAL COST FOR DEMO = ₹0
 | Service | Free Tier | Limit | Your Usage |
 |---|---|---|---|
 | Firebase FCM | Unlimited | none | ~100 demo alerts |
-| Firebase Auth | 10,000 users/mo | 10K | ~10 demo users |
-| Supabase | 500MB DB | 500MB | ~10MB max |
+| Google Firestore | 50K reads/day | 50K/day | ~100 documents |
 | Tomorrow.io | 500 calls/day | 500/day | ~33 zones × 4hr demo |
-| Protomaps | 200K tiles/mo | 200K/mo | ~5000 tiles for demo |
-| Upstash Redis | 10K commands/day | 10K | ~500 commands demo |
-| OpenWeatherMap | 1000 calls/day | 1000/day | ~20 backup calls |
-| Railway.app | $5 credit | $5 | ~$0.10 for 3-day hackathon |
-| Vercel | Unlimited hobby | - | free |
 | Open-Elevation | Unlimited | - | ~100 calls |
 | NASA POWER | Unlimited | - | ~10 calls |
-| Geofabrik | Free download | - | once |
-| Google Nearby | Free library | - | no API calls |
-| OSRM/Valhalla | Free (self-host) | - | not needed for demo |
+| USGS Seismic | Unlimited | - | ~100 calls |
 
 TOTAL COST: ₹0 (literally zero rupees)
 

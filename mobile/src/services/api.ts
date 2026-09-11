@@ -2,13 +2,16 @@ import { Platform } from 'react-native';
 import { ZonePrediction, SOSPayload } from '../types';
 import { getOfflineSOSQueue, clearOfflineSOSQueue, setOfflineSOSQueue, saveSOSToOfflineQueue } from './offlineStorage';
 
-// Dynamic API URL: on Android emulator 10.0.2.2 points to host, otherwise localhost
+// Dynamic API URL: environment override -> active host LAN IP -> emulator fallback -> localhost
 const getBaseUrl = (): string => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
+  // Active host LAN IP for physical device testing over Wi-Fi / Hotspot
+  const HOST_LAN_IP = '172.16.191.155';
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8000';
+    // Physical phones on same Wi-Fi reach host laptop via LAN IP
+    return `http://${HOST_LAN_IP}:8000`;
   }
   return 'http://localhost:8000';
 };

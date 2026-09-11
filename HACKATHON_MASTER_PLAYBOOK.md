@@ -43,7 +43,7 @@ When the timer starts, each teammate opens their specific folder in their AI IDE
 **Folder:** `/web`
 **Action:** Run `npx create-next-app@latest .`
 **AI Prompt to Paste:** 
-> "Read the `AI_SYSTEM_CONTEXT.md` file in the root folder. I am in the `web` folder. Build the Next.js 14 Dashboard. I need a Leaflet map (using react-leaflet) that connects to our Supabase database to show live Red SOS dots. Also, create a panel that fetches the current flood probability from our backend at `http://localhost:8000/api/prediction/current`. Write the code."
+> "Read the `AI_SYSTEM_CONTEXT.md` file in the root folder. I am in the `web` folder. Build the Next.js 14 Dashboard. I need a Tactical Himalayan Radar that connects to our backend API to show live citizen GPS beacons and active distress events. Also, create a panel that fetches the current flood probability from our backend at `http://localhost:8000/api/prediction/current`. Write the code."
 
 ### 📱 TEAMMATE 2: PRIYANSHU (React Native Mobile App)
 **Folder:** `/mobile`
@@ -53,9 +53,9 @@ When the timer starts, each teammate opens their specific folder in their AI IDE
 
 ### ⚙️ TEAMMATE 3: BACKEND API
 **Folder:** `/backend`
-**Action:** Run `pip install fastapi uvicorn pandas scikit-learn joblib supabase`
+**Action:** Run `pip install fastapi uvicorn pandas scikit-learn joblib firebase-admin`
 **AI Prompt to Paste:** 
-> "Read the `AI_SYSTEM_CONTEXT.md` file in the root folder. I am in the `backend` folder. Build the FastAPI `main.py` server exactly as defined in the API Contracts section. It needs to load the `.pkl` model, expose the `/api/prediction` and `/api/sos` routes, and connect to Supabase to save SOS events. Write the code."
+> "Read the `AI_SYSTEM_CONTEXT.md` file in the root folder. I am in the `backend` folder. Build the FastAPI `main.py` server exactly as defined in the API Contracts section. It needs to load the `.pkl` model, expose the `/api/prediction` and `/api/sos` routes, and connect to Google Cloud Firestore to persist SOS events. Write the code."
 
 ### 🧠 TEAMMATE 4: AI MODEL & DATA
 **Folder:** `/ai_model`
@@ -72,4 +72,4 @@ Stop coding. Use `SOLUTION_PART1.md` and `SOLUTION_PART2.md` to create your Powe
 **Key points to hit:**
 1. Traditional systems only track rain. We use Seismic data to detect Glacial Lake Outbursts (GLOFs) like the deadly Nepal 2026 disaster.
 2. Warning is useless without delivery. Our Bluetooth mesh ensures offline SOS.
-3. We don't just dump 5000 SOS pins on a map. We use PostGIS K-Means Clustering to group rescues for NDRF triage.
+3. We don't just dump 5000 SOS pins on a map. We use Spatial Proximity Clustering (~5.5km) to group rescues for NDRF triage into P1-Critical / P2-High missions.
