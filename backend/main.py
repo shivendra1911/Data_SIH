@@ -72,6 +72,7 @@ active_broadcasts_db: List[Dict[str, Any]] = []
 registered_push_tokens: Dict[str, Dict[str, Any]] = {}
 FIREBASE_KEY_PATH = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
 firebase_initialized = False
+firestore_db = None
 
 # 10 Monitored Himalayan Target Zones
 ALL_ZONES_CONFIG = {
@@ -339,7 +340,7 @@ class FCMTestPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_services():
-    global model_clf, firebase_initialized
+    global model_clf, firebase_initialized, firestore_db
     # 1. Load ML Model
     if os.path.exists(MODEL_PATH):
         try:
@@ -350,20 +351,36 @@ def startup_services():
     else:
         print(f"[Backend Startup] Model file not found at {MODEL_PATH}. Using algorithmic fallback.")
 
-    # 2. Initialize Firebase Admin SDK
+    # 2. Initialize Firebase Admin SDK (FCM + Firestore)
     if os.path.exists(FIREBASE_KEY_PATH):
         try:
             import firebase_admin
-            from firebase_admin import credentials
+            from firebase_admin import credentials, firestore
             if not firebase_admin._apps:
                 cred = credentials.Certificate(FIREBASE_KEY_PATH)
                 firebase_admin.initialize_app(cred)
             firebase_initialized = True
             print(f"[Firebase Admin] Initialized successfully with {FIREBASE_KEY_PATH}")
+            try:
+                firestore_db = firestore.client()
+                print(f"[Firebase Firestore] Connected to Cloud Firestore (Project: {firestore_db.project})")
+            except Exception as fs_err:
+                print(f"[Firebase Firestore] Client initialization note: {fs_err}")
         except Exception as fb_err:
             print(f"[Firebase Admin] Initialization warning: {fb_err}")
     else:
         print(f"[Firebase Admin] Notice: serviceAccountKey.json not present at {FIREBASE_KEY_PATH}")
+
+def sync_to_firestore(collection_name: str, doc_id: str, data: Dict[str, Any]):
+    """
+    Safely writes documents to Google Cloud Firestore when enabled,
+    without crashing or blocking on error.
+    """
+    if firestore_db:
+        try:
+            firestore_db.collection(collection_name).document(str(doc_id)).set(data)
+        except Exception as e:
+            pass  # Fallback to in-memory gracefully
 
 def send_firebase_fcm_alert(
     zone_id: str,
@@ -564,6 +581,7 @@ def trigger_sos_beacon(payload: SOSPayload):
     }
 
     sos_events_db.append(event_entry)
+    sync_to_firestore("sos_events", message_id, event_entry)
 
     if payload.device_uuid in location_history_db:
         location_history_db[payload.device_uuid]["status"] = payload.status
@@ -582,6 +600,7 @@ def trigger_sos_beacon(payload: SOSPayload):
             "zone_id": "chamoli_01",
             "status": payload.status
         }
+    sync_to_firestore("citizen_locations", payload.device_uuid, location_history_db[payload.device_uuid])
 
     print(f"[SOS Ingest] Beacon received [{payload.status}] from {payload.device_uuid[:8]} (Mesh: {payload.is_mesh_relayed})")
 
@@ -679,6 +698,7 @@ def dispatch_rescue_squad(payload: RescueDispatchPayload):
     }
 
     dispatched_rescues_db.append(dispatch_entry)
+    sync_to_firestore("dispatched_rescues", dispatch_entry["dispatch_id"], dispatch_entry)
     print(f"[NDRF Command] Rescue Squad [{payload.squad_type}] dispatched to Cluster #{payload.cluster_id}")
 
     return {
@@ -703,7 +723,7 @@ def sync_device_location(payload: LocationSyncPayload):
     """
     curr_status = location_history_db.get(payload.device_uuid, {}).get("status", "ACTIVE")
 
-    location_history_db[payload.device_uuid] = {
+    location_entry = {
         "device_uuid": payload.device_uuid,
         "lat": payload.lat,
         "lng": payload.lng,
@@ -715,6 +735,8 @@ def sync_device_location(payload: LocationSyncPayload):
         "status": curr_status,
         "server_received_at": datetime.now(timezone.utc).isoformat()
     }
+    location_history_db[payload.device_uuid] = location_entry
+    sync_to_firestore("citizen_locations", payload.device_uuid, location_entry)
     print(f"[Location Sync] 5-Min GPS update from {payload.device_uuid[:8]}: ({payload.lat}, {payload.lng})")
     return {
         "success": True,
@@ -772,6 +794,7 @@ def broadcast_red_zone_alert(zone_id: str = "chamoli_01"):
         "message": f"EMERGENCY RED ALERT DISPATCHED TO ALL DEVICES IN {zone_id.upper()} RANGE"
     }
     active_broadcasts_db.append(broadcast_entry)
+    sync_to_firestore("active_broadcasts", broadcast_entry["broadcast_id"], broadcast_entry)
 
     # Dispatch Cloud Push Alert via Firebase Cloud Messaging (FCM)
     fcm_summary = send_firebase_fcm_alert(
