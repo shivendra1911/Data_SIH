@@ -310,7 +310,7 @@ export default function EmergencyMap({
       : "#10b981";
 
   return (
-    <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl">
+    <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm">
       <MapContainer
         center={center}
         zoom={zoom}
@@ -636,18 +636,18 @@ export default function EmergencyMap({
       </MapContainer>
 
       {/* Tactical Layers Floating Control */}
-      <div className="absolute top-3 right-3 z-[1000] bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-xl p-2.5 shadow-2xl flex flex-col gap-1.5 max-w-[220px]">
-        <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1 mb-0.5">
-          <Layers className="w-3 h-3 text-sky-400" /> Tactical Layers
+      <div className="absolute top-3 right-3 z-[1000] bg-white/95 backdrop-blur-md border border-gray-200 rounded-2xl p-3 shadow-lg flex flex-col gap-1.5 max-w-[220px]">
+        <div className="text-[10px] font-bold uppercase text-gray-500 flex items-center gap-1 mb-0.5">
+          <Layers className="w-3 h-3 text-violet-600" aria-hidden /> Map Layers
         </div>
 
         {/* Epicenter & Flood Wave Toggle */}
         <button
           onClick={() => setShowEpicenter((prev) => !prev)}
-          className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition text-left ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
             showEpicenter
-              ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-              : "bg-slate-800 text-slate-400"
+              ? "bg-red-50 text-red-700 border border-red-200"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
           }`}
         >
           <span>💥 GLOF Epicenter & Wave</span>
@@ -656,10 +656,10 @@ export default function EmergencyMap({
         {/* Critical Infrastructure */}
         <button
           onClick={() => setShowInfrastructure((prev) => !prev)}
-          className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition text-left ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
             showInfrastructure
-              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
-              : "bg-slate-800 text-slate-400"
+              ? "bg-violet-50 text-violet-700 border border-violet-200"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
           }`}
         >
           <span>⚡ Critical Infrastructure</span>
@@ -668,10 +668,10 @@ export default function EmergencyMap({
         {/* Live Citizens */}
         <button
           onClick={() => setShowLiveCitizens((prev) => !prev)}
-          className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition text-left ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
             showLiveCitizens
-              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-              : "bg-slate-800 text-slate-400"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
           }`}
         >
           <span>🟢 Live Citizens ({citizens.filter((c) => c.is_live).length || sosEvents.length})</span>
@@ -680,68 +680,68 @@ export default function EmergencyMap({
         {/* Last Known Locations (BLE Mesh) */}
         <button
           onClick={() => setShowLastKnownCitizens((prev) => !prev)}
-          className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition text-left ${
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
             showLastKnownCitizens
-              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-              : "bg-slate-800 text-slate-400"
+              ? "bg-amber-50 text-amber-800 border border-amber-200"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
           }`}
         >
           <span>⏱️ Last Known ({citizens.filter((c) => !c.is_live).length})</span>
         </button>
 
         {/* Basemap Selection */}
-        <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1 mt-1 mb-0.5 pt-1 border-t border-slate-800">
-          <Globe className="w-3 h-3 text-cyan-400" /> Terrain Mode
+        <div className="text-[10px] font-bold uppercase text-gray-500 flex items-center gap-1 mt-1 mb-0.5 pt-1 border-t border-gray-100">
+          <Globe className="w-3 h-3 text-violet-600" aria-hidden /> Terrain Mode
         </div>
-        <div className="grid grid-cols-3 gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+        <div className="grid grid-cols-3 gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200">
           <button
             onClick={() => setBasemap("topo")}
-            className={`px-1.5 py-1 rounded text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
+            className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
               basemap === "topo"
-                ? "bg-cyan-500 text-slate-950 shadow-md font-extrabold"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-violet-700 text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
             }`}
-            title="Himalayan Valley Elevation Contours (Esri Topo)"
+            title="Elevation Contours (Esri Topo)"
           >
-            <Mountain className="w-3 h-3" />
+            <Mountain className="w-3 h-3" aria-hidden />
             <span>Topo</span>
           </button>
           <button
             onClick={() => setBasemap("satellite")}
-            className={`px-1.5 py-1 rounded text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
+            className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
               basemap === "satellite"
-                ? "bg-cyan-500 text-slate-950 shadow-md font-extrabold"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-violet-700 text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
             }`}
-            title="High-Resolution Satellite Reconnaissance (Esri Imagery)"
+            title="Satellite Reconnaissance (Esri Imagery)"
           >
-            <Satellite className="w-3 h-3" />
+            <Satellite className="w-3 h-3" aria-hidden />
             <span>Sat</span>
           </button>
           <button
             onClick={() => setBasemap("osm")}
-            className={`px-1.5 py-1 rounded text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
+            className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 ${
               basemap === "osm"
-                ? "bg-cyan-500 text-slate-950 shadow-md font-extrabold"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-violet-700 text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
             }`}
-            title="Standard OpenStreetMap Road & Basin Network"
+            title="OpenStreetMap Road Network"
           >
-            <Globe className="w-3 h-3" />
+            <Globe className="w-3 h-3" aria-hidden />
             <span>OSM</span>
           </button>
         </div>
       </div>
 
-      {/* Tactical Map Overlay Header / Legend */}
-      <div className="absolute top-3 left-3 z-[1000] bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-xl p-3 shadow-2xl max-w-xs pointer-events-auto">
+      {/* Map Overlay Header / Legend */}
+      <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-md border border-gray-200 rounded-2xl p-3 shadow-lg max-w-xs pointer-events-auto">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            Himalayan Valley Inundation Radar
+          <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping"></span>
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-900" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            India Flood Radar
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-300">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-600">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">⚡</span>
             <span>Dam / Barrage</span>
@@ -752,24 +752,24 @@ export default function EmergencyMap({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-sm">⛺</span>
-            <span>High-Ground Haven</span>
+            <span>Evac Shelter</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-400/50"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-red-200"></span>
             <span>Citizen SOS</span>
           </div>
         </div>
       </div>
 
       {/* Floating Active Zone Banner */}
-      <div className="absolute bottom-3 left-3 z-[1000] bg-slate-950/90 backdrop-blur-md border border-slate-700 rounded-lg px-3 py-2 text-xs flex items-center gap-2.5">
+      <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl px-3.5 py-2 text-xs flex items-center gap-2.5 shadow-md">
         <div
           className="w-3 h-3 rounded-full"
           style={{ backgroundColor: zoneAlertColor }}
         ></div>
         <div>
-          <span className="text-slate-400 font-medium">Monitoring Catchment:</span>{" "}
-          <strong className="text-white font-semibold">{activeZone.name}</strong>
+          <span className="text-gray-500 font-medium">Monitoring Zone:</span>{" "}
+          <strong className="text-gray-900 font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{activeZone.name}</strong>
         </div>
       </div>
     </div>
