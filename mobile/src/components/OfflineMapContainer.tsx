@@ -98,6 +98,15 @@ export const OfflineMapContainer: React.FC<OfflineMapContainerProps> = ({
             );
           })}
 
+          {/* High Ground Safe Assembly Point */}
+          <G transform="translate(250, 45)">
+            <Circle r="14" fill="#10b981" opacity={0.25} />
+            <Circle r="7" fill="#059669" />
+            <SvgText x="0" y="-12" fill="#065f46" fontSize="10" fontWeight="bold" textAnchor="middle">
+              SAFE HIGH GROUND (+50m)
+            </SvgText>
+          </G>
+
           {/* YOU ARE HERE Marker (Pulsing Amber Pin) */}
           <G transform="translate(170, 110)">
             <Circle r="16" fill="#f59e0b" opacity={0.3} />

@@ -115,66 +115,74 @@ export default function GovernmentCommandPortal() {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<CitizenLiveLocation | null>(null);
 
-  // Poll backend data every 4 seconds
+  // Poll backend data with adaptive tab visibility (4s active, 12s hidden)
   useEffect(() => {
     fetchAllData();
-    const timer = setInterval(fetchAllData, 4000);
-    return () => clearInterval(timer);
+    let intervalMs = 4000;
+    let timer = setInterval(fetchAllData, intervalMs);
+
+    const handleVisibilityChange = () => {
+      clearInterval(timer);
+      intervalMs = document.hidden ? 12000 : 4000;
+      timer = setInterval(fetchAllData, intervalMs);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [selectedZone]);
 
   const fetchAllData = async () => {
     try {
-      // 1. Fetch current zone prediction
+      // 1. High-speed consolidated endpoint (fetches predictions, zones, radar, clusters, dispatches in 1 round-trip)
+      const overviewRes = await fetch(`${API_BASE}/api/dashboard/overview?zone_id=${encodeURIComponent(selectedZone)}`);
+      if (overviewRes.ok) {
+        const data = await overviewRes.json();
+        if (data.selected_zone?.prediction) {
+          setCurrentPrediction({
+            ...data.selected_zone.prediction,
+            zone_id: data.selected_zone.zone_id,
+            zone_name: data.selected_zone.zone_name,
+            sensors: data.selected_zone.sensors,
+            last_updated: data.timestamp
+          });
+        }
+        if (data.all_zones) setAllZones(data.all_zones);
+        if (data.live_devices) setLiveDevices(data.live_devices);
+        if (data.clusters) setClusters(data.clusters);
+        if (data.dispatches) setDispatches(data.dispatches);
+        setBackendOnline(true);
+        return;
+      }
+
+      // Fallback: individual endpoints if running on older backend instance
       const predRes = await fetch(`${API_BASE}/api/prediction/current?zone_id=${encodeURIComponent(selectedZone)}`);
       if (predRes.ok) {
         const predData = await predRes.json();
         setCurrentPrediction(predData);
         setBackendOnline(true);
       }
-
-      // 2. Fetch all 10 monitored zones (global national coverage)
       const zonesRes = await fetch(`${API_BASE}/api/prediction/zones`);
       if (zonesRes.ok) {
         const zonesData = await zonesRes.json();
-        if (zonesData.zones) {
-          setAllZones(zonesData.zones);
-        }
+        if (zonesData.zones) setAllZones(zonesData.zones);
       }
-
-      // 3. Fetch live citizen locations & unresponsive danger
       const locRes = await fetch(`${API_BASE}/api/location/live`);
       if (locRes.ok) {
         const locData = await locRes.json();
-        if (locData.devices) {
-          setLiveDevices(locData.devices);
-        }
+        if (locData.devices) setLiveDevices(locData.devices);
       }
-
-      // 4. Fetch SOS beacons
-      const sosRes = await fetch(`${API_BASE}/api/sos/events`);
-      if (sosRes.ok) {
-        const sosData = await sosRes.json();
-        if (sosData.events) {
-          setSosEvents(sosData.events);
-        }
-      }
-
-      // 5. Fetch rescue clusters
       const clusterRes = await fetch(`${API_BASE}/api/sos/clusters?zone_id=${encodeURIComponent(selectedZone)}`);
       if (clusterRes.ok) {
         const clusterData = await clusterRes.json();
-        if (clusterData.clusters) {
-          setClusters(clusterData.clusters);
-        }
+        if (clusterData.clusters) setClusters(clusterData.clusters);
       }
-
-      // 6. Fetch dispatch logs
       const dispRes = await fetch(`${API_BASE}/api/rescue/dispatches`);
       if (dispRes.ok) {
         const dispData = await dispRes.json();
-        if (dispData.dispatches) {
-          setDispatches(dispData.dispatches);
-        }
+        if (dispData.dispatches) setDispatches(dispData.dispatches);
       }
     } catch (err) {
       console.warn('[Command Portal] Backend offline or deferred:', err);

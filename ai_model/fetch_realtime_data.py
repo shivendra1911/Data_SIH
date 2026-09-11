@@ -46,9 +46,44 @@ ZONES = {
     "dehradun_01":   {"name": "Dehradun",         "lat": 30.3165, "lng": 78.0322},
 }
 
+# In-memory Caching layer to eliminate API quota exhaustion
+_rainfall_cache = {}    # (lat, lng) -> (timestamp, rain, humidity)
+_elevation_cache = {}   # (lat, lng) -> elevation
+_slope_cache = {}       # (lat, lng) -> slope
+_seismic_cache = {}     # (lat, lng) -> (timestamp, magnitude)
+
+CACHE_TTL_RAIN = 600       # 10 minutes cache
+CACHE_TTL_SEISMIC = 300    # 5 minutes cache
+
+def fetch_rainfall_open_meteo_fallback(lat, lng):
+    """Zero-key high-availability fallback when Tomorrow.io quota is exhausted or throttled"""
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lng,
+            "current": "precipitation,relative_humidity_2m"
+        }
+        resp = requests.get(url, params=params, timeout=8)
+        if resp.status_code == 200:
+            current = resp.json().get("current", {})
+            rain = float(current.get("precipitation", 0.0))
+            humidity = float(current.get("relative_humidity_2m", 50.0))
+            return round(rain, 2), round(humidity, 1)
+    except Exception as e:
+        print(f"  [WARN] Open-Meteo fallback failed: {e}")
+    return None, None
 
 def fetch_rainfall(lat, lng):
-    """Fetch real-time rainfall from Tomorrow.io"""
+    """Fetch real-time rainfall from Tomorrow.io with TTL cache & Open-Meteo failover"""
+    coord_key = (round(lat, 3), round(lng, 3))
+    now = time.time()
+
+    if coord_key in _rainfall_cache:
+        ts, rain, hum = _rainfall_cache[coord_key]
+        if now - ts < CACHE_TTL_RAIN:
+            return rain, hum
+
     try:
         url = "https://api.tomorrow.io/v4/weather/realtime"
         params = {
@@ -57,30 +92,44 @@ def fetch_rainfall(lat, lng):
             "apikey": TOMORROW_IO_API_KEY,
             "units": "metric"
         }
-        resp = requests.get(url, params=params, timeout=10)
+        headers = {"User-Agent": "NeerNetraDisaster/1.0"}
+        resp = requests.get(url, params=params, headers=headers, timeout=8)
         if resp.status_code == 200:
             data = resp.json()
             values = data.get("data", {}).get("values", {})
             rain = values.get("precipitationIntensity", 0.0)
             humidity = values.get("humidity", 50.0)
+            _rainfall_cache[coord_key] = (now, round(rain, 2), round(humidity, 1))
             return round(rain, 2), round(humidity, 1)
         else:
-            print(f"  [WARN] Tomorrow.io returned {resp.status_code}: {resp.text[:100]}")
-            return None, None
+            print(f"  [WARN] Tomorrow.io HTTP {resp.status_code}. Engaging Open-Meteo fallback.")
     except Exception as e:
-        print(f"  [ERR] Tomorrow.io failed: {e}")
-        return None, None
+        print(f"  [WARN] Tomorrow.io failed: {e}. Engaging Open-Meteo fallback.")
+
+    f_rain, f_hum = fetch_rainfall_open_meteo_fallback(lat, lng)
+    if f_rain is not None:
+        _rainfall_cache[coord_key] = (now, f_rain, f_hum)
+        return f_rain, f_hum
+
+    return None, None
 
 
 def fetch_elevation(lat, lng):
-    """Fetch elevation from Open-Elevation API (free, no key needed)"""
+    """Fetch elevation with permanent in-memory coordinate cache"""
+    coord_key = (round(lat, 3), round(lng, 3))
+    if coord_key in _elevation_cache:
+        return _elevation_cache[coord_key]
+
     try:
         url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lng}"
-        resp = requests.get(url, timeout=10)
+        headers = {"User-Agent": "NeerNetraDisaster/1.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
             results = resp.json().get("results", [])
             if results:
-                return results[0].get("elevation", 500)
+                elev = results[0].get("elevation", 500)
+                _elevation_cache[coord_key] = elev
+                return elev
         return None
     except Exception as e:
         print(f"  [ERR] Open-Elevation failed: {e}")
@@ -88,27 +137,32 @@ def fetch_elevation(lat, lng):
 
 
 def estimate_slope_from_elevation(lat, lng, base_elev=None):
-    """Estimate terrain slope by sampling 4 nearby points (N/S/E/W, ~100m apart)"""
+    """Estimate terrain slope with in-memory coordinate cache"""
+    coord_key = (round(lat, 3), round(lng, 3))
+    if coord_key in _slope_cache:
+        return _slope_cache[coord_key]
+
     try:
-        delta = 0.001  # ~111m at equator
+        delta = 0.001  # ~111m
         points = [
-            (lat + delta, lng),  # North
-            (lat - delta, lng),  # South
-            (lat, lng + delta),  # East
-            (lat, lng - delta),  # West
+            (lat + delta, lng),
+            (lat - delta, lng),
+            (lat, lng + delta),
+            (lat, lng - delta),
         ]
         locs = "|".join([f"{p[0]},{p[1]}" for p in points])
         url = f"https://api.open-elevation.com/api/v1/lookup?locations={locs}"
-        resp = requests.get(url, timeout=15)
+        headers = {"User-Agent": "NeerNetraDisaster/1.0"}
+        resp = requests.get(url, headers=headers, timeout=15)
         if resp.status_code == 200:
             results = resp.json().get("results", [])
             if len(results) == 4 and base_elev is not None:
                 elevs = [r["elevation"] for r in results]
-                # Max elevation difference over ~111m horizontal distance
                 max_diff = max(abs(e - base_elev) for e in elevs)
-                slope_rad = math.atan2(max_diff, 111.0)  # 111m horizontal
-                slope_deg = math.degrees(slope_rad)
-                return round(min(slope_deg, 65.0), 2)
+                slope_rad = math.atan2(max_diff, 111.0)
+                slope_deg = round(min(math.degrees(slope_rad), 65.0), 2)
+                _slope_cache[coord_key] = slope_deg
+                return slope_deg
         return None
     except Exception as e:
         print(f"  [ERR] Slope estimation failed: {e}")

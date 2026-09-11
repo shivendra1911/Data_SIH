@@ -1,0 +1,36 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // NeerNetra Permanent Production Disaster Security Rules (SIH26192)
+    
+    // Citizen GPS tracking nodes: Citizens update their own location coordinates
+    match /citizen_locations/{deviceId} {
+      allow read: if true;
+      allow write: if request.resource.data.device_uuid != null;
+    }
+    
+    // Emergency SOS Beacons: Immutable disaster incident audit logs
+    match /sos_events/{eventId} {
+      allow read: if true;
+      allow create: if request.resource.data.status in ['SOS', 'SAFE', 'HELPING'];
+      allow update, delete: if false;
+    }
+    
+    // Tactical Rescue Squads & Dispatches
+    match /dispatched_rescues/{dispatchId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Government Red Alert Broadcasts
+    match /active_broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // System Health & Latency Telemetry
+    match /system_health/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

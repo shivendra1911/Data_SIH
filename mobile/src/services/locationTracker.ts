@@ -35,8 +35,15 @@ export const syncCurrentLocationToBackend = async (deviceUuid: string, zoneId: s
     let altitude: number | null = 1450;
     let accuracy: number | null = 5.0;
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') {
+    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+    if (fgStatus === 'granted') {
+      try {
+        if (Platform.OS === 'android') {
+          await Location.requestBackgroundPermissionsAsync();
+        }
+      } catch (bgErr) {
+        console.log('[LocationTracker] Background location permission notice:', bgErr);
+      }
       const currentPos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
