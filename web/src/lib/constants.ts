@@ -458,7 +458,95 @@ export const INDIA_FLOOD_ZONES: HazardZone[] = [
     ],
     infrastructure: [{ id: "infra-d1", name: "Cuttack River Wall", type: "BARRAGE", coords: [20.4525, 85.8923], riskLevel: "SAFE", bufferDistanceM: 150 }],
   },
+
+  // ─── HIMACHAL PRADESH / BEAS BASIN ──────────────────────────────────────
+  {
+    id: "himachal_kullu_01",
+    name: "Parvati & Beas Valley (Kullu - Manikaran)",
+    district: "Kullu, Himachal Pradesh",
+    center: [31.9578, 77.1095],
+    currentRisk: 88.2,
+    alertColor: "RED" as const,
+    primaryTrigger: "Cloudburst Inundation & Debris Torrent — Beas River Surge",
+    leadTimeMinutes: 110,
+    dangerMarkM: 8.0,
+    warningMarkM: 6.8,
+    telemetry: { rainfall_mm: 72.4, soil_moisture_pct: 94.5, slope_deg: 46.0, river_level_m: 7.7, seismic_mag: 1.8 },
+    hydrograph: [
+      { time: "-06h", level_m: 3.4, discharge_cumecs: 190, isPredicted: false },
+      { time: "-04h", level_m: 4.1, discharge_cumecs: 310, isPredicted: false },
+      { time: "-02h", level_m: 5.6, discharge_cumecs: 680, isPredicted: false },
+      { time: "NOW",  level_m: 7.7, discharge_cumecs: 1240, isPredicted: false },
+      { time: "+02h", level_m: 8.8, discharge_cumecs: 1920, isPredicted: true },
+      { time: "+04h", level_m: 8.2, discharge_cumecs: 1550, isPredicted: true },
+      { time: "+06h", level_m: 6.5, discharge_cumecs: 980, isPredicted: true },
+      { time: "+08h", level_m: 5.1, discharge_cumecs: 520, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-hp-01", category: "HIGHWAY", title: "Kullu-Manali NH-3 Traffic Suspension", action: "Halt all vehicle movement along vulnerable riverside road stretches. Move travelers uphill.", priority: "IMMEDIATE", deadline: "T - 30 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-hp1", name: "Pandoh Dam Sluice", type: "DAM", coords: [31.6708, 77.0700], riskLevel: "HIGH", bufferDistanceM: 200 }],
+  },
+
+  // ─── JAMMU & KASHMIR / JHELUM BASIN ────────────────────────────────────
+  {
+    id: "jk_jhelum_01",
+    name: "Jhelum Floodplain (Srinagar - Sangam)",
+    district: "Srinagar / Anantnag, J&K",
+    center: [34.0837, 74.7973],
+    currentRisk: 64.5,
+    alertColor: "ORANGE" as const,
+    primaryTrigger: "Snowmelt Runoff + Continuous Downpour (Ram Munshi Bagh Stage Rising)",
+    leadTimeMinutes: 280,
+    dangerMarkM: 21.0,
+    warningMarkM: 18.0,
+    telemetry: { rainfall_mm: 44.0, soil_moisture_pct: 88.0, slope_deg: 5.5, river_level_m: 19.4, seismic_mag: 0.5 },
+    hydrograph: [
+      { time: "-06h", level_m: 14.5, discharge_cumecs: 1500, isPredicted: false },
+      { time: "-04h", level_m: 16.2, discharge_cumecs: 2100, isPredicted: false },
+      { time: "-02h", level_m: 18.1, discharge_cumecs: 2800, isPredicted: false },
+      { time: "NOW",  level_m: 19.4, discharge_cumecs: 3400, isPredicted: false },
+      { time: "+02h", level_m: 20.6, discharge_cumecs: 4100, isPredicted: true },
+      { time: "+04h", level_m: 21.3, discharge_cumecs: 4600, isPredicted: true },
+      { time: "+06h", level_m: 20.1, discharge_cumecs: 3900, isPredicted: true },
+      { time: "+08h", level_m: 18.5, discharge_cumecs: 3000, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-jk-01", category: "DAM", title: "Flood Spill Channel Diversion Activation", action: "Open Padshahi Bagh flood spill gates to bypass Srinagar city center.", priority: "IMMEDIATE", deadline: "T - 60 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-jk1", name: "Sangam Hydrometric Gauge", type: "BRIDGE", coords: [33.8200, 75.0800], riskLevel: "MODERATE", bufferDistanceM: 100 }],
+  },
+
+  // ─── WEST BENGAL & SIKKIM / TEESTA BASIN ────────────────────────────────
+  {
+    id: "wb_teesta_01",
+    name: "Teesta River Corridor (Jalpaiguri - Sevoke)",
+    district: "Jalpaiguri, West Bengal",
+    center: [26.5400, 88.7200],
+    currentRisk: 91.0,
+    alertColor: "RED" as const,
+    primaryTrigger: "Upstream Chungthang Dam Outburst Surge Wave Transmission",
+    leadTimeMinutes: 140,
+    dangerMarkM: 52.5,
+    warningMarkM: 50.0,
+    telemetry: { rainfall_mm: 58.0, soil_moisture_pct: 91.0, slope_deg: 28.0, river_level_m: 51.8, seismic_mag: 3.8 },
+    hydrograph: [
+      { time: "-06h", level_m: 44.0, discharge_cumecs: 3200, isPredicted: false },
+      { time: "-04h", level_m: 46.5, discharge_cumecs: 4800, isPredicted: false },
+      { time: "-02h", level_m: 49.2, discharge_cumecs: 7100, isPredicted: false },
+      { time: "NOW",  level_m: 51.8, discharge_cumecs: 9500, isPredicted: false },
+      { time: "+02h", level_m: 53.4, discharge_cumecs: 12800, isPredicted: true },
+      { time: "+04h", level_m: 52.8, discharge_cumecs: 11200, isPredicted: true },
+      { time: "+06h", level_m: 49.5, discharge_cumecs: 7500, isPredicted: true },
+      { time: "+08h", level_m: 46.0, discharge_cumecs: 4600, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-wb-01", category: "HIGHWAY", title: "Coronation Bridge & NH-10 Closure", action: "Shut Kalimpong-Sikkim corridor. Evacuate low-lying riverbank villages downstream.", priority: "IMMEDIATE", deadline: "T - 40 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-wb1", name: "Teesta Barrage (Gajoldoba)", type: "BARRAGE", coords: [26.7533, 88.5833], riskLevel: "HIGH", bufferDistanceM: 300 }],
+  },
 ];
+
 
 // Backward-compat alias — points to Uttarakhand/HP zones (first 5)
 HIMALAYAN_ZONES.push(...INDIA_FLOOD_ZONES.slice(0, 5));

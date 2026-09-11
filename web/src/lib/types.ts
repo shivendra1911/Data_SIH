@@ -11,7 +11,10 @@ export type ZoneId =
   | "assam_brahmaputra_01"
   | "kerala_chalakudy_01"
   | "bihar_kosi_01"
-  | "odisha_mahanadi_01";
+  | "odisha_mahanadi_01"
+  | "himachal_kullu_01"
+  | "jk_jhelum_01"
+  | "wb_teesta_01";
 
 export type ForecastHorizon = "NOW" | "+2H" | "+6H" | "+12H" | "+24H";
 
@@ -149,4 +152,38 @@ export interface HazardZone {
   preventiveDirectives: PreventiveDirective[];
   infrastructure: CriticalInfrastructure[];
   epicenter?: DisasterEpicenter;
+}
+
+export interface ScannedZoneSummary {
+  zone_id: ZoneId;
+  zone_name: string;
+  district: string;
+  state: string;
+  river_basin: string;
+  flood_probability_percent: number;
+  alert_color: AlertColor;
+  primary_trigger: string;
+  is_cryo_seismic_glof: boolean;
+  lead_time_minutes: number;
+  river_level_m: number;
+  danger_mark_m: number;
+  auto_dispatched: boolean;
+  dispatched_at?: string;
+}
+
+export interface NationalSentinelScan {
+  timestamp: string;
+  national_threat_level: "NORMAL" | "ELEVATED" | "HIGH" | "CRITICAL_RED";
+  total_zones_scanned: number;
+  critical_zones_count: number;
+  warning_zones_count: number;
+  highest_threat_zone: ScannedZoneSummary;
+  zones: ScannedZoneSummary[];
+  recent_auto_sos_dispatches: {
+    alert_id: string;
+    zone_name: string;
+    timestamp: string;
+    message: string;
+    target_nodes_count: number;
+  }[];
 }

@@ -14,17 +14,18 @@ import ForecastHorizonSlider from "@/components/Dashboard/ForecastHorizonSlider"
 import ClusterTriagePanel from "@/components/Dashboard/ClusterTriagePanel";
 import LiveSOSFeed from "@/components/Dashboard/LiveSOSFeed";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
+import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar";
 
-// Dynamically import Vectrus-style 500vh WebCodecs Scroll Video Hero with SSR disabled
+// Dynamically import Vectrus-style WebCodecs Scroll Video Hero with SSR disabled
 const ScrollVideoHero = dynamic(
   () => import("@/components/CinematicHero/ScrollVideoHero"),
   {
     ssr: false,
     loading: () => (
-      <div className="h-screen w-full bg-[#1D3045] flex items-center justify-center text-white font-mono">
+      <div className="h-[60vh] w-full bg-slate-950 flex items-center justify-center text-white font-mono">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
-          <span className="text-xs uppercase tracking-widest text-cyan-200">
+          <div className="w-8 h-8 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+          <span className="text-xs uppercase tracking-widest text-violet-200">
             Initializing WebCodecs 60FPS Video Canvas...
           </span>
         </div>
@@ -40,7 +41,9 @@ import {
   SOSEvent,
   CitizenLocation,
   RegionalAlert,
+  NationalSentinelScan,
 } from "@/lib/types";
+
 import {
   INDIA_FLOOD_ZONES,
   INITIAL_MOCK_CLUSTERS,
@@ -79,6 +82,9 @@ export default function DashboardPage() {
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
   const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
   const [citizens, setCitizens] = useState<CitizenLocation[]>(INITIAL_CITIZEN_LOCATIONS);
+  const [sentinelScan, setSentinelScan] = useState<NationalSentinelScan | null>(null);
+  const [loadingScan, setLoadingScan] = useState<boolean>(false);
+  const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(true);
 
   // High-frequency alert sound synthesizer
   const playAlertSound = useCallback(() => {
@@ -97,6 +103,39 @@ export default function DashboardPage() {
       } catch {}
     }
   }, []);
+
+  // Autonomous National Flood Sentinel: Scans all basins in India and auto-triggers SOS
+  const runNationalScan = useCallback(async () => {
+    setLoadingScan(true);
+    try {
+      const res = await fetch(`/api/sentinel/scan?auto_dispatch=${autoDispatchEnabled}`);
+      if (res.ok) {
+        const data: NationalSentinelScan = await res.json();
+        setSentinelScan(data);
+        if (data.recent_auto_sos_dispatches.length > 0 && soundEnabled) {
+          playAlertSound();
+        }
+      }
+    } catch (err) {
+      console.warn("National sentinel scan error:", err);
+    } finally {
+      setLoadingScan(false);
+    }
+  }, [autoDispatchEnabled, soundEnabled, playAlertSound]);
+
+  useEffect(() => {
+    runNationalScan();
+    const interval = setInterval(runNationalScan, 10000); // 10-second real-time autonomous scan cycle
+    return () => clearInterval(interval);
+  }, [runNationalScan]);
+
+  const handleSelectZoneById = (zoneId: string) => {
+    const found = INDIA_FLOOD_ZONES.find((z) => z.id === zoneId);
+    if (found) {
+      handleSelectZone(found);
+    }
+  };
+
 
   // Load prediction & clustering telemetry on sector change
   const loadZoneData = useCallback(async (zone: HazardZone) => {
@@ -266,18 +305,30 @@ export default function DashboardPage() {
         <Header
           selectedZone={selectedZone}
           onSelectZone={handleSelectZone}
-        isDemoMode={isDemoMode}
-        onToggleDemoMode={() => setIsDemoMode((prev) => !prev)}
-        onSimulateSOS={handleSimulateSOS}
-        onOpenMobileModal={() => setIsMobileModalOpen(true)}
-        onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
-        floodRiskPercent={displayedRisk}
-        soundEnabled={soundEnabled}
-        onToggleSound={() => setSoundEnabled((prev) => !prev)}
-      />
+          isDemoMode={isDemoMode}
+          onToggleDemoMode={() => setIsDemoMode((prev) => !prev)}
+          onSimulateSOS={handleSimulateSOS}
+          onOpenMobileModal={() => setIsMobileModalOpen(true)}
+          onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
+          floodRiskPercent={displayedRisk}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled((prev) => !prev)}
+        />
 
-      {/* 2. Executive Real-Time Telemetry Ribbon */}
-      <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
+        {/* 1.5 Autonomous All-India Sentinel Radar & Multi-Basin Threat Matrix */}
+        <NationalSentinelRadar
+          scanData={sentinelScan}
+          loading={loadingScan}
+          onRefreshScan={runNationalScan}
+          selectedZone={selectedZone}
+          onSelectZoneById={handleSelectZoneById}
+          autoDispatchEnabled={autoDispatchEnabled}
+          onToggleAutoDispatch={() => setAutoDispatchEnabled((prev) => !prev)}
+        />
+
+        {/* 2. Executive Real-Time Telemetry Ribbon */}
+        <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
+
 
       {/* 3. Primary Command Workspace */}
       <main className="flex-1 p-3 sm:p-5 lg:p-6 space-y-5 max-w-[1750px] mx-auto w-full">
