@@ -9,9 +9,6 @@ import {
   Activity,
   Clock,
   Gauge,
-  Satellite,
-  TrendingUp,
-  AlertTriangle,
 } from "lucide-react";
 
 interface TelemetryStripProps {
@@ -35,33 +32,33 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
   };
 
   return (
-    <div className="w-full bg-slate-950/80 border-y border-slate-800/80 backdrop-blur-md px-4 lg:px-8 py-2.5">
+    <div className="w-full bg-slate-950/90 border-y border-slate-800/80 backdrop-blur-xl px-4 lg:px-8 py-2.5">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4 max-w-[1750px] mx-auto text-xs">
         {/* Metric 1: River Gauge & Rising Velocity */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center shrink-0">
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-cyan-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center shrink-0 relative z-10">
             <Waves className="w-4 h-4 text-sky-400" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold flex items-center gap-1">
               <span>River Stage</span>
-              <span className="text-rose-400 font-normal">▲ +1.4m/h</span>
+              <span className="text-rose-400 font-bold">▲ +1.4m/h</span>
             </div>
             <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
               {telemetry.river_level_m.toFixed(1)}m
               <span className="text-[10px] text-slate-400 font-normal">
-                / {activeZone.dangerMarkM}m (Danger)
+                / {activeZone.dangerMarkM}m
               </span>
             </div>
           </div>
         </div>
 
         {/* Metric 2: Catchment Rainfall Intensity */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-blue-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 relative z-10">
             <CloudRain className="w-4 h-4 text-blue-400" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
               Catchment Rain
             </div>
@@ -76,11 +73,11 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
         </div>
 
         {/* Metric 3: Soil Pore Saturation */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-emerald-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 relative z-10">
             <Mountain className="w-4 h-4 text-emerald-400" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
               Soil Saturation
             </div>
@@ -94,31 +91,31 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
         </div>
 
         {/* Metric 4: Cryo-Seismic Tremor Frequency */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-rose-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0 relative z-10">
             <Activity className="w-4 h-4 text-rose-400 animate-pulse" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
               Cryo-Seismic (GLOF)
             </div>
             <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
               {telemetry.seismic_mag.toFixed(1)}M{" "}
-              <span className="text-[10px] text-rose-400 font-bold">
-                (Lake Breach Risk)
+              <span className="text-[9px] text-rose-400 font-bold px-1 rounded bg-rose-500/15 border border-rose-500/30">
+                BREACH RISK
               </span>
             </div>
           </div>
         </div>
 
         {/* Metric 5: Lead-Time to Inundation Breach */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-amber-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 relative z-10">
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Lead Time Window
+              Evacuation Window
             </div>
             <div className="text-sm font-black font-mono text-amber-300">
               {hours}h {mins}m{" "}
@@ -127,12 +124,12 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
           </div>
         </div>
 
-        {/* Metric 6: Discharge Rate & Basin */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center shrink-0">
+        {/* Metric 6: Peak Discharge Rate & Catchment */}
+        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-purple-500/40 transition">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0 relative z-10">
             <Gauge className="w-4 h-4 text-purple-400" />
           </div>
-          <div>
+          <div className="relative z-10">
             <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
               Peak Discharge
             </div>

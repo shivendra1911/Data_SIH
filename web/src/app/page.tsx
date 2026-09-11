@@ -5,7 +5,6 @@ import Header from "@/components/Dashboard/Header";
 import TelemetryStrip from "@/components/Dashboard/TelemetryStrip";
 import AccessibleVoiceCard from "@/components/Dashboard/AccessibleVoiceCard";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
-import CitizenSafetyHub from "@/components/Citizen/CitizenSafetyHub";
 import MapWrapper from "@/components/Map/MapWrapper";
 import PredictionPanel from "@/components/Dashboard/PredictionPanel";
 import HydrographPanel from "@/components/Dashboard/HydrographPanel";
@@ -25,20 +24,23 @@ import {
   INITIAL_MOCK_CLUSTERS,
   INITIAL_MOCK_SOS_EVENTS,
 } from "@/lib/constants";
-import { Language, translations } from "@/lib/i18n";
 import { fetchActiveClusters, fetchCurrentPrediction } from "@/lib/api";
 import { subscribeToSOSEvents } from "@/lib/supabase";
+import { useRabtoTilt } from "@/lib/useRabtoTilt";
 import {
   ChevronDown,
   ChevronUp,
-  ShieldCheck,
-  Radio,
-  RadioTower,
-  Sliders,
   LifeBuoy,
+  Radio,
+  Sliders,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 
 export default function DashboardPage() {
+  // Initialize Rabto FX 60fps 3D tilt physics & radial spotlight engine
+  useRabtoTilt();
+
   const [selectedZone, setSelectedZone] = useState<HazardZone>(HIMALAYAN_ZONES[0]);
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(true);
@@ -52,12 +54,8 @@ export default function DashboardPage() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showRescueLayer, setShowRescueLayer] = useState<boolean>(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<"COMMAND" | "CITIZEN">("COMMAND");
-  const [language, setLanguage] = useState<Language>("en"); // English is the professional default!
 
-  const t = translations[language];
-
-  // Sound play helper
+  // High-frequency alert sound synthesizer
   const playAlertSound = useCallback(() => {
     if (typeof window !== "undefined") {
       try {
@@ -75,7 +73,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Load prediction and clusters when zone changes
+  // Load prediction & clustering telemetry on sector change
   const loadZoneData = useCallback(async (zone: HazardZone) => {
     setLoadingPrediction(true);
     try {
@@ -177,11 +175,11 @@ export default function DashboardPage() {
     const isMesh = Math.random() > 0.4;
     const mockEvent: SOSEvent = {
       id: `sim-${Date.now()}`,
-      device_uuid: `android-${Math.random().toString(36).substring(2, 8)}`,
+      device_uuid: `node-${Math.random().toString(36).substring(2, 8)}`,
       lat: selectedZone.center[0] + latOffset,
       lng: selectedZone.center[1] + lngOffset,
       status: "SOS",
-      sos_type: "RIVER LEVEL RISING RAPIDLY (INUNDATION SURGE)",
+      sos_type: "RAPID RIVER INUNDATION & STRUCTURAL BREACH",
       is_mesh_relayed: isMesh,
       created_at: new Date().toISOString(),
     };
@@ -209,8 +207,8 @@ export default function DashboardPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#060811] text-slate-100 font-sans">
-      {/* 1. Tactical Command Header with View Mode Switcher */}
+    <div className="min-h-screen flex flex-col bg-[#05070e] text-slate-100 font-sans hud-grid selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* 1. Tactical Command Header with HUD Telemetry Status */}
       <Header
         selectedZone={selectedZone}
         onSelectZone={handleSelectZone}
@@ -219,10 +217,6 @@ export default function DashboardPage() {
         onSimulateSOS={handleSimulateSOS}
         onOpenMobileModal={() => setIsMobileModalOpen(true)}
         floodRiskPercent={displayedRisk}
-        language={language}
-        onToggleLanguage={() => setLanguage((l) => (l === "en" ? "hi" : "en"))}
-        viewMode={viewMode}
-        onSelectViewMode={(mode) => setViewMode(mode)}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
       />
@@ -230,148 +224,129 @@ export default function DashboardPage() {
       {/* 2. Executive Real-Time Telemetry Ribbon */}
       <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
 
-      {/* 3. Main Workspace */}
+      {/* 3. Primary Command Workspace */}
       <main className="flex-1 p-3 sm:p-5 lg:p-6 space-y-5 max-w-[1750px] mx-auto w-full">
-        {/* VIEW 1: TACTICAL COMMAND CENTER (DEFAULT ELITE VIEW) */}
-        {viewMode === "COMMAND" && (
-          <div className="space-y-5">
-            {/* Audio Broadcast & Civil Defense Siren Bar */}
-            <AccessibleVoiceCard
-              activeZone={selectedZone}
-              riskPercent={displayedRisk}
-              language={language}
-            />
+        {/* Audio Alert Dispatcher & Ground Directives Bar */}
+        <AccessibleVoiceCard
+          activeZone={selectedZone}
+          riskPercent={displayedRisk}
+        />
 
-            {/* Multi-Horizon Scrubber */}
-            <ForecastHorizonSlider
-              currentHorizon={forecastHorizon}
-              onSelectHorizon={(h) => setForecastHorizon(h)}
-            />
+        {/* Multi-Horizon Scrubber */}
+        <ForecastHorizonSlider
+          currentHorizon={forecastHorizon}
+          onSelectHorizon={(h) => setForecastHorizon(h)}
+        />
 
-            {/* Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Tactical Geospatial Map */}
-              <div className="lg:col-span-8 flex flex-col">
-                <div className="w-full h-[520px] lg:h-[560px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
-                  <MapWrapper
-                    center={mapCenter}
-                    zoom={mapZoom}
-                    sosEvents={sosEvents}
-                    clusters={clusters}
-                    activeZone={selectedZone}
-                    selectedEventId={selectedEventId}
-                    onSelectEvent={handleSelectEvent}
-                    onDispatchCluster={handleDispatchCluster}
-                  />
-                </div>
+        {/* Primary Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Tactical Geospatial Map */}
+          <div className="lg:col-span-8 flex flex-col">
+            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
+              <MapWrapper
+                center={mapCenter}
+                zoom={mapZoom}
+                sosEvents={sosEvents}
+                clusters={clusters}
+                activeZone={selectedZone}
+                selectedEventId={selectedEventId}
+                onSelectEvent={handleSelectEvent}
+                onDispatchCluster={handleDispatchCluster}
+              />
+            </div>
+          </div>
+
+          {/* AI Neural Predictive Engine */}
+          <div className="lg:col-span-4 flex flex-col">
+            <PredictionPanel
+              prediction={
+                prediction
+                  ? {
+                      ...prediction,
+                      flood_probability_percent: displayedRisk,
+                      alert_color:
+                        displayedRisk >= 75
+                          ? "RED"
+                          : displayedRisk >= 55
+                          ? "ORANGE"
+                          : displayedRisk >= 35
+                          ? "YELLOW"
+                          : "GREEN",
+                    }
+                  : null
+              }
+              loading={loadingPrediction}
+              onRefresh={() => loadZoneData(selectedZone)}
+            />
+          </div>
+        </div>
+
+        {/* Primary Row 2: Inundation Hydrograph (7 cols) + Preventive Directives Matrix (5 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Hydrograph & Lead Time Countdown */}
+          <div className="lg:col-span-7">
+            <HydrographPanel activeZone={selectedZone} />
+          </div>
+
+          {/* Preventive Action Directives */}
+          <div className="lg:col-span-5">
+            <PreventiveDirectivesPanel activeZone={selectedZone} />
+          </div>
+        </div>
+
+        {/* Primary Row 3: Tactical Distress Beacons & Automated K-Means Rescue Triage (Collapsible) */}
+        <div className="tilt-card border border-slate-800/80 rounded-2xl bg-slate-950/70 p-4 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                <LifeBuoy className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                  Field Distress Beacons & Automated K-Means Rescue Triage
+                </h3>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  Offline BLE Mesh Relays • Realtime Latency &lt;450ms • Connected Field Nodes: {sosEvents.length}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowRescueLayer((prev) => !prev)}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-850 text-xs font-mono font-semibold text-slate-300 border border-slate-800 flex items-center gap-2 transition min-h-[40px]"
+            >
+              <span>{showRescueLayer ? "Collapse Triage Feed" : "Expand Field Telemetry"}</span>
+              {showRescueLayer ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          {showRescueLayer && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2 relative z-10">
+              <div className="lg:col-span-6">
+                <ClusterTriagePanel
+                  clusters={clusters}
+                  onDispatch={handleDispatchCluster}
+                  onFocusCoordinates={handleFocusCoords}
+                />
               </div>
 
-              {/* AI Neural Predictive Engine */}
-              <div className="lg:col-span-4 flex flex-col">
-                <PredictionPanel
-                  prediction={
-                    prediction
-                      ? {
-                          ...prediction,
-                          flood_probability_percent: displayedRisk,
-                          alert_color:
-                            displayedRisk >= 75
-                              ? "RED"
-                              : displayedRisk >= 55
-                              ? "ORANGE"
-                              : displayedRisk >= 35
-                              ? "YELLOW"
-                              : "GREEN",
-                        }
-                      : null
-                  }
-                  loading={loadingPrediction}
-                  onRefresh={() => loadZoneData(selectedZone)}
-                  language={language}
+              <div className="lg:col-span-6">
+                <LiveSOSFeed
+                  events={sosEvents}
+                  onSelectEvent={handleSelectEvent}
+                  onToggleRescued={handleToggleRescued}
                 />
               </div>
             </div>
-
-            {/* Row 2: Inundation Hydrograph (7 cols) + Preventive Directives Matrix (5 cols) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Hydrograph & Lead Time Countdown */}
-              <div className="lg:col-span-7">
-                <HydrographPanel activeZone={selectedZone} language={language} />
-              </div>
-
-              {/* Preventive Action Directives */}
-              <div className="lg:col-span-5">
-                <PreventiveDirectivesPanel activeZone={selectedZone} language={language} />
-              </div>
-            </div>
-
-            {/* Row 3: Tactical Rescue Operations & Field Beacons (Collapsible) */}
-            <div className="border border-slate-800/80 rounded-2xl bg-slate-950/60 p-4 space-y-4 shadow-xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <LifeBuoy className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                      Field Distress Beacons & Automated K-Means Rescue Triage
-                    </h3>
-                    <p className="text-[11px] text-slate-400 font-mono">
-                      Offline BLE Mesh Relays • Realtime Latency &lt;450ms • Connected Nodes: {sosEvents.length}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowRescueLayer((prev) => !prev)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-850 text-xs font-mono font-semibold text-slate-300 border border-slate-800 flex items-center gap-2 transition min-h-[40px]"
-                >
-                  <span>{showRescueLayer ? "Collapse Triage" : "Expand Rescue Clusters"}</span>
-                  {showRescueLayer ? (
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </div>
-
-              {showRescueLayer && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
-                  <div className="lg:col-span-6">
-                    <ClusterTriagePanel
-                      clusters={clusters}
-                      onDispatch={handleDispatchCluster}
-                      onFocusCoordinates={handleFocusCoords}
-                    />
-                  </div>
-
-                  <div className="lg:col-span-6">
-                    <LiveSOSFeed
-                      events={sosEvents}
-                      onSelectEvent={handleSelectEvent}
-                      onToggleRescued={handleToggleRescued}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* VIEW 2: PUBLIC SAFETY & CITIZEN GUIDANCE PORTAL */}
-        {viewMode === "CITIZEN" && (
-          <div className="space-y-5">
-            <CitizenSafetyHub
-              activeZone={selectedZone}
-              riskPercent={displayedRisk}
-              language={language}
-              onSuccessSOS={handleAndroidSOSArrival}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </main>
 
-      {/* Mobile Pairing Modal */}
+      {/* Android Pairing Bridge Station Modal */}
       <MobilePairingModal
         isOpen={isMobileModalOpen}
         onClose={() => setIsMobileModalOpen(false)}
@@ -381,14 +356,14 @@ export default function DashboardPage() {
       {/* Command Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-950 px-6 py-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="font-mono text-[11px] text-slate-400">
-          NEERNETRA • Smart India Hackathon PS: SIH26192 • Flash Flood & GLOF Early Warning System
+          NEERNETRA • Smart India Hackathon PS: SIH26192 • Himalayan Flash Flood & GLOF Early Warning System
         </div>
         <div className="flex flex-wrap items-center gap-3 text-slate-400 font-mono text-[11px]">
-          <span className="text-emerald-400">● CWC Sensor API Online</span>
+          <span className="text-emerald-400">● CWC Station Telemetry Online</span>
           <span>•</span>
-          <span className="text-sky-400">● Mobile Relay: 172.16.183.190:3000</span>
+          <span className="text-sky-400">● Android Relay: 172.16.183.190:3000</span>
           <span>•</span>
-          <span>NDRF: 1078 / SDMA: 1070</span>
+          <span>NDRF Hotlines: 1078 / SDMA: 1070</span>
         </div>
       </footer>
     </div>

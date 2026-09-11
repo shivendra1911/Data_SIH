@@ -27,8 +27,8 @@ export default function ForecastHorizonSlider({
   onSelectHorizon,
 }: ForecastHorizonSliderProps) {
   return (
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-      <div className="flex items-center gap-2 text-slate-300">
+    <div className="tilt-card rounded-xl bg-slate-950/80 border border-slate-800 p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-lg">
+      <div className="flex items-center gap-2 text-slate-300 relative z-10">
         <FastForward className="w-4 h-4 text-sky-400" />
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-white block">
@@ -41,7 +41,7 @@ export default function ForecastHorizonSlider({
       </div>
 
       {/* Horizon Buttons */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 relative z-10">
         {HORIZONS.map((h) => {
           const isSelected = currentHorizon === h.id;
           return (

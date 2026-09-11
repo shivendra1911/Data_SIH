@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { HazardZone } from "@/lib/types";
 import { HIMALAYAN_ZONES } from "@/lib/constants";
-import { Language, translations } from "@/lib/i18n";
 import {
   ShieldAlert,
   Activity,
@@ -11,10 +10,7 @@ import {
   Radio,
   Clock,
   Zap,
-  Globe,
   Smartphone,
-  Compass,
-  Users2,
   Satellite,
   Volume2,
   VolumeX,
@@ -28,10 +24,6 @@ interface HeaderProps {
   onSimulateSOS: () => void;
   onOpenMobileModal: () => void;
   floodRiskPercent: number;
-  language: Language;
-  onToggleLanguage: () => void;
-  viewMode: "COMMAND" | "CITIZEN";
-  onSelectViewMode: (mode: "COMMAND" | "CITIZEN") => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
 }
@@ -44,21 +36,16 @@ export default function Header({
   onSimulateSOS,
   onOpenMobileModal,
   floodRiskPercent,
-  language,
-  onToggleLanguage,
-  viewMode,
-  onSelectViewMode,
   soundEnabled,
   onToggleSound,
 }: HeaderProps) {
   const [currentTime, setCurrentTime] = useState<string>("");
-  const t = translations[language];
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString("en-IN", {
+        now.toLocaleTimeString("en-US", {
           hour12: false,
           hour: "2-digit",
           minute: "2-digit",
@@ -75,7 +62,7 @@ export default function Header({
 
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-2xl sticky top-0 z-50 px-4 lg:px-8 py-3 shadow-2xl">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1750px] mx-auto w-full">
         {/* Left: Brand Identity & Subtitle */}
         <div className="flex items-center gap-3.5">
           <div className="relative">
@@ -100,75 +87,49 @@ export default function Header({
               </span>
             </div>
             <p className="text-xs text-slate-400 font-medium tracking-tight">
-              Himalayan Flash Flood & GLOF Early Warning Platform • Alaknanda Basin
+              Himalayan Flash Flood & Cryo-Seismic GLOF Early Warning Platform • Alaknanda Basin
             </p>
           </div>
         </div>
 
-        {/* Center: View Switcher Segmented Control */}
-        <div className="flex items-center justify-center">
-          <div className="bg-slate-900/90 border border-slate-800 p-1 rounded-xl flex items-center gap-1 shadow-inner">
-            <button
-              onClick={() => onSelectViewMode("COMMAND")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all min-h-[40px] ${
-                viewMode === "COMMAND"
-                  ? "bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow-lg shadow-cyan-950/60 ring-1 ring-cyan-400/50"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>Tactical Command Center</span>
-            </button>
-
-            <button
-              onClick={() => onSelectViewMode("CITIZEN")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all min-h-[40px] ${
-                viewMode === "CITIZEN"
-                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/60 ring-1 ring-emerald-400/50"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <Users2 className="w-4 h-4" />
-              <span>Public Safety Portal</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right: Telemetry Status, Clock, Android Bridge, Zone Selector */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Center: Zero-Minute Protocol Status & Live System Clock */}
+        <div className="flex items-center gap-3">
           {/* Zero-Minute Protocol Status Badge */}
           {isZeroMinuteActive ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-950/80 border border-rose-500/80 text-rose-200 text-xs font-mono font-bold shadow-lg shadow-rose-950/50 animate-pulse">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-950/80 border border-rose-500/80 text-rose-200 text-xs font-mono font-bold shadow-lg shadow-rose-950/50 animate-pulse">
               <Zap className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
-              <span>ZERO-MINUTE TRIGGER ACTIVE</span>
+              <span>ZERO-MINUTE PROTOCOL: ACTIVE</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-emerald-400 text-xs font-mono font-semibold">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-emerald-400 text-xs font-mono font-semibold">
               <Activity className="w-3.5 h-3.5" />
               <span>SURVEILLANCE NORMAL</span>
             </div>
           )}
 
           {/* System Clock */}
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800/80 text-slate-300 text-xs font-mono">
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800/80 text-slate-300 text-xs font-mono">
             <Clock className="w-3.5 h-3.5 text-cyan-400" />
             <span>{currentTime || "00:00:00 IST"}</span>
           </div>
+        </div>
 
-          {/* Android Connect Button */}
+        {/* Right: Controls, Android Bridge, Zone Selector */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Android Mobile Connect Button */}
           <button
             onClick={onOpenMobileModal}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 active:scale-95 text-sky-300 border border-sky-500/40 text-xs font-bold transition min-h-[44px] shadow-sm"
             title="Pair with Teammate's Android App (Local Wi-Fi Bridge)"
           >
             <Smartphone className="w-4 h-4 text-sky-400" />
-            <span className="hidden sm:inline">Android Bridge</span>
+            <span>Android Bridge</span>
           </button>
 
-          {/* Sound Mute/Unmute */}
+          {/* Audio Mute/Unmute */}
           <button
             onClick={onToggleSound}
-            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
             title={soundEnabled ? "Mute Audio Alerts" : "Enable Audio Alerts"}
           >
             {soundEnabled ? (
@@ -176,16 +137,6 @@ export default function Header({
             ) : (
               <VolumeX className="w-4 h-4 text-slate-500" />
             )}
-          </button>
-
-          {/* Language Toggle */}
-          <button
-            onClick={onToggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-mono font-semibold transition min-h-[44px]"
-            title="Toggle between English and Hindi"
-          >
-            <Globe className="w-3.5 h-3.5 text-amber-400" />
-            <span>{language === "en" ? "EN" : "HI"}</span>
           </button>
 
           {/* Sector / Zone Selector */}
@@ -210,11 +161,11 @@ export default function Header({
           {/* Simulation Trigger Button */}
           <button
             onClick={onSimulateSOS}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold transition min-h-[44px]"
-            title="Simulate Inundation Spike & SOS"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold transition min-h-[44px]"
+            title="Simulate Inundation Spike & Beacon"
           >
             <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-            <span className="hidden md:inline">Test Alert</span>
+            <span>Test Inundation Spike</span>
           </button>
         </div>
       </div>

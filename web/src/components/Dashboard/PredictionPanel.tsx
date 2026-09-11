@@ -71,9 +71,9 @@ export default function PredictionPanel({
   };
 
   return (
-    <div className="rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col h-full">
+    <div className="tilt-card rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col h-full">
       {/* Top Header */}
-      <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
+      <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60 relative z-10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
             <Cpu className="w-4 h-4 text-cyan-400" />
@@ -103,7 +103,7 @@ export default function PredictionPanel({
         </button>
       </div>
 
-      <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between">
+      <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
         {/* Main Risk Display */}
         <div
           className={`p-4 rounded-xl border bg-gradient-to-br ${statusBg} flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg`}

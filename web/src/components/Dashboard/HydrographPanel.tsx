@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { HazardZone, HydrographPoint } from "@/lib/types";
-import { Language, translations } from "@/lib/i18n";
+import { HazardZone } from "@/lib/types";
 import {
   Waves,
   Clock,
@@ -14,17 +13,12 @@ import {
 
 interface HydrographPanelProps {
   activeZone: HazardZone;
-  language?: Language;
 }
 
-export default function HydrographPanel({
-  activeZone,
-  language = "en",
-}: HydrographPanelProps) {
+export default function HydrographPanel({ activeZone }: HydrographPanelProps) {
   const [leadSeconds, setLeadSeconds] = useState<number>(
     activeZone.leadTimeMinutes * 60
   );
-  const t = translations[language];
 
   useEffect(() => {
     setLeadSeconds(activeZone.leadTimeMinutes * 60);
@@ -59,7 +53,7 @@ export default function HydrographPanel({
   const minLevel = Math.min(...hydrograph.map((p) => p.level_m)) * 0.8;
   const range = maxLevel - minLevel || 1;
 
-  // Chart coordinate helpers (viewBox 600 x 220)
+  // Chart coordinate helpers (viewBox 620 x 200)
   const chartW = 560;
   const chartH = 150;
   const offsetX = 40;
@@ -67,8 +61,7 @@ export default function HydrographPanel({
 
   const points = hydrograph.map((pt, idx) => {
     const x = offsetX + (idx / (hydrograph.length - 1)) * chartW;
-    const y =
-      offsetY + chartH - ((pt.level_m - minLevel) / range) * chartH;
+    const y = offsetY + chartH - ((pt.level_m - minLevel) / range) * chartH;
     return { ...pt, x, y };
   });
 
@@ -100,123 +93,118 @@ export default function HydrographPanel({
   );
 
   return (
-    <div className="rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-xl overflow-hidden backdrop-blur-md">
+    <div className="tilt-card rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col h-full">
       {/* Top Bar with Lead Time Countdown */}
-      <div className="px-5 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-950/80 via-slate-900 to-slate-950/80">
+      <div className="px-5 py-4 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/70 relative z-10">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
             <Waves className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white tracking-wide uppercase flex items-center gap-2">
-              {t.hydrographTitle}
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                {language === "hi" ? "एआई मॉडल" : "PHYSICS-INFORMED ML"}
+            <h2 className="text-xs font-mono font-bold text-white tracking-wider uppercase flex items-center gap-2">
+              Inundation Hydrograph & Peak Wave Arrival
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                PHYSICS-INFORMED ML
               </span>
             </h2>
-            <p className="text-[11px] text-slate-400 font-mono">
-              {language === "hi"
-                ? "नदी स्टेशन डेटा व अनुमानित जल बहाव"
-                : "India-WRIS Station Baseline + Runoff Accumulation Model"}
+            <p className="text-[10px] text-slate-400 font-mono">
+              India-WRIS Hydrometric Baseline + Upstream Runoff Kinematic Wave Model
             </p>
           </div>
         </div>
 
         {/* Lead Time Countdown Clock */}
-        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-slate-950 border border-rose-500/40 shadow-lg shadow-rose-950/30">
+        <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-slate-950 border border-rose-500/50 shadow-lg shadow-rose-950/40">
           <div className="flex items-center gap-1.5 text-rose-400">
             <Clock className="w-4 h-4 animate-pulse" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300">
-              {language === "hi" ? "बचाव हेतु समय:" : "Evacuation Window:"}
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 font-mono">
+              Evacuation Window:
             </span>
           </div>
 
           <div className="flex items-baseline gap-1 font-mono font-black text-rose-400 text-lg">
             <span>{countdown.hours}</span>
-            <span className="text-xs text-slate-500 font-normal">{language === "hi" ? "घं" : "h"}</span>
+            <span className="text-xs text-slate-500 font-normal">h</span>
             <span className="text-slate-600">:</span>
             <span>{countdown.minutes}</span>
-            <span className="text-xs text-slate-500 font-normal">{language === "hi" ? "मि" : "m"}</span>
+            <span className="text-xs text-slate-500 font-normal">m</span>
             <span className="text-slate-600">:</span>
             <span>{countdown.seconds}</span>
-            <span className="text-xs text-slate-500 font-normal">{language === "hi" ? "से" : "s"}</span>
+            <span className="text-xs text-slate-500 font-normal">s</span>
           </div>
         </div>
       </div>
 
-      <div className="p-5 space-y-4">
+      <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
         {/* Quick Metric Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">
-              {t.currentWater}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+            <span className="text-[10px] font-mono font-bold uppercase text-slate-400 block">
+              Current Stage
             </span>
             <span className="text-lg font-mono font-black text-white mt-0.5 block">
               {currentPoint.level_m.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-emerald-400">
-              {language === "hi" ? "सामान्य स्तर: ~3.0m" : "Normal Channel: ~3.0m"}
+            <span className="text-[10px] text-emerald-400 font-mono">
+              Baseline Channel: ~3.0m
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/60 border border-rose-500/30">
-            <span className="text-[10px] font-bold uppercase text-rose-400 block">
-              {t.peakSurge}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-rose-500/40">
+            <span className="text-[10px] font-mono font-bold uppercase text-rose-400 block">
+              Peak Surge
             </span>
             <span className="text-lg font-mono font-black text-rose-400 mt-0.5 block">
               {peakPoint.level_m.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-rose-300 font-semibold">
+            <span className="text-[10px] text-rose-300 font-mono font-semibold">
               +{peakPoint.time} ({peakPoint.discharge_cumecs} m³/s)
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/60 border border-amber-500/30">
-            <span className="text-[10px] font-bold uppercase text-amber-400 block">
-              {t.warningMark}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-amber-500/40">
+            <span className="text-[10px] font-mono font-bold uppercase text-amber-400 block">
+              Warning Mark
             </span>
             <span className="text-lg font-mono font-black text-amber-300 mt-0.5 block">
               {activeZone.warningMarkM.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-amber-400/80">
-              {language === "hi" ? "तटवर्ती कटाव" : "Riverbank Inundation"}
+            <span className="text-[10px] text-amber-400/80 font-mono">
+              Bankfull Inundation
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-950/60 border border-rose-600/40">
-            <span className="text-[10px] font-bold uppercase text-rose-500 block">
-              {t.dangerMark}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-rose-600/50">
+            <span className="text-[10px] font-mono font-bold uppercase text-rose-500 block">
+              Danger Mark
             </span>
             <span className="text-lg font-mono font-black text-rose-500 mt-0.5 block">
               {activeZone.dangerMarkM.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-rose-400 font-bold">
-              {language === "hi" ? "गंभीर जलमग्नता" : "Catastrophic Breach"}
+            <span className="text-[10px] text-rose-400 font-mono font-bold">
+              Catastrophic Breach
             </span>
           </div>
         </div>
 
         {/* SVG Hydrograph Visualization */}
-        <div className="relative w-full rounded-xl bg-slate-950/90 border border-slate-800 p-3">
-          <svg
-            viewBox="0 0 620 200"
-            className="w-full h-48 overflow-visible"
-          >
+        <div className="relative w-full rounded-xl bg-slate-950/90 border border-slate-800/80 p-3">
+          <svg viewBox="0 0 620 200" className="w-full h-48 overflow-visible">
             <defs>
               <linearGradient id="hydroGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.4" />
-                <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.45" />
+                <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
-            {/* Grid Lines */}
+            {/* Grid Line */}
             <line
               x1={offsetX}
               y1={offsetY + chartH}
               x2={offsetX + chartW}
               y2={offsetY + chartH}
-              stroke="#334155"
+              stroke="#1e293b"
               strokeWidth="1"
             />
 
@@ -239,7 +227,7 @@ export default function HydrographPanel({
               fontWeight="bold"
               fontFamily="monospace"
             >
-              {language === "hi" ? "चेतावनी निशान: " : "WARNING: "}{activeZone.warningMarkM.toFixed(1)}m
+              WARNING: {activeZone.warningMarkM.toFixed(1)}m
             </text>
 
             {/* Danger Mark Line */}
@@ -248,7 +236,7 @@ export default function HydrographPanel({
               y1={dangerY}
               x2={offsetX + chartW}
               y2={dangerY}
-              stroke="#ef4444"
+              stroke="#f43f5e"
               strokeDasharray="6, 4"
               strokeWidth="2"
             />
@@ -256,12 +244,12 @@ export default function HydrographPanel({
               x={offsetX + chartW - 5}
               y={dangerY - 5}
               textAnchor="end"
-              fill="#ef4444"
+              fill="#f43f5e"
               fontSize="10"
               fontWeight="bold"
               fontFamily="monospace"
             >
-              {language === "hi" ? "खतरे का निशान: " : "DANGER MARK: "}{activeZone.dangerMarkM.toFixed(1)}m
+              DANGER THRESHOLD: {activeZone.dangerMarkM.toFixed(1)}m
             </text>
 
             {/* Area Fill */}
@@ -271,7 +259,7 @@ export default function HydrographPanel({
             <path
               d={pathD}
               fill="none"
-              stroke="#38bdf8"
+              stroke="#06b6d4"
               strokeWidth="3"
               strokeLinecap="round"
             />
@@ -285,10 +273,10 @@ export default function HydrographPanel({
                   r={pt.isPredicted ? 5 : 4}
                   fill={
                     pt.level_m >= activeZone.dangerMarkM
-                      ? "#ef4444"
+                      ? "#f43f5e"
                       : pt.level_m >= activeZone.warningMarkM
                       ? "#f59e0b"
-                      : "#38bdf8"
+                      : "#06b6d4"
                   }
                   stroke="#ffffff"
                   strokeWidth="1.5"
@@ -308,35 +296,35 @@ export default function HydrographPanel({
                   x={pt.x}
                   y={offsetY + chartH + 16}
                   textAnchor="middle"
-                  fill={pt.time === "NOW" ? "#38bdf8" : "#94a3b8"}
+                  fill={pt.time === "NOW" ? "#06b6d4" : "#64748b"}
                   fontSize="9"
                   fontWeight={pt.time === "NOW" ? "bold" : "normal"}
                   fontFamily="monospace"
                 >
-                  {pt.time === "NOW" ? (language === "hi" ? "अभी" : "NOW") : pt.time}
+                  {pt.time}
                 </text>
               </g>
             ))}
           </svg>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-800 text-[11px] text-slate-400">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-800/80 text-[11px] text-slate-400">
+            <div className="flex items-center gap-4 font-mono text-[10px]">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-0.5 bg-sky-400"></span>
-                <span>{language === "hi" ? "जलस्तर वक्र" : "Hydrograph Curve"}</span>
+                <span className="w-2.5 h-0.5 bg-cyan-400"></span>
+                <span>Hydrograph Curve</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-0.5 bg-amber-400 border-dashed"></span>
-                <span>{language === "hi" ? "चेतावनी स्तर" : "Warning Level"}</span>
+                <span>Warning Level</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-0.5 bg-rose-500 border-dashed"></span>
-                <span>{language === "hi" ? "खतरे का निशान" : "Danger Mark (Breach)"}</span>
+                <span>Danger Mark (Breach)</span>
               </div>
             </div>
             <div className="font-mono text-[10px] text-slate-500">
-              {language === "hi" ? "*T+02h से T+08h: अनुमानित बाढ़ बहाव" : "*T+02h to T+08h: Predicted Runoff Wave Propagation"}
+              *T+02h to T+08h: Predicted Runoff Wave Propagation
             </div>
           </div>
         </div>
