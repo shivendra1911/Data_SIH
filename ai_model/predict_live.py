@@ -1,7 +1,8 @@
-﻿"""Quick script to run live predictions using the trained model on real-time data"""
+"""Quick script to run live predictions using the trained model on real-time data"""
 import sys, io, os, joblib, pandas as pd, numpy as np
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 FEATURES = ["rainfall_mm_hr","soil_moisture_pct","terrain_slope_deg","river_water_level_m","seismic_magnitude"]
 model = joblib.load(os.path.join("..","backend","neernetra_model.pkl"))

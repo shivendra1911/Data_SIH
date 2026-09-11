@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeerNetra AI Model Engine - Random Forest Training Pipeline
 Trains a RandomForestClassifier on the 10,000-row hybrid dataset
 and saves the serialized model to ../backend/neernetra_model.pkl
@@ -18,7 +18,8 @@ from sklearn.metrics import (
 )
 
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 
 def train_neernetra_model(

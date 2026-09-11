@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeerNetra AI Model Engine - Hybrid Dataset Generator
 Generates a 10,000-row synthetic hybrid dataset modeling Himalayan flash floods,
 cloudbursts, and cryo-seismic Glacial Lake Outburst Floods (GLOFs) like Nepal 2026.
@@ -12,7 +12,8 @@ import os
 # Ensure clean UTF-8 stdout on Windows console
 if sys.platform == "win32":
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 def generate_hybrid_dataset(n_samples=10000, seed=42, output_path="neernetra_hybrid_dataset.csv"):
     np.random.seed(seed)

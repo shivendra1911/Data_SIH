@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeerNetra AI Model - Retrain on Real-Time Data
 Loads existing model + dataset, appends new real-time observations,
 retrains the model, evaluates improvement, and saves the updated .pkl
@@ -16,7 +16,8 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
 
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 
 FEATURE_COLS = [

@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeerNetra AI Model - Real-Time Data Fetcher
 Fetches live 5-factor data from real APIs for prediction and retraining.
 
@@ -22,7 +22,8 @@ import numpy as np
 from datetime import datetime, timezone
 
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # ============================================================
 # API KEYS (from your project .env / api,s.txt)
