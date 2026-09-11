@@ -1,22 +1,29 @@
 import os
+import sys
 import time
 import uuid
+import json
 import joblib
 import numpy as np
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+# Ensure repo root is on sys.path for ai_model imports
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 # Initialize FastAPI App
 app = FastAPI(
     title="NeerNetra Emergency Telemetry & Flash Flood API",
     description="Central API engine for real-time GLOF prediction, citizen SOS triage, and offline BLE mesh telemetry.",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# Enable CORS for Mobile App (localhost:8081) and Web Dashboard (localhost:3000)
+# Enable CORS for Mobile App (localhost:8081 / Expo web) and Web Dashboard (localhost:3000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,38 +36,252 @@ app.add_middleware(
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "neernetra_model.pkl")
 model_clf = None
 
-# Store registered SOS events in memory (simulating PostGIS database table)
-sos_events_db = []
+# Store registered SOS events in memory
+sos_events_db: List[Dict[str, Any]] = [
+    {
+        "id": "req_seed_001",
+        "device_uuid": "dev_priyanshu_phone",
+        "lat": 30.5573,
+        "lng": 79.5642,
+        "status": "SOS",
+        "sos_type": "TRAPPED",
+        "is_mesh_relayed": False,
+        "received_at": datetime.now(timezone.utc).isoformat(),
+        "notes": "Trapped near Riverbank sector 1"
+    },
+    {
+        "id": "req_seed_002",
+        "device_uuid": "dev_katy_fuller",
+        "lat": 30.5560,
+        "lng": 79.5630,
+        "status": "HELPING",
+        "sos_type": "EVACUATION",
+        "is_mesh_relayed": True,
+        "received_at": datetime.now(timezone.utc).isoformat(),
+        "notes": "Assisting elderly citizens towards higher ridge"
+    }
+]
 
-# Mock sensor readings state for Zone Telemetry
-zone_sensor_state = {
+# Dispatched rescue missions
+dispatched_rescues_db: List[Dict[str, Any]] = []
+
+# Active emergency broadcasts
+active_broadcasts_db: List[Dict[str, Any]] = []
+
+# 10 Monitored Himalayan Target Zones
+ALL_ZONES_CONFIG = {
+    "chamoli_01":    {"name": "Chamoli",         "lat": 30.4167, "lng": 79.3167, "river": "Alaknanda"},
+    "joshimath_01":  {"name": "Joshimath",       "lat": 30.5573, "lng": 79.5642, "river": "Dhauliganga"},
+    "uttarkashi_01": {"name": "Uttarkashi",       "lat": 30.7268, "lng": 78.4354, "river": "Bhagirathi"},
+    "pithoragarh_01":{"name": "Pithoragarh",      "lat": 29.5829, "lng": 80.2182, "river": "Kali"},
+    "rudraprayag_01":{"name": "Rudraprayag",      "lat": 30.2840, "lng": 78.9802, "river": "Mandakini"},
+    "kedarnath_01":  {"name": "Kedarnath",        "lat": 30.7346, "lng": 79.0669, "river": "Mandakini Headwaters"},
+    "badrinath_01":  {"name": "Badrinath",        "lat": 30.7433, "lng": 79.4938, "river": "Alaknanda Basin"},
+    "gopeshwar_01":  {"name": "Gopeshwar",        "lat": 30.4100, "lng": 79.3200, "river": "Balkhila"},
+    "nainital_01":   {"name": "Nainital",         "lat": 29.3919, "lng": 79.4542, "river": "Naini Lake Basin"},
+    "dehradun_01":   {"name": "Dehradun",         "lat": 30.3165, "lng": 78.0322, "river": "Rispana / Bindal"},
+}
+
+# Real-time sensor state per zone
+zone_sensor_state: Dict[str, Dict[str, Any]] = {
     "chamoli_01": {
         "zone_name": "Chamoli Sector 01 (Alaknanda Basin)",
         "rainfall_mm": 185.4,
+        "rainfall_mm_hr": 185.4,
         "seismic_mag": 4.8,
+        "seismic_magnitude": 4.8,
         "soil_moisture": 0.88,
+        "soil_moisture_pct": 88.0,
         "river_discharge_m3s": 1420.0,
+        "river_water_level_m": 8.4,
         "slope_angle_deg": 38.5,
+        "terrain_slope_deg": 38.5,
+        "elevation_m": 1512.0
     },
-    "joshimath_02": {
+    "joshimath_01": {
         "zone_name": "Joshimath Sector 02",
         "rainfall_mm": 92.0,
+        "rainfall_mm_hr": 92.0,
         "seismic_mag": 2.1,
+        "seismic_magnitude": 2.1,
         "soil_moisture": 0.45,
+        "soil_moisture_pct": 45.0,
         "river_discharge_m3s": 450.0,
+        "river_water_level_m": 3.8,
         "slope_angle_deg": 42.0,
+        "terrain_slope_deg": 42.0,
+        "elevation_m": 1790.0
     },
-    "badrinath_03": {
-        "zone_name": "Badrinath Sector 03",
+    "kedarnath_01": {
+        "zone_name": "Kedarnath Glacial Zone",
         "rainfall_mm": 210.0,
+        "rainfall_mm_hr": 210.0,
         "seismic_mag": 5.2,
+        "seismic_magnitude": 5.2,
         "soil_moisture": 0.95,
+        "soil_moisture_pct": 95.0,
         "river_discharge_m3s": 1890.0,
+        "river_water_level_m": 9.2,
         "slope_angle_deg": 48.0,
+        "terrain_slope_deg": 48.0,
+        "elevation_m": 3583.0
+    },
+    "badrinath_01": {
+        "zone_name": "Badrinath Sector 03",
+        "rainfall_mm": 130.0,
+        "rainfall_mm_hr": 130.0,
+        "seismic_mag": 3.8,
+        "seismic_magnitude": 3.8,
+        "soil_moisture": 0.72,
+        "soil_moisture_pct": 72.0,
+        "river_discharge_m3s": 980.0,
+        "river_water_level_m": 5.4,
+        "slope_angle_deg": 44.0,
+        "terrain_slope_deg": 44.0,
+        "elevation_m": 3133.0
+    },
+    "uttarkashi_01": {
+        "zone_name": "Uttarkashi Bhagirathi Valley",
+        "rainfall_mm": 45.0,
+        "rainfall_mm_hr": 45.0,
+        "seismic_mag": 1.5,
+        "seismic_magnitude": 1.5,
+        "soil_moisture": 0.38,
+        "soil_moisture_pct": 38.0,
+        "river_discharge_m3s": 320.0,
+        "river_water_level_m": 2.9,
+        "slope_angle_deg": 35.0,
+        "terrain_slope_deg": 35.0,
+        "elevation_m": 1158.0
+    },
+    "rudraprayag_01": {
+        "zone_name": "Rudraprayag Confluence",
+        "rainfall_mm": 68.0,
+        "rainfall_mm_hr": 68.0,
+        "seismic_mag": 2.0,
+        "seismic_magnitude": 2.0,
+        "soil_moisture": 0.52,
+        "soil_moisture_pct": 52.0,
+        "river_discharge_m3s": 610.0,
+        "river_water_level_m": 4.1,
+        "slope_angle_deg": 32.0,
+        "terrain_slope_deg": 32.0,
+        "elevation_m": 895.0
+    },
+    "pithoragarh_01": {
+        "zone_name": "Pithoragarh Kali Basin",
+        "rainfall_mm": 80.0,
+        "rainfall_mm_hr": 80.0,
+        "seismic_mag": 2.8,
+        "seismic_magnitude": 2.8,
+        "soil_moisture": 0.60,
+        "soil_moisture_pct": 60.0,
+        "river_discharge_m3s": 540.0,
+        "river_water_level_m": 3.7,
+        "slope_angle_deg": 36.0,
+        "terrain_slope_deg": 36.0,
+        "elevation_m": 1627.0
+    },
+    "gopeshwar_01": {
+        "zone_name": "Gopeshwar Administrative Ridge",
+        "rainfall_mm": 35.0,
+        "rainfall_mm_hr": 35.0,
+        "seismic_mag": 1.2,
+        "seismic_magnitude": 1.2,
+        "soil_moisture": 0.30,
+        "soil_moisture_pct": 30.0,
+        "river_discharge_m3s": 210.0,
+        "river_water_level_m": 2.1,
+        "slope_angle_deg": 28.0,
+        "terrain_slope_deg": 28.0,
+        "elevation_m": 1550.0
+    },
+    "nainital_01": {
+        "zone_name": "Nainital Lake Catchment",
+        "rainfall_mm": 20.0,
+        "rainfall_mm_hr": 20.0,
+        "seismic_mag": 0.8,
+        "seismic_magnitude": 0.8,
+        "soil_moisture": 0.25,
+        "soil_moisture_pct": 25.0,
+        "river_discharge_m3s": 90.0,
+        "river_water_level_m": 1.8,
+        "slope_angle_deg": 22.0,
+        "terrain_slope_deg": 22.0,
+        "elevation_m": 2084.0
+    },
+    "dehradun_01": {
+        "zone_name": "Dehradun Foothills HQ",
+        "rainfall_mm": 12.0,
+        "rainfall_mm_hr": 12.0,
+        "seismic_mag": 0.5,
+        "seismic_magnitude": 0.5,
+        "soil_moisture": 0.20,
+        "soil_moisture_pct": 20.0,
+        "river_discharge_m3s": 80.0,
+        "river_water_level_m": 1.4,
+        "slope_angle_deg": 15.0,
+        "terrain_slope_deg": 15.0,
+        "elevation_m": 640.0
     }
 }
 
-# --- Pydantic Request / Response Schemas ---
+zone_sensor_state["joshimath_02"] = zone_sensor_state["joshimath_01"]
+zone_sensor_state["badrinath_03"] = zone_sensor_state["badrinath_01"]
+
+now_ts = time.time()
+location_history_db: Dict[str, Dict[str, Any]] = {
+    "dev_priyanshu_phone": {
+        "device_uuid": "dev_priyanshu_phone",
+        "name": "Priyanshu (Citizen Node 01)",
+        "lat": 30.5573,
+        "lng": 79.5642,
+        "altitude": 1450,
+        "accuracy": 4.2,
+        "battery_level": 88,
+        "last_synced_at": datetime.fromtimestamp(now_ts - 360, timezone.utc).isoformat(),
+        "zone_id": "chamoli_01",
+        "status": "SOS"
+    },
+    "dev_ramesh_kumar": {
+        "device_uuid": "dev_ramesh_kumar",
+        "name": "Ramesh Kumar",
+        "lat": 30.5585,
+        "lng": 79.5652,
+        "altitude": 1480,
+        "accuracy": 5.0,
+        "battery_level": 64,
+        "last_synced_at": datetime.fromtimestamp(now_ts - 120, timezone.utc).isoformat(),
+        "zone_id": "chamoli_01",
+        "status": "SAFE"
+    },
+    "dev_katy_fuller": {
+        "device_uuid": "dev_katy_fuller",
+        "name": "Katy Fuller (Vol. Rescue)",
+        "lat": 30.5560,
+        "lng": 79.5630,
+        "altitude": 1410,
+        "accuracy": 6.1,
+        "battery_level": 42,
+        "last_synced_at": datetime.fromtimestamp(now_ts - 180, timezone.utc).isoformat(),
+        "zone_id": "chamoli_01",
+        "status": "HELPING"
+    },
+    "dev_anita_sharma": {
+        "device_uuid": "dev_anita_sharma",
+        "name": "Anita Sharma",
+        "lat": 30.5810,
+        "lng": 79.5230,
+        "altitude": 1620,
+        "accuracy": 3.8,
+        "battery_level": 75,
+        "last_synced_at": datetime.fromtimestamp(now_ts - 90, timezone.utc).isoformat(),
+        "zone_id": "joshimath_01",
+        "status": "SOS"
+    }
+}
+
+# --- Pydantic Schemas ---
 class SOSPayload(BaseModel):
     device_uuid: str
     lat: float
@@ -71,6 +292,27 @@ class SOSPayload(BaseModel):
     timestamp: Optional[str] = None
     notes: Optional[str] = None
 
+class LocationSyncPayload(BaseModel):
+    device_uuid: str
+    lat: float
+    lng: float
+    altitude: Optional[float] = None
+    accuracy: Optional[float] = None
+    battery_level: Optional[float] = None
+    last_synced_at: str
+    zone_id: Optional[str] = "chamoli_01"
+
+class RescueDispatchPayload(BaseModel):
+    cluster_id: int
+    squad_type: str = Field(default="HELICOPTER", description="Enum: 'HELICOPTER', 'BOAT', 'GROUND_SQUAD', 'MEDICAL'")
+    zone_id: str = "chamoli_01"
+    assigned_unit: Optional[str] = "NDRF Battalion 8"
+    notes: Optional[str] = None
+
+class SimulateScenarioPayload(BaseModel):
+    zone_id: str = "chamoli_01"
+    scenario: str = Field(..., description="Enum: 'GLOF_CRITICAL', 'TORRENTIAL_CLOUDBURST', 'SEISMIC_SHOCK', 'NORMAL_BASELINE'")
+
 class SensorUpdatePayload(BaseModel):
     zone_id: str
     rainfall_mm: float
@@ -78,7 +320,6 @@ class SensorUpdatePayload(BaseModel):
     soil_moisture: float
     river_discharge_m3s: float
 
-# Load Model on Startup
 @app.on_event("startup")
 def load_ml_model():
     global model_clf
@@ -91,7 +332,45 @@ def load_ml_model():
     else:
         print(f"[Backend Startup] Model file not found at {MODEL_PATH}. Using algorithmic fallback.")
 
-# --- Endpoints ---
+def run_zone_inference(zone_id: str, sensors: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from ai_model.inference_engine import predict_flood_risk
+        pred = predict_flood_risk(sensors)
+        return {
+            "flood_probability_percent": pred["flood_probability_percent"],
+            "alert_color": pred["alert_color"],
+            "primary_trigger": pred["primary_trigger"],
+            "explanation": pred["explanation"],
+            "factors": pred["factors"]
+        }
+    except Exception as e:
+        rain = sensors.get("rainfall_mm_hr", sensors.get("rainfall_mm", 0.0))
+        seismic = sensors.get("seismic_magnitude", sensors.get("seismic_mag", 0.0))
+        discharge = sensors.get("river_discharge_m3s", 300.0)
+
+        if rain > 150 or seismic > 4.5 or discharge > 1200:
+            prob = 88.5
+            color = "RED"
+            trigger = "Seismic Glacial Lake Outburst (GLOF)" if seismic > 4.5 else "Cloudburst Torrential Downpour"
+            expl = f"Extreme hydrological trigger active: {rain}mm rain, {seismic}M seismic."
+        elif rain > 70 or discharge > 600:
+            prob = 54.0
+            color = "ORANGE"
+            trigger = "Moderate Downpour & Saturation"
+            expl = "River discharge and soil moisture approaching danger thresholds."
+        else:
+            prob = 12.5
+            color = "GREEN"
+            trigger = "Normal Telemetry Baseline"
+            expl = "All sensor telemetry remains within safe operational limits."
+
+        return {
+            "flood_probability_percent": prob,
+            "alert_color": color,
+            "primary_trigger": trigger,
+            "explanation": expl,
+            "factors": sensors
+        }
 
 @app.get("/")
 def root():
@@ -99,6 +378,8 @@ def root():
         "app": "NeerNetra Flash Flood API",
         "status": "ONLINE",
         "model_loaded": model_clf is not None,
+        "monitored_zones": len(ALL_ZONES_CONFIG),
+        "active_devices": len(location_history_db),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
@@ -107,6 +388,8 @@ def health_check():
     return {
         "status": "healthy",
         "model_status": "active" if model_clf else "fallback",
+        "active_devices": len(location_history_db),
+        "active_sos": len([e for e in sos_events_db if e.get("status") == "SOS"]),
         "uptime": time.time()
     }
 
@@ -114,43 +397,54 @@ def health_check():
 def get_current_prediction(zone_id: str = Query(default="chamoli_01")):
     """
     Returns real-time flood hazard prediction, alert classification, and physical explanation
-    using the NeerNetra 99.76% accuracy Random Forest inference engine.
-    Consumed by Mobile App & Web Dashboard.
+    using the NeerNetra inference engine. Consumed by Mobile App & Web Dashboard.
     """
-    sensors = zone_sensor_state.get(zone_id.lower(), zone_sensor_state["chamoli_01"])
-
-    try:
-        # Import and invoke the central AI Inference Engine
-        try:
-            from ai_model.inference_engine import predict_flood_risk
-        except ImportError:
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-            from ai_model.inference_engine import predict_flood_risk
-
-        pred = predict_flood_risk(sensors)
-        flood_prob = pred["flood_probability_percent"]
-        alert_color = pred["alert_color"]
-        primary_trigger = pred["primary_trigger"]
-        explanation = pred["explanation"]
-        factors = pred["factors"]
-    except Exception as e:
-        print(f"[Backend Inference Error] Fallback applied: {e}")
-        flood_prob = 85.5
-        alert_color = "RED"
-        primary_trigger = "Composite Hydrological Hazard"
-        explanation = "Model inference encountered a telemetry exception; critical alert maintained."
-        factors = sensors
+    zone_key = zone_id.lower()
+    sensors = zone_sensor_state.get(zone_key, zone_sensor_state["chamoli_01"])
+    inference = run_zone_inference(zone_key, sensors)
 
     return {
         "zone_id": zone_id,
-        "zone_name": sensors.get("zone_name", zone_id),
-        "flood_probability_percent": flood_prob,
-        "alert_color": alert_color,
-        "primary_trigger": primary_trigger,
-        "explanation": explanation,
-        "factors": factors,
+        "zone_name": sensors.get("zone_name", ALL_ZONES_CONFIG.get(zone_key, {}).get("name", zone_id)),
+        "coordinates": ALL_ZONES_CONFIG.get(zone_key, {"lat": 30.4167, "lng": 79.3167}),
+        "flood_probability_percent": inference["flood_probability_percent"],
+        "alert_color": inference["alert_color"],
+        "primary_trigger": inference["primary_trigger"],
+        "explanation": inference["explanation"],
+        "factors": inference["factors"],
         "sensors": sensors,
         "last_updated": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/prediction/zones")
+def get_all_zone_predictions():
+    """
+    Returns live prediction status across all 10 Himalayan monitored zones.
+    Provides the Web Dashboard with a multi-zone national command overview.
+    """
+    zones_output = []
+
+    for zid, zcfg in ALL_ZONES_CONFIG.items():
+        sensors = zone_sensor_state.get(zid, {})
+        inference = run_zone_inference(zid, sensors)
+
+        zones_output.append({
+            "zone_id": zid,
+            "zone_name": zcfg["name"],
+            "river": zcfg["river"],
+            "coordinates": {"lat": zcfg["lat"], "lng": zcfg["lng"]},
+            "flood_probability_percent": inference["flood_probability_percent"],
+            "alert_color": inference["alert_color"],
+            "primary_trigger": inference["primary_trigger"],
+            "explanation": inference["explanation"],
+            "sensors": sensors
+        })
+
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "total_zones": len(zones_output),
+        "high_risk_zones": len([z for z in zones_output if z["alert_color"] == "RED"]),
+        "zones": zones_output
     }
 
 @app.post("/api/sos/trigger")
@@ -167,10 +461,30 @@ def trigger_sos_beacon(payload: SOSPayload):
         "status": payload.status,
         "sos_type": payload.sos_type,
         "is_mesh_relayed": payload.is_mesh_relayed,
-        "received_at": datetime.now(timezone.utc).isoformat()
+        "received_at": datetime.now(timezone.utc).isoformat(),
+        "notes": payload.notes or ("Mesh-relayed distress beacon" if payload.is_mesh_relayed else "Direct HTTP beacon")
     }
 
     sos_events_db.append(event_entry)
+
+    if payload.device_uuid in location_history_db:
+        location_history_db[payload.device_uuid]["status"] = payload.status
+        location_history_db[payload.device_uuid]["lat"] = payload.lat
+        location_history_db[payload.device_uuid]["lng"] = payload.lng
+        location_history_db[payload.device_uuid]["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+    else:
+        location_history_db[payload.device_uuid] = {
+            "device_uuid": payload.device_uuid,
+            "name": f"Citizen {payload.device_uuid[:8]}",
+            "lat": payload.lat,
+            "lng": payload.lng,
+            "altitude": 1450,
+            "battery_level": 85,
+            "last_synced_at": datetime.now(timezone.utc).isoformat(),
+            "zone_id": "chamoli_01",
+            "status": payload.status
+        }
+
     print(f"[SOS Ingest] Beacon received [{payload.status}] from {payload.device_uuid[:8]} (Mesh: {payload.is_mesh_relayed})")
 
     return {
@@ -183,24 +497,25 @@ def trigger_sos_beacon(payload: SOSPayload):
 @app.get("/api/sos/events")
 def get_all_sos_events():
     """
-    Returns list of all active citizen beacons.
+    Returns list of all active and historical citizen beacons.
     """
     return {
         "total_events": len(sos_events_db),
-        "events": sos_events_db[::-1] # newest first
+        "active_sos": len([e for e in sos_events_db if e.get("status") == "SOS"]),
+        "events": sos_events_db[::-1]
     }
 
 @app.get("/api/sos/clusters")
 def get_sos_clusters(zone_id: str = "chamoli_01"):
     """
-    Groups active SOS events into high-priority rescue zones for NDRF dispatch.
+    Groups active SOS events into high-priority rescue zones for NDRF triage.
     """
-    active_sos = [e for e in sos_events_db if e['status'] == 'SOS']
+    active_sos = [e for e in sos_events_db if e.get('status') == 'SOS']
 
     if not active_sos:
-        # Default mock cluster data matching API contract
         return {
             "zone_id": zone_id,
+            "total_clusters": 2,
             "clusters": [
                 {
                     "cluster_id": 1,
@@ -208,7 +523,9 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
                     "center_lng": 79.5642,
                     "total_people": 47,
                     "priority": "P1-CRITICAL",
-                    "primary_need": "TRAPPED under debris"
+                    "primary_need": "TRAPPED under debris",
+                    "status": "PENDING_DISPATCH",
+                    "sector": "Sector 1 Riverbank Collapse"
                 },
                 {
                     "cluster_id": 2,
@@ -216,41 +533,69 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
                     "center_lng": 79.5230,
                     "total_people": 18,
                     "priority": "P2-HIGH",
-                    "primary_need": "EVACUATION"
+                    "primary_need": "EVACUATION",
+                    "status": "PENDING_DISPATCH",
+                    "sector": "Joshimath Highway Evacuation"
                 }
             ]
         }
 
-    # Grouping by cluster center average
     avg_lat = sum(e['lat'] for e in active_sos) / len(active_sos)
     avg_lng = sum(e['lng'] for e in active_sos) / len(active_sos)
 
+    dispatched_ids = {d["cluster_id"] for d in dispatched_rescues_db}
+
     return {
         "zone_id": zone_id,
+        "total_clusters": 1,
         "clusters": [
             {
                 "cluster_id": 1,
                 "center_lat": round(avg_lat, 4),
                 "center_lng": round(avg_lng, 4),
                 "total_people": len(active_sos),
-                "priority": "P1-CRITICAL" if len(active_sos) > 5 else "P2-HIGH",
-                "primary_need": active_sos[0].get('sos_type', 'GENERAL')
+                "priority": "P1-CRITICAL" if len(active_sos) > 2 else "P2-HIGH",
+                "primary_need": active_sos[0].get('sos_type', 'TRAPPED under debris'),
+                "status": "DISPATCHED" if 1 in dispatched_ids else "PENDING_DISPATCH",
+                "sector": f"{zone_id.upper()} Flash Flood Sector"
             }
         ]
     }
 
-class LocationSyncPayload(BaseModel):
-    device_uuid: str
-    lat: float
-    lng: float
-    altitude: Optional[float] = None
-    accuracy: Optional[float] = None
-    battery_level: Optional[float] = None
-    last_synced_at: str
-    zone_id: Optional[str] = "chamoli_01"
+@app.post("/api/rescue/dispatch")
+def dispatch_rescue_squad(payload: RescueDispatchPayload):
+    """
+    Allows the NDRF Web Command Portal to dispatch specialized rescue squads
+    (Helicopter, Rescue Boat, Ground Team, Medical) to an active SOS cluster.
+    """
+    dispatch_entry = {
+        "dispatch_id": f"disp_{uuid.uuid4().hex[:8]}",
+        "cluster_id": payload.cluster_id,
+        "squad_type": payload.squad_type,
+        "zone_id": payload.zone_id,
+        "assigned_unit": payload.assigned_unit,
+        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+        "status": "EN_ROUTE",
+        "eta_minutes": 15 if payload.squad_type == "HELICOPTER" else 25,
+        "notes": payload.notes or f"{payload.squad_type} dispatched to Cluster #{payload.cluster_id}"
+    }
 
-# Store 5-minute location history
-location_history_db = {}
+    dispatched_rescues_db.append(dispatch_entry)
+    print(f"[NDRF Command] Rescue Squad [{payload.squad_type}] dispatched to Cluster #{payload.cluster_id}")
+
+    return {
+        "success": True,
+        "message": f"{payload.squad_type} Squad successfully dispatched to Cluster #{payload.cluster_id}",
+        "dispatch": dispatch_entry
+    }
+
+@app.get("/api/rescue/dispatches")
+def get_all_dispatches():
+    """Returns list of all active rescue squad dispatches."""
+    return {
+        "total_dispatches": len(dispatched_rescues_db),
+        "dispatches": dispatched_rescues_db[::-1]
+    }
 
 @app.post("/api/location/sync")
 def sync_device_location(payload: LocationSyncPayload):
@@ -258,14 +603,18 @@ def sync_device_location(payload: LocationSyncPayload):
     Ingests 5-minute periodic location telemetry from mobile clients.
     Persists last known location for rescue tracking.
     """
+    curr_status = location_history_db.get(payload.device_uuid, {}).get("status", "ACTIVE")
+
     location_history_db[payload.device_uuid] = {
         "device_uuid": payload.device_uuid,
         "lat": payload.lat,
         "lng": payload.lng,
-        "altitude": payload.altitude,
-        "battery_level": payload.battery_level,
+        "altitude": payload.altitude or 1450,
+        "accuracy": payload.accuracy or 5.0,
+        "battery_level": payload.battery_level or 85,
         "last_synced_at": payload.last_synced_at,
-        "zone_id": payload.zone_id,
+        "zone_id": payload.zone_id or "chamoli_01",
+        "status": curr_status,
         "server_received_at": datetime.now(timezone.utc).isoformat()
     }
     print(f"[Location Sync] 5-Min GPS update from {payload.device_uuid[:8]}: ({payload.lat}, {payload.lng})")
@@ -280,33 +629,125 @@ def sync_device_location(payload: LocationSyncPayload):
 def get_live_device_locations():
     """
     Returns latest GPS locations of all connected devices for NDRF government portal.
+    Automatically escalates citizens unresponsive > 5 minutes to UNRESPONSIVE DANGER.
     """
+    curr_time = datetime.now(timezone.utc)
+    enriched_devices = []
+
+    for dev in location_history_db.values():
+        dev_copy = dict(dev)
+        try:
+            sync_time = datetime.fromisoformat(dev["last_synced_at"].replace("Z", "+00:00"))
+            elapsed_seconds = (curr_time - sync_time).total_seconds()
+        except Exception:
+            elapsed_seconds = 0
+
+        is_unresponsive = elapsed_seconds > 300 and dev.get("status") != "SAFE"
+        dev_copy["isUnresponsiveDanger"] = is_unresponsive
+        dev_copy["elapsed_seconds_since_sync"] = int(elapsed_seconds)
+        enriched_devices.append(dev_copy)
+
     return {
-        "total_devices": len(location_history_db),
-        "devices": list(location_history_db.values())
+        "total_devices": len(enriched_devices),
+        "unresponsive_danger_count": len([d for d in enriched_devices if d.get("isUnresponsiveDanger")]),
+        "devices": enriched_devices
     }
 
 @app.post("/api/alert/broadcast")
 def broadcast_red_zone_alert(zone_id: str = "chamoli_01"):
     """
-    Triggers emergency RED ALERT notification to all devices in the affected zone.
+    Triggers emergency RED ALERT evacuation broadcast to all devices in the affected zone.
     """
-    sensors = zone_sensor_state.get(zone_id.lower(), zone_sensor_state["chamoli_01"])
-    sensors["rainfall_mm"] = 280.0 # Force extreme rainfall
-    sensors["seismic_mag"] = 5.8  # Force GLOF earthquake
+    zone_key = zone_id.lower()
+    sensors = zone_sensor_state.get(zone_key, zone_sensor_state["chamoli_01"])
+    sensors["rainfall_mm"] = 280.0
+    sensors["rainfall_mm_hr"] = 280.0
+    sensors["seismic_mag"] = 5.8
+    sensors["seismic_magnitude"] = 5.8
+    sensors["river_discharge_m3s"] = 2250.0
+
+    broadcast_entry = {
+        "broadcast_id": f"bcast_{uuid.uuid4().hex[:8]}",
+        "zone_id": zone_id,
+        "priority": "RED_ZONE_CRITICAL",
+        "broadcasted_at": datetime.now(timezone.utc).isoformat(),
+        "message": f"EMERGENCY RED ALERT DISPATCHED TO ALL DEVICES IN {zone_id.upper()} RANGE"
+    }
+    active_broadcasts_db.append(broadcast_entry)
 
     return {
         "success": True,
         "broadcast_status": "DISPATCHED",
         "affected_zone": zone_id,
         "priority": "RED_ZONE_CRITICAL",
+        "broadcast": broadcast_entry,
         "message": f"EMERGENCY RED ALERT DISPATCHED TO ALL DEVICES IN {zone_id.upper()} RANGE"
+    }
+
+@app.get("/api/alerts/active")
+def get_active_alerts():
+    """Returns list of active emergency broadcasts for mobile clients."""
+    return {
+        "total_active_broadcasts": len(active_broadcasts_db),
+        "alerts": active_broadcasts_db[::-1]
+    }
+
+@app.post("/api/telemetry/simulate")
+def simulate_hazard_scenario(payload: SimulateScenarioPayload):
+    """
+    Simulates real-time telemetry changes across any Himalayan zone so developers
+    and judges can immediately test live end-to-end reactive synchronization.
+    """
+    zone_key = payload.zone_id.lower()
+    if zone_key not in zone_sensor_state:
+        zone_sensor_state[zone_key] = {"zone_name": payload.zone_id}
+
+    s = zone_sensor_state[zone_key]
+    scen = payload.scenario.upper()
+
+    if scen == "GLOF_CRITICAL":
+        s.update({
+            "rainfall_mm": 240.0, "rainfall_mm_hr": 240.0,
+            "seismic_mag": 5.4, "seismic_magnitude": 5.4,
+            "soil_moisture": 0.95, "soil_moisture_pct": 95.0,
+            "river_discharge_m3s": 2400.0, "river_water_level_m": 10.2
+        })
+    elif scen == "TORRENTIAL_CLOUDBURST":
+        s.update({
+            "rainfall_mm": 210.0, "rainfall_mm_hr": 210.0,
+            "seismic_mag": 1.8, "seismic_magnitude": 1.8,
+            "soil_moisture": 0.90, "soil_moisture_pct": 90.0,
+            "river_discharge_m3s": 1800.0, "river_water_level_m": 8.5
+        })
+    elif scen == "SEISMIC_SHOCK":
+        s.update({
+            "rainfall_mm": 15.0, "rainfall_mm_hr": 15.0,
+            "seismic_mag": 6.2, "seismic_magnitude": 6.2,
+            "soil_moisture": 0.50, "soil_moisture_pct": 50.0,
+            "river_discharge_m3s": 500.0, "river_water_level_m": 3.9
+        })
+    elif scen == "NORMAL_BASELINE":
+        s.update({
+            "rainfall_mm": 5.0, "rainfall_mm_hr": 5.0,
+            "seismic_mag": 0.8, "seismic_magnitude": 0.8,
+            "soil_moisture": 0.25, "soil_moisture_pct": 25.0,
+            "river_discharge_m3s": 120.0, "river_water_level_m": 1.8
+        })
+
+    inference = run_zone_inference(zone_key, s)
+
+    return {
+        "success": True,
+        "zone_id": payload.zone_id,
+        "scenario_applied": scen,
+        "prediction": inference,
+        "updated_sensors": s
     }
 
 @app.post("/api/telemetry/update")
 def update_sensor_telemetry(payload: SensorUpdatePayload):
     """
-    Dynamically updates sensor values for a zone to trigger test alerts.
+    Dynamically updates sensor values for a zone to trigger custom telemetry values.
     """
     zone_key = payload.zone_id.lower()
     if zone_key not in zone_sensor_state:
@@ -314,12 +755,21 @@ def update_sensor_telemetry(payload: SensorUpdatePayload):
 
     zone_sensor_state[zone_key].update({
         "rainfall_mm": payload.rainfall_mm,
+        "rainfall_mm_hr": payload.rainfall_mm,
         "seismic_mag": payload.seismic_mag,
+        "seismic_magnitude": payload.seismic_mag,
         "soil_moisture": payload.soil_moisture,
+        "soil_moisture_pct": payload.soil_moisture * 100.0 if payload.soil_moisture <= 1.0 else payload.soil_moisture,
         "river_discharge_m3s": payload.river_discharge_m3s
     })
 
-    return {"success": True, "updated_zone": zone_sensor_state[zone_key]}
+    inference = run_zone_inference(zone_key, zone_sensor_state[zone_key])
+
+    return {
+        "success": True,
+        "updated_zone": zone_sensor_state[zone_key],
+        "prediction": inference
+    }
 
 if __name__ == '__main__':
     import uvicorn
