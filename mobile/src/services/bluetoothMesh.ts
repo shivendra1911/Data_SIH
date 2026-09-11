@@ -18,6 +18,7 @@ import { Alert, Platform, PermissionsAndroid } from 'react-native';
 // Use global atob/btoa for base64 (available in RN)
 import { MeshPeer, MeshChatMessage, SOSPayload } from '../types';
 import { saveSOSToOfflineQueue } from './offlineStorage';
+import { startGattServer, notifyAllCentrals } from './gattServerBridge';
 
 // ─── NeerNetra BLE Service UUIDs ────────────────────────────────────────────
 export const NEERNETRA_SERVICE_UUID = '4E656572-4E65-7472-6100-000000000001';
@@ -156,6 +157,13 @@ class NeerNetraBLEMesh {
   // ── Start Mesh (Scan + Advertise cycle) ────────────────────────────────────
   async startMesh() {
     console.log('[BLE Mesh] Starting NeerNetra mesh network...');
+
+    // 1. Start native GATT Server + Advertising (Peripheral mode)
+    await startGattServer(this.myName, (fromDevice, data) => {
+      this.handleIncomingPacket(fromDevice, data);
+    });
+
+    // 2. Start GATT Client scanning (Central mode)
     await this.startScanning();
   }
 
@@ -293,9 +301,11 @@ class NeerNetraBLEMesh {
 
   // ── Broadcast a packet to ALL connected peers (mesh flood) ─────────────────
   private async broadcastToAll(type: BLEMsgType, payload: string, ttl: number = 7) {
+    const packet = encodePacket(type, this.myDeviceId, payload, ttl);
     const promises = Array.from(this.connectedDevices.values()).map((d) =>
       this.sendToPeer(d, type, payload, ttl)
     );
+    notifyAllCentrals(packet).catch(() => {});
     await Promise.allSettled(promises);
   }
 
