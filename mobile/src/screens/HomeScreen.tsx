@@ -6,20 +6,24 @@ import {
   StatusBar,
   ScrollView,
   RefreshControl,
-  TouchableOpacity,
   Text,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ZonePrediction, NetworkMode, LocationSyncPayload } from '../types';
 import { fetchCurrentPrediction, flushOfflineSOSQueue, sendSOSPayload } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
-import { meshManager } from '../services/meshService';
+import { meshManager, meshEngine } from '../services/bluetoothMesh';
 import {
   start5MinPeriodicLocationTracker,
   getLastKnownLocation,
   syncCurrentLocationToBackend,
 } from '../services/locationTracker';
 import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
+import {
+  startRedZoneDangerTimer,
+  markUserAsSafeConfirmed,
+  stopDangerTimer,
+} from '../services/dangerEscalation';
 
 import { TopPillNav } from '../components/TopPillNav';
 import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
@@ -30,7 +34,9 @@ import { TriageModal } from '../components/TriageModal';
 import { MeshStatusBadge } from '../components/MeshStatusBadge';
 import { BluetoothWalkieTalkie } from '../components/BluetoothWalkieTalkie';
 import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
-import { Radio, Navigation, BellRing } from 'lucide-react-native';
+import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
+import { OfflineMapContainer } from '../components/OfflineMapContainer';
+import { Navigation } from 'lucide-react-native';
 
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
@@ -46,6 +52,7 @@ export const HomeScreen: React.FC = () => {
   const [syncing, setSyncing] = useState<boolean>(false);
   const [lastLocation, setLastLocation] = useState<LocationSyncPayload | null>(null);
   const [showRedAlertOverlay, setShowRedAlertOverlay] = useState<boolean>(false);
+  const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     initDeviceUuid();
@@ -78,10 +85,21 @@ export const HomeScreen: React.FC = () => {
       setPrediction(data);
       setNetworkMode('ONLINE');
 
-      // Trigger push notification if RED ZONE alert is active
+      // Trigger push notification & 5-minute danger countdown if RED ZONE alert is active
       if (data.alert_color === 'RED' || data.flood_probability_percent > 75.0) {
         triggerRedZoneEmergencyAlert(data.zone_id, data.flood_probability_percent, data.primary_trigger);
         setShowRedAlertOverlay(true);
+
+        // Initiate 5-minute countdown for auto-danger escalation
+        startRedZoneDangerTimer(
+          deviceUuid,
+          300,
+          (remSeconds) => setRemainingCountdown(remSeconds),
+          () => {
+            setRemainingCountdown(0);
+            checkOfflineQueue();
+          }
+        );
       }
     } catch (e) {
       console.warn('Prediction load error:', e);
@@ -109,6 +127,23 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  const handleConfirmSafe = async () => {
+    await markUserAsSafeConfirmed(deviceUuid);
+    setRemainingCountdown(null);
+    stopDangerTimer();
+
+    await sendSOSPayload({
+      device_uuid: deviceUuid,
+      lat: lastLocation ? lastLocation.lat : 30.5573,
+      lng: lastLocation ? lastLocation.lng : 79.5642,
+      status: 'SAFE',
+      is_mesh_relayed: networkMode === 'BLE_MESH',
+      timestamp: new Date().toISOString(),
+    });
+
+    await checkOfflineQueue();
+  };
+
   const handleSyncQueue = async () => {
     setSyncing(true);
     try {
@@ -132,6 +167,8 @@ export const HomeScreen: React.FC = () => {
     });
     await checkOfflineQueue();
   };
+
+  const peers = meshEngine.getConnectedPeers();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -165,17 +202,29 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.locationSyncBar}>
             <Navigation size={14} color="#0284c7" />
             <Text style={styles.locSyncText}>
-              5-Min Sync: <Text style={styles.boldCoords}>{lastLocation.lat.toFixed(4)}, {lastLocation.lng.toFixed(4)}</Text> • Battery {lastLocation.battery_level}%
+              5-Min GPS Sync: <Text style={styles.boldCoords}>{lastLocation.lat.toFixed(4)}, {lastLocation.lng.toFixed(4)}</Text> • Battery {lastLocation.battery_level}%
             </Text>
           </View>
+        )}
+
+        {/* 5-Minute Unresponsive Safety Confirmation Banner */}
+        {remainingCountdown !== null && remainingCountdown > 0 && (
+          <SafeConfirmationCountdown
+            remainingSeconds={remainingCountdown}
+            onConfirmSafe={handleConfirmSafe}
+          />
         )}
 
         {/* Tab 1: Telemetry & Overview */}
         {activeTab === 'telemetry' && (
           <>
             <SecurityGaugeCard prediction={prediction} />
+            <OfflineMapContainer
+              lastLocation={lastLocation}
+              peers={peers}
+              isRedZone={prediction?.alert_color === 'RED'}
+            />
             <BluetoothWalkieTalkie />
-            <MapSessionCard />
             <PeopleBeaconCard beacons={[]} />
             <DarkSessionDrawer />
           </>
@@ -190,6 +239,11 @@ export const HomeScreen: React.FC = () => {
               onStatusSubmitted={() => checkOfflineQueue()}
             />
             <BluetoothWalkieTalkie />
+            <OfflineMapContainer
+              lastLocation={lastLocation}
+              peers={peers}
+              isRedZone={prediction?.alert_color === 'RED'}
+            />
             <PeopleBeaconCard beacons={[]} />
             <DarkSessionDrawer />
           </>
@@ -198,6 +252,11 @@ export const HomeScreen: React.FC = () => {
         {/* Tab 3: Live Map Focus */}
         {activeTab === 'map' && (
           <>
+            <OfflineMapContainer
+              lastLocation={lastLocation}
+              peers={peers}
+              isRedZone={prediction?.alert_color === 'RED'}
+            />
             <MapSessionCard />
             <BluetoothWalkieTalkie />
             <SecurityGaugeCard prediction={prediction} />
