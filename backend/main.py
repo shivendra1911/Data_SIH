@@ -608,7 +608,7 @@ def trigger_sos_beacon(payload: SOSPayload, background_tasks: BackgroundTasks):
         "success": True,
         "message_id": message_id,
         "message": f"Beacon [{payload.status}] acknowledged by NeerNetra NDRF Server",
-        "total_active_sos": len([e for e in sos_events_db if e['status'] == 'SOS'])
+        "total_active_sos": len([e for e in list(sos_events_db) if e['status'] == 'SOS'])
     }
 
 @app.get("/api/sos/events")
@@ -616,10 +616,11 @@ def get_all_sos_events():
     """
     Returns list of all active and historical citizen beacons.
     """
+    snapshot = list(sos_events_db)
     return {
-        "total_events": len(sos_events_db),
-        "active_sos": len([e for e in sos_events_db if e.get("status") == "SOS"]),
-        "events": sos_events_db[::-1]
+        "total_events": len(snapshot),
+        "active_sos": len([e for e in snapshot if e.get("status") == "SOS"]),
+        "events": snapshot[::-1]
     }
 
 @app.get("/api/sos/clusters")
@@ -627,7 +628,7 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
     """
     Groups active SOS events into high-priority rescue zones for NDRF triage.
     """
-    active_sos = [e for e in sos_events_db if e.get('status') == 'SOS']
+    active_sos = [e for e in list(sos_events_db) if e.get('status') == 'SOS']
 
     if not active_sos:
         return {
@@ -710,9 +711,10 @@ def dispatch_rescue_squad(payload: RescueDispatchPayload, background_tasks: Back
 @app.get("/api/rescue/dispatches")
 def get_all_dispatches():
     """Returns list of all active rescue squad dispatches."""
+    snapshot = list(dispatched_rescues_db)
     return {
-        "total_dispatches": len(dispatched_rescues_db),
-        "dispatches": dispatched_rescues_db[::-1]
+        "total_dispatches": len(snapshot),
+        "dispatches": snapshot[::-1]
     }
 
 @app.post("/api/location/sync")
@@ -754,7 +756,7 @@ def get_live_device_locations():
     curr_time = datetime.now(timezone.utc)
     enriched_devices = []
 
-    for dev in location_history_db.values():
+    for dev in list(location_history_db.values()):
         dev_copy = dict(dev)
         try:
             sync_time = datetime.fromisoformat(dev["last_synced_at"].replace("Z", "+00:00"))

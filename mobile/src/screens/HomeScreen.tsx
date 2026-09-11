@@ -10,6 +10,7 @@ import {
   Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { ZonePrediction, NetworkMode, LocationSyncPayload, SOSType, SOSPayload } from '../types';
 import { fetchCurrentPrediction, sendSOSPayload, flushOfflineSOSQueue } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
@@ -62,6 +63,20 @@ export const HomeScreen: React.FC = () => {
     initDeviceUuid();
     loadPrediction();
     checkOfflineQueue();
+
+    const unsubscribeNet = NetInfo.addEventListener(state => {
+      const isConnected = !!(state.isConnected && state.isInternetReachable !== false);
+      if (isConnected) {
+        setNetworkMode('ONLINE');
+        flushOfflineSOSQueue().then(() => checkOfflineQueue()).catch(() => {});
+      } else {
+        setNetworkMode('BLE_MESH');
+      }
+    });
+
+    return () => {
+      unsubscribeNet();
+    };
   }, []);
 
   const initDeviceUuid = async () => {
