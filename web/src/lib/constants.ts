@@ -1,4 +1,11 @@
-import { HazardZone, SOSCluster, SOSEvent } from "./types";
+import {
+  HazardZone,
+  SOSCluster,
+  SOSEvent,
+  CitizenLocation,
+  DisasterEpicenter,
+  RegionalAlert,
+} from "./types";
 
 export const HIMALAYAN_ZONES: HazardZone[] = [
   {
@@ -93,6 +100,30 @@ export const HIMALAYAN_ZONES: HazardZone[] = [
         bufferDistanceM: 450,
       },
     ],
+    epicenter: {
+      id: "epi-chamoli-01",
+      zone_id: "chamoli_01",
+      name: "Raunthi Glacier Moraine Lake Breach (GLOF Origin)",
+      type: "GLOF_MORAINE_BREACH",
+      coords: [30.5724, 79.5812],
+      elevation_m: 5420,
+      estimated_volume_m3: "1.85M m³",
+      detection_source: "Cryo-Seismic Tremor (4.6M) + INSAT-3DR Thermal Anomaly",
+      surge_path: [
+        [30.5724, 79.5812],
+        [30.5645, 79.5742],
+        [30.5582, 79.5651],
+        [30.5489, 79.5785],
+        [30.5420, 79.5490],
+        [30.5310, 79.5380],
+      ],
+      checkpoints: [
+        { name: "Raini Bridge Confluence", distance_km: 4.2, eta_minutes: 18, peak_surge_m: 8.6 },
+        { name: "Tapovan-Vishnugad Barrage", distance_km: 7.8, eta_minutes: 42, peak_surge_m: 7.9 },
+        { name: "Joshimath Helipad Lowlands", distance_km: 14.5, eta_minutes: 75, peak_surge_m: 6.4 },
+        { name: "Helang NH-7 River Crossing", distance_km: 21.0, eta_minutes: 110, peak_surge_m: 5.1 },
+      ],
+    },
   },
   {
     id: "kedarnath_01",
@@ -362,5 +393,106 @@ export const INITIAL_MOCK_CLUSTERS: SOSCluster[] = [
     total_people: 22,
     priority: "P1",
     dispatched: false,
+  },
+];
+
+export const INITIAL_CITIZEN_LOCATIONS: CitizenLocation[] = [
+  {
+    id: "cit-101",
+    device_uuid: "node-f81d4f-live",
+    lat: 30.5582,
+    lng: 79.5651,
+    is_live: true,
+    last_seen_minutes_ago: 1,
+    accuracy_radius_m: 14,
+    drift_radius_m: 0,
+    battery_pct: 78,
+    status: "SOS",
+    sos_type: "TRAPPED IN RIVER VALLEY (RAPID RISE)",
+    mesh_hops: 0,
+    breadcrumbs: [
+      [30.5575, 79.5640],
+      [30.5582, 79.5651],
+    ],
+  },
+  {
+    id: "cit-102",
+    device_uuid: "node-550e84-mesh",
+    lat: 30.5565,
+    lng: 79.5638,
+    is_live: false,
+    last_seen_minutes_ago: 18,
+    accuracy_radius_m: 65,
+    drift_radius_m: 350,
+    battery_pct: 34,
+    status: "SOS",
+    sos_type: "LAST SEEN NEAR WASHED BRIDGE PIER",
+    mesh_hops: 2,
+    breadcrumbs: [
+      [30.5550, 79.5620],
+      [30.5565, 79.5638],
+    ],
+  },
+  {
+    id: "cit-103",
+    device_uuid: "node-a74b12-offline",
+    lat: 30.5595,
+    lng: 79.5680,
+    is_live: false,
+    last_seen_minutes_ago: 32,
+    accuracy_radius_m: 120,
+    drift_radius_m: 600,
+    battery_pct: 19,
+    status: "SOS",
+    sos_type: "COMM CELL TOWER SEVERED (LAST BEACON)",
+    mesh_hops: 3,
+  },
+  {
+    id: "cit-104",
+    device_uuid: "node-safe-01",
+    lat: 30.5532,
+    lng: 79.5615,
+    is_live: true,
+    last_seen_minutes_ago: 0,
+    accuracy_radius_m: 8,
+    drift_radius_m: 0,
+    battery_pct: 92,
+    status: "SAFE",
+    sos_type: "EVACUATED TO JOSHIMATH HELIPAD SHELTER",
+    mesh_hops: 0,
+  },
+  {
+    id: "cit-105",
+    device_uuid: "node-volunteer-01",
+    lat: 30.5545,
+    lng: 79.5628,
+    is_live: true,
+    last_seen_minutes_ago: 2,
+    accuracy_radius_m: 15,
+    drift_radius_m: 0,
+    battery_pct: 86,
+    status: "HELPING",
+    sos_type: "CIVIL DEFENSE VOLUNTEER RELAY NODE",
+    mesh_hops: 1,
+  },
+];
+
+export const INITIAL_REGIONAL_ALERTS: RegionalAlert[] = [
+  {
+    alert_id: "alert-rec-01",
+    zone_id: "chamoli_01",
+    severity: "CRITICAL RED",
+    title: "ZERO-MINUTE MANDATORY EVACUATION DISPATCH",
+    message:
+      "CRITICAL GLOF / FLASH FLOOD BREACH DETECTED in Rishi Ganga Valley. Evacuate all riverbanks immediately to high ground (>100m vertical elevation).",
+    safe_havens: [
+      "Joshimath Helipad Multi-Hazard Shelter",
+      "Govindghat High Ground Gurdwara",
+    ],
+    trigger_acoustic_siren: true,
+    dispatched_at: new Date(Date.now() - 12 * 60000).toISOString(),
+    status: "ACTIVE_IN_EDGE_MESH",
+    target_nodes_count: 1420,
+    delivery_rate_pct: 98.4,
   },
 ];

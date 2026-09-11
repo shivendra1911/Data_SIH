@@ -23,6 +23,7 @@ interface HeaderProps {
   onToggleDemoMode: () => void;
   onSimulateSOS: () => void;
   onOpenMobileModal: () => void;
+  onOpenRegionalBroadcast?: () => void;
   floodRiskPercent: number;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -35,6 +36,7 @@ export default function Header({
   onToggleDemoMode,
   onSimulateSOS,
   onOpenMobileModal,
+  onOpenRegionalBroadcast,
   floodRiskPercent,
   soundEnabled,
   onToggleSound,
@@ -116,6 +118,20 @@ export default function Header({
 
         {/* Right: Controls, Android Bridge, Zone Selector */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Regional Mobile Alert Broadcast Trigger Button */}
+          <button
+            onClick={onOpenRegionalBroadcast}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition min-h-[44px] shadow-lg ${
+              isZeroMinuteActive
+                ? "bg-rose-600 hover:bg-rose-500 active:scale-95 text-white border border-rose-400 animate-pulse shadow-rose-950/60"
+                : "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40"
+            }`}
+            title="Dispatch Geo-Fenced Push Broadcast to All Citizen Phones in Zone"
+          >
+            <Radio className="w-4 h-4 text-rose-400" />
+            <span>Broadcast Regional Alert</span>
+          </button>
+
           {/* Android Mobile Connect Button */}
           <button
             onClick={onOpenMobileModal}
@@ -141,8 +157,14 @@ export default function Header({
 
           {/* Sector / Zone Selector */}
           <div className="relative flex items-center">
+            <label htmlFor="sector-zone-selector" className="sr-only">
+              Select Himalayan Monitoring Catchment Sector
+            </label>
             <MapPin className="w-4 h-4 text-cyan-400 absolute left-3 pointer-events-none" />
             <select
+              id="sector-zone-selector"
+              name="sector_zone"
+              aria-label="Select Himalayan Monitoring Catchment Sector"
               value={selectedZone.id}
               onChange={(e) => {
                 const zone = HIMALAYAN_ZONES.find((z) => z.id === e.target.value);

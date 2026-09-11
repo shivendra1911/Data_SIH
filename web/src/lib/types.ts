@@ -77,6 +77,56 @@ export interface SOSCluster {
   assigned_team?: string;
 }
 
+export interface SurgeCheckpoint {
+  name: string;
+  distance_km: number;
+  eta_minutes: number;
+  peak_surge_m: number;
+}
+
+export interface DisasterEpicenter {
+  id: string;
+  zone_id: string;
+  name: string;
+  type: "GLOF_MORAINE_BREACH" | "CLOUDBURST_CELL" | "ROCK_ICE_AVALANCHE";
+  coords: [number, number];
+  elevation_m: number;
+  estimated_volume_m3: string;
+  detection_source: string;
+  surge_path: [number, number][];
+  checkpoints: SurgeCheckpoint[];
+}
+
+export interface CitizenLocation {
+  id: string;
+  device_uuid: string;
+  lat: number;
+  lng: number;
+  is_live: boolean;
+  last_seen_minutes_ago: number;
+  accuracy_radius_m: number;
+  drift_radius_m: number;
+  battery_pct: number;
+  status: "SOS" | "SAFE" | "HELPING";
+  sos_type?: string;
+  mesh_hops: number;
+  breadcrumbs?: [number, number][];
+}
+
+export interface RegionalAlert {
+  alert_id: string;
+  zone_id: string;
+  severity: "CRITICAL RED" | "HIGH ORANGE" | "ADVISORY YELLOW";
+  title: string;
+  message: string;
+  safe_havens: string[];
+  trigger_acoustic_siren: boolean;
+  dispatched_at: string;
+  status: string;
+  target_nodes_count: number;
+  delivery_rate_pct: number;
+}
+
 export interface HazardZone {
   id: ZoneId;
   name: string;
@@ -92,4 +142,5 @@ export interface HazardZone {
   hydrograph: HydrographPoint[];
   preventiveDirectives: PreventiveDirective[];
   infrastructure: CriticalInfrastructure[];
+  epicenter?: DisasterEpicenter;
 }

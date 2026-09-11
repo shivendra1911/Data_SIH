@@ -12,17 +12,21 @@ import PreventiveDirectivesPanel from "@/components/Dashboard/PreventiveDirectiv
 import ForecastHorizonSlider from "@/components/Dashboard/ForecastHorizonSlider";
 import ClusterTriagePanel from "@/components/Dashboard/ClusterTriagePanel";
 import LiveSOSFeed from "@/components/Dashboard/LiveSOSFeed";
+import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import {
   ForecastHorizon,
   HazardZone,
   PredictionResponse,
   SOSCluster,
   SOSEvent,
+  CitizenLocation,
+  RegionalAlert,
 } from "@/lib/types";
 import {
   HIMALAYAN_ZONES,
   INITIAL_MOCK_CLUSTERS,
   INITIAL_MOCK_SOS_EVENTS,
+  INITIAL_CITIZEN_LOCATIONS,
 } from "@/lib/constants";
 import { fetchActiveClusters, fetchCurrentPrediction } from "@/lib/api";
 import { subscribeToSOSEvents } from "@/lib/supabase";
@@ -54,6 +58,8 @@ export default function DashboardPage() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showRescueLayer, setShowRescueLayer] = useState<boolean>(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
+  const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
+  const [citizens, setCitizens] = useState<CitizenLocation[]>(INITIAL_CITIZEN_LOCATIONS);
 
   // High-frequency alert sound synthesizer
   const playAlertSound = useCallback(() => {
@@ -130,6 +136,26 @@ export default function DashboardPage() {
 
     return () => clearInterval(pollInterval);
   }, [soundEnabled, playAlertSound]);
+
+  // Live citizen tracking poll from /api/citizen/locations
+  useEffect(() => {
+    const fetchCitizenLocations = async () => {
+      try {
+        const res = await fetch("/api/citizen/locations");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.citizens && Array.isArray(data.citizens)) {
+            setCitizens(data.citizens);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch citizen locations", err);
+      }
+    };
+    fetchCitizenLocations();
+    const interval = setInterval(fetchCitizenLocations, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSelectZone = (zone: HazardZone) => {
     setSelectedZone(zone);
@@ -216,6 +242,7 @@ export default function DashboardPage() {
         onToggleDemoMode={() => setIsDemoMode((prev) => !prev)}
         onSimulateSOS={handleSimulateSOS}
         onOpenMobileModal={() => setIsMobileModalOpen(true)}
+        onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
         floodRiskPercent={displayedRisk}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
@@ -249,6 +276,7 @@ export default function DashboardPage() {
                 sosEvents={sosEvents}
                 clusters={clusters}
                 activeZone={selectedZone}
+                citizens={citizens}
                 selectedEventId={selectedEventId}
                 onSelectEvent={handleSelectEvent}
                 onDispatchCluster={handleDispatchCluster}
@@ -337,6 +365,7 @@ export default function DashboardPage() {
               <div className="lg:col-span-6">
                 <LiveSOSFeed
                   events={sosEvents}
+                  citizens={citizens}
                   onSelectEvent={handleSelectEvent}
                   onToggleRescued={handleToggleRescued}
                 />
@@ -351,6 +380,14 @@ export default function DashboardPage() {
         isOpen={isMobileModalOpen}
         onClose={() => setIsMobileModalOpen(false)}
         onSimulateAndroidSOS={handleAndroidSOSArrival}
+      />
+
+      {/* Zero-Minute Regional Mobile Alert Broadcast Modal */}
+      <RegionalAlertBroadcastModal
+        isOpen={isRegionalModalOpen}
+        onClose={() => setIsRegionalModalOpen(false)}
+        activeZone={selectedZone}
+        riskPercent={displayedRisk}
       />
 
       {/* Command Footer */}

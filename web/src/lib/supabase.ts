@@ -28,6 +28,15 @@ export function subscribeToSOSEvents(
   onNewEvent: (event: SOSEvent) => void,
   onError?: (error: any) => void
 ): () => void {
+  // If Supabase is unconfigured or pointing to placeholder domain, bypass to prevent network spam
+  const isDummyUrl =
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    supabaseUrl.includes("neernetra.supabase.co") ||
+    supabaseUrl.includes("example.com");
+  if (isDummyUrl) {
+    return () => {};
+  }
+
   try {
     const channel: RealtimeChannel = supabase
       .channel("public:sos_events")

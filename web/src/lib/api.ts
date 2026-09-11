@@ -2,7 +2,9 @@ import { PredictionResponse, SOSCluster, ZoneId } from "./types";
 import { HIMALAYAN_ZONES, INITIAL_MOCK_CLUSTERS } from "./constants";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  typeof window !== "undefined"
+    ? ""
+    : process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 /**
  * Fetch current flood prediction from backend FastAPI

@@ -112,14 +112,17 @@ export default function MobilePairingModal({
 
         {/* Endpoint 1: SOS Trigger */}
         <div className="space-y-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+          <label htmlFor="mobile-trigger-url" className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
             <span>1. Android SOS Trigger Endpoint (POST)</span>
             <span className="text-[10px] text-slate-400">CORS Enabled</span>
           </label>
           <div className="flex items-center gap-2">
             <input
+              id="mobile-trigger-url"
+              name="mobile_trigger_url"
               type="text"
               readOnly
+              aria-label="Android SOS Trigger Endpoint URL"
               value={triggerUrl}
               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-sky-300 select-all"
             />
@@ -139,13 +142,16 @@ export default function MobilePairingModal({
 
         {/* Endpoint 2: Prediction Current */}
         <div className="space-y-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
+          <label htmlFor="mobile-pred-url" className="text-xs font-bold uppercase tracking-wider text-slate-300">
             2. Android Prediction Fetch Endpoint (GET)
           </label>
           <div className="flex items-center gap-2">
             <input
+              id="mobile-pred-url"
+              name="mobile_pred_url"
               type="text"
               readOnly
+              aria-label="Android Prediction Fetch Endpoint URL"
               value={predictionUrl}
               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-cyan-300 select-all"
             />

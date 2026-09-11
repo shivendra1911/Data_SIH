@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { HazardZone, SOSCluster, SOSEvent } from "@/lib/types";
+import { HazardZone, SOSCluster, SOSEvent, CitizenLocation } from "@/lib/types";
 
 interface MapWrapperProps {
   center: [number, number];
@@ -9,6 +9,7 @@ interface MapWrapperProps {
   sosEvents: SOSEvent[];
   clusters: SOSCluster[];
   activeZone: HazardZone;
+  citizens?: CitizenLocation[];
   selectedEventId?: string;
   onSelectEvent?: (event: SOSEvent) => void;
   onDispatchCluster?: (clusterId: number) => void;

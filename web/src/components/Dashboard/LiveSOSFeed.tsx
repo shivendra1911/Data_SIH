@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { SOSEvent } from "@/lib/types";
+import { SOSEvent, CitizenLocation } from "@/lib/types";
 import {
   AlertTriangle,
   CheckCircle,
@@ -11,27 +11,57 @@ import {
   Search,
   Navigation,
   CheckCircle2,
+  Smartphone,
 } from "lucide-react";
 
 interface LiveSOSFeedProps {
   events: SOSEvent[];
+  citizens?: CitizenLocation[];
   onSelectEvent: (event: SOSEvent) => void;
   onToggleRescued?: (id: string) => void;
 }
 
 export default function LiveSOSFeed({
   events,
+  citizens = [],
   onSelectEvent,
   onToggleRescued,
 }: LiveSOSFeedProps) {
-  const [filter, setFilter] = useState<"ALL" | "SOS" | "SAFE" | "HELPING" | "MESH">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "SOS" | "SAFE" | "LIVE" | "LAST_KNOWN">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredEvents = events.filter((e) => {
+  const combinedItems = [
+    ...citizens.map((c) => ({
+      id: c.id,
+      device_uuid: c.device_uuid,
+      lat: c.lat,
+      lng: c.lng,
+      status: c.status,
+      sos_type: c.sos_type,
+      is_mesh_relayed: c.mesh_hops > 0,
+      is_live: c.is_live,
+      last_seen_minutes_ago: c.last_seen_minutes_ago,
+      battery_pct: c.battery_pct,
+      drift_radius_m: c.drift_radius_m,
+      mesh_hops: c.mesh_hops,
+      created_at: new Date(Date.now() - c.last_seen_minutes_ago * 60000).toISOString(),
+      rescued: false,
+    })),
+    ...events.filter((e) => !citizens.some((c) => c.device_uuid === e.device_uuid)).map((e) => ({
+      ...e,
+      is_live: !e.is_mesh_relayed,
+      last_seen_minutes_ago: 0,
+      battery_pct: 82,
+      drift_radius_m: e.is_mesh_relayed ? 350 : 0,
+      mesh_hops: e.is_mesh_relayed ? 2 : 0,
+    })),
+  ];
+
+  const filteredEvents = combinedItems.filter((e) => {
     if (filter === "SOS" && e.status !== "SOS") return false;
     if (filter === "SAFE" && e.status !== "SAFE") return false;
-    if (filter === "HELPING" && e.status !== "HELPING") return false;
-    if (filter === "MESH" && !e.is_mesh_relayed) return false;
+    if (filter === "LIVE" && !e.is_live) return false;
+    if (filter === "LAST_KNOWN" && e.is_live) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -68,10 +98,16 @@ export default function LiveSOSFeed({
 
         {/* Search */}
         <div className="relative">
+          <label htmlFor="sos-feed-search" className="sr-only">
+            Search by UUID or triage report
+          </label>
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
+            id="sos-feed-search"
+            name="sos_feed_search"
             type="text"
             placeholder="Search by UUID or triage report..."
+            aria-label="Search by UUID or triage report"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950/70 border border-slate-700/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
@@ -88,7 +124,7 @@ export default function LiveSOSFeed({
                 : "bg-slate-800/80 text-slate-400 hover:text-slate-200"
             }`}
           >
-            All ({events.length})
+            All ({combinedItems.length})
           </button>
           <button
             onClick={() => setFilter("SOS")}
@@ -99,29 +135,28 @@ export default function LiveSOSFeed({
             }`}
           >
             <AlertTriangle className="w-3 h-3" />
-            SOS ({sosCount})
+            SOS ({combinedItems.filter((e) => e.status === "SOS").length})
           </button>
           <button
-            onClick={() => setFilter("SAFE")}
+            onClick={() => setFilter("LIVE")}
             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 min-h-[32px] ${
-              filter === "SAFE"
+              filter === "LIVE"
                 ? "bg-emerald-600 text-white font-bold"
                 : "bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 border border-emerald-500/30"
             }`}
           >
-            <CheckCircle className="w-3 h-3" />
-            Safe ({safeCount})
+            <span>● Live GPS ({combinedItems.filter((e) => e.is_live).length})</span>
           </button>
           <button
-            onClick={() => setFilter("MESH")}
+            onClick={() => setFilter("LAST_KNOWN")}
             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 min-h-[32px] ${
-              filter === "MESH"
-                ? "bg-sky-600 text-white font-bold"
-                : "bg-sky-950/40 text-sky-300 hover:bg-sky-900/50 border border-sky-500/30"
+              filter === "LAST_KNOWN"
+                ? "bg-amber-600 text-white font-bold"
+                : "bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 border border-amber-500/30"
             }`}
           >
-            <Radio className="w-3 h-3" />
-            BLE Mesh ({meshCount})
+            <Clock className="w-3 h-3" />
+            <span>Last Known ({combinedItems.filter((e) => !e.is_live).length})</span>
           </button>
         </div>
       </div>
@@ -136,52 +171,55 @@ export default function LiveSOSFeed({
           filteredEvents.map((event) => {
             const isSOS = event.status === "SOS";
             const isSafe = event.status === "SAFE";
-            const isHelping = event.status === "HELPING";
 
             return (
               <div
                 key={event.id}
-                onClick={() => onSelectEvent(event)}
+                onClick={() => onSelectEvent(event as any)}
                 className={`p-3 rounded-xl border transition-all cursor-pointer hover:border-slate-600 ${
                   event.rescued
                     ? "bg-slate-950/40 border-slate-800 opacity-60"
+                    : !event.is_live
+                    ? "bg-amber-950/20 border-amber-500/40 hover:bg-amber-950/30"
                     : isSOS
                     ? "bg-rose-950/25 border-rose-500/40 hover:bg-rose-950/40 shadow-sm shadow-rose-950/30"
-                    : isSafe
-                    ? "bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/30"
-                    : "bg-sky-950/20 border-sky-500/30 hover:bg-sky-950/30"
+                    : "bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/30"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span
                       className={`p-1.5 rounded-lg ${
-                        isSOS
+                        !event.is_live
+                          ? "bg-amber-500/20 text-amber-400"
+                          : isSOS
                           ? "bg-rose-500/20 text-rose-400"
-                          : isSafe
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-sky-500/20 text-sky-400"
+                          : "bg-emerald-500/20 text-emerald-400"
                       }`}
                     >
-                      {isSOS ? (
+                      {!event.is_live ? (
+                        <Clock className="w-4 h-4 text-amber-400" />
+                      ) : isSOS ? (
                         <AlertTriangle className="w-4 h-4 text-rose-400 animate-pulse" />
-                      ) : isSafe ? (
-                        <CheckCircle className="w-4 h-4 text-emerald-400" />
                       ) : (
-                        <HelpCircle className="w-4 h-4 text-sky-400" />
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
                       )}
                     </span>
                     <div>
                       <div className="text-xs font-bold text-white flex items-center gap-1.5">
                         <span>{isSOS ? "SOS EMERGENCY" : event.status}</span>
-                        {event.is_mesh_relayed && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-500/40 flex items-center gap-0.5">
-                            <Radio className="w-2 h-2" /> MESH
+                        {event.is_live ? (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                            LIVE GPS
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-500/40">
+                            LAST KNOWN (-{event.last_seen_minutes_ago}m)
                           </span>
                         )}
-                        {event.rescued && (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-                            RESCUED
+                        {event.is_mesh_relayed && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-500/40 flex items-center gap-0.5">
+                            <Radio className="w-2 h-2" /> MESH #{event.mesh_hops}
                           </span>
                         )}
                       </div>
@@ -191,15 +229,11 @@ export default function LiveSOSFeed({
                     </div>
                   </div>
 
-                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span>
-                      {new Date(event.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </span>
+                  <div className="text-[10px] text-slate-400 font-mono text-right">
+                    <div>{event.battery_pct}% Batt</div>
+                    {!event.is_live && event.drift_radius_m > 0 && (
+                      <div className="text-amber-400 text-[9px]">±{event.drift_radius_m}m drift</div>
+                    )}
                   </div>
                 </div>
 
@@ -212,7 +246,7 @@ export default function LiveSOSFeed({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelectEvent(event);
+                        onSelectEvent(event as any);
                       }}
                       className="text-slate-300 hover:text-white flex items-center gap-1 underline-offset-2 hover:underline min-h-[36px] px-1"
                     >

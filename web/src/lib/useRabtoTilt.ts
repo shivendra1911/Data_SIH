@@ -8,6 +8,12 @@ import { useEffect } from "react";
  */
 export function useRabtoTilt() {
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
     let mouseX = 0;
     let mouseY = 0;
     let currentRotationX = 0;
@@ -31,14 +37,16 @@ export function useRabtoTilt() {
     };
 
     const animate = () => {
-      // Smooth RAF lerp interpolation
-      currentRotationX += (mouseY * 3.5 - currentRotationX) * 0.1;
-      currentRotationY += (mouseX * 3.5 - currentRotationY) * 0.1;
+      if (!prefersReducedMotion) {
+        // Smooth RAF lerp interpolation
+        currentRotationX += (mouseY * 3.5 - currentRotationX) * 0.1;
+        currentRotationY += (mouseX * 3.5 - currentRotationY) * 0.1;
 
-      const activeCards = document.querySelectorAll<HTMLElement>(".tilt-card-physics");
-      activeCards.forEach((card) => {
-        card.style.transform = `perspective(1200px) rotateX(${-currentRotationX}deg) rotateY(${currentRotationY}deg)`;
-      });
+        const activeCards = document.querySelectorAll<HTMLElement>(".tilt-card-physics");
+        activeCards.forEach((card) => {
+          card.style.transform = `perspective(1200px) rotateX(${-currentRotationX}deg) rotateY(${currentRotationY}deg)`;
+        });
+      }
 
       animFrameId = requestAnimationFrame(animate);
     };
