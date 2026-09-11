@@ -39,6 +39,7 @@ export function useVideoScrub(videoSrc: string) {
   const scrollSpanRef = useRef(1);
   const pendingSeekTimeRef = useRef<number | null>(null);
   const activeFrameIdxRef = useRef(0);
+  const lastPRef = useRef(-1);
 
   // Binary search to find nearest frame index by microsecond timestamp
   const findNearestIndex = (targetTs: number): number => {
@@ -98,11 +99,11 @@ export function useVideoScrub(videoSrc: string) {
   // Recompute span on resize and orientationchange
   useEffect(() => {
     const updateSpan = () => {
-      const totalScroll = Math.max(
-        1,
-        document.documentElement.scrollHeight - window.innerHeight
-      );
-      scrollSpanRef.current = totalScroll;
+      const container = containerRef.current;
+      const totalScroll = container
+        ? container.offsetHeight - window.innerHeight
+        : (document.documentElement.scrollHeight - window.innerHeight);
+      scrollSpanRef.current = totalScroll > 0 ? totalScroll : 1;
     };
 
     updateSpan();
@@ -143,10 +144,11 @@ export function useVideoScrub(videoSrc: string) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const getProgress = () => {
-      const totalScroll = Math.max(
-        1,
-        document.documentElement.scrollHeight - window.innerHeight
-      );
+      const container = containerRef.current;
+      const totalScroll = container
+        ? container.offsetHeight - window.innerHeight
+        : (document.documentElement.scrollHeight - window.innerHeight);
+      if (totalScroll <= 0) return 0;
       return Math.min(1, Math.max(0, window.scrollY / totalScroll));
     };
 
@@ -180,7 +182,10 @@ export function useVideoScrub(videoSrc: string) {
       const dt = Math.min(0.1, deltaSeconds);
 
       const p = getProgress();
-      setScrollProgress(p);
+      if (Math.abs(p - lastPRef.current) > 0.001) {
+        lastPRef.current = p;
+        setScrollProgress(p);
+      }
 
       const dur = durRef.current;
       if (dur > 0) {
@@ -203,7 +208,10 @@ export function useVideoScrub(videoSrc: string) {
 
     const onScroll = () => {
       const p = getProgress();
-      setScrollProgress(p);
+      if (Math.abs(p - lastPRef.current) > 0.001) {
+        lastPRef.current = p;
+        setScrollProgress(p);
+      }
       const dur = durRef.current;
       if (dur > 0) {
         targetRef.current = p * dur;

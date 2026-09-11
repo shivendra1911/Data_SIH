@@ -1,3 +1,4 @@
+@'
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -50,15 +51,10 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
     if (!container) return;
     const totalScroll = container.offsetHeight - window.innerHeight;
     if (totalScroll > 0) {
-      const targetY = totalScroll * targetProgress;
-      if ((window as any).__lenis) {
-        (window as any).__lenis.scrollTo(targetY);
-      } else {
-        window.scrollTo({
-          top: targetY,
-          behavior: "smooth",
-        });
-      }
+      window.scrollTo({
+        top: totalScroll * targetProgress,
+        behavior: "smooth",
+      });
     }
   };
 
@@ -392,3 +388,4 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
     </div>
   );
 }
+'@ | Set-Content -Path "C:\Users\SHIVENDRA\.gemini\antigravity\scratch\Data_SIH\web\src\components\CinematicHero\ScrollVideoHero.tsx" -Encoding utf8
