@@ -1,61 +1,70 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft, SlidersHorizontal, Share2, Plus } from 'lucide-react-native';
+import { Activity, Radio, Map, Droplets } from 'lucide-react-native';
+
+export type CitizenTab = 'status' | 'mesh' | 'map';
 
 interface TopPillNavProps {
-  activeTab: 'telemetry' | 'rescue' | 'map';
-  onTabChange: (tab: 'telemetry' | 'rescue' | 'map') => void;
-  onFilterPress?: () => void;
-  onActionPress?: () => void;
+  activeTab: CitizenTab;
+  onTabChange: (tab: CitizenTab) => void;
+  networkMode: 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
 }
+
+const TABS: { id: CitizenTab; label: string; Icon: React.ComponentType<any> }[] = [
+  { id: 'status', label: 'Status', Icon: Activity },
+  { id: 'mesh', label: 'Mesh', Icon: Radio },
+  { id: 'map', label: 'Map', Icon: Map },
+];
+
+const MODE_COLOR: Record<string, string> = {
+  ONLINE: '#10b981',
+  BLE_MESH: '#f59e0b',
+  OFFLINE_QUEUED: '#ef4444',
+};
+
+const MODE_LABEL: Record<string, string> = {
+  ONLINE: '4G Live',
+  BLE_MESH: 'BLE Mesh',
+  OFFLINE_QUEUED: 'Offline',
+};
 
 export const TopPillNav: React.FC<TopPillNavProps> = ({
   activeTab,
   onTabChange,
-  onFilterPress,
-  onActionPress,
+  networkMode,
 }) => {
+  const dotColor = MODE_COLOR[networkMode] || '#10b981';
+  const modeLabel = MODE_LABEL[networkMode] || 'Online';
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
-        <ArrowLeft size={18} color="#1e293b" />
-      </TouchableOpacity>
-
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.pillTab, activeTab === 'telemetry' && styles.pillTabActive]}
-          onPress={() => onTabChange('telemetry')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pillText, activeTab === 'telemetry' && styles.pillTextActive]}>
-            Telemetry
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.pillTab, activeTab === 'rescue' && styles.pillTabActive]}
-          onPress={() => onTabChange('rescue')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pillText, activeTab === 'rescue' && styles.pillTextActive]}>
-            Rescue
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.pillTab, activeTab === 'map' && styles.pillTabActive]}
-          onPress={() => onTabChange('map')}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pillText, activeTab === 'map' && styles.pillTextActive]}>
-            Live Map
-          </Text>
-        </TouchableOpacity>
+      {/* App Logo + Network Status */}
+      <View style={styles.logoBlock}>
+        <Droplets size={18} color="#2563eb" />
+        <Text style={styles.logoText}>NeerNetra</Text>
+        <View style={[styles.netDot, { backgroundColor: dotColor }]} />
+        <Text style={[styles.netLabel, { color: dotColor }]}>{modeLabel}</Text>
       </View>
 
-      <TouchableOpacity style={styles.iconCircle} onPress={onFilterPress} activeOpacity={0.7}>
-        <SlidersHorizontal size={18} color="#1e293b" />
-      </TouchableOpacity>
+      {/* Tab Pills */}
+      <View style={styles.tabContainer}>
+        {TABS.map(({ id, label, Icon }) => {
+          const isActive = activeTab === id;
+          return (
+            <TouchableOpacity
+              key={id}
+              style={[styles.pillTab, isActive && styles.pillTabActive]}
+              onPress={() => onTabChange(id)}
+              activeOpacity={0.8}
+            >
+              <Icon size={14} color={isActive ? '#0f172a' : '#64748b'} />
+              <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 };
@@ -69,32 +78,41 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'transparent',
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
+  logoBlock: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    gap: 5,
+  },
+  logoText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+  },
+  netDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  netLabel: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderRadius: 24,
     padding: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    borderColor: 'rgba(0, 0, 0, 0.06)',
   },
   pillTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   pillTabActive: {
@@ -106,7 +124,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pillText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
   },

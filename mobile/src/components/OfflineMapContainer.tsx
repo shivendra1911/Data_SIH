@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   coordFooter: {
     flexDirection: 'row',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,

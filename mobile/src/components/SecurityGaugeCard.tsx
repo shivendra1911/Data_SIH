@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Path, G } from 'react-native-svg';
+import Svg, { Path, G, Circle } from 'react-native-svg';
 import { ZonePrediction } from '../types';
+import { Droplets, ThermometerSun, CloudRain, AlertTriangle } from 'lucide-react-native';
 
 interface SecurityGaugeCardProps {
   prediction: ZonePrediction | null;
@@ -11,57 +12,85 @@ export const SecurityGaugeCard: React.FC<SecurityGaugeCardProps> = ({ prediction
   const prob = prediction ? prediction.flood_probability_percent : 85.5;
   const alertColor = prediction ? prediction.alert_color : 'RED';
   const trigger = prediction ? prediction.primary_trigger : 'GLOF & Torrential Rainfall';
+  const zoneId = prediction ? prediction.zone_id : 'chamoli_01';
+  const lastUpdated = prediction?.last_updated
+    ? new Date(prediction.last_updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '--:--';
 
-  // SVG Gauge calculations for a 180-degree semi circle
+  // SVG Gauge — 180-degree semicircle
   const radius = 70;
   const strokeWidth = 16;
   const cx = 100;
   const cy = 90;
 
-  // Percentage to angle (0 to 180 degrees)
   const angle = (prob / 100) * 180;
-  
-  // Convert polar coordinates to Cartesian
-  const polarToCartesian = (centerX: number, centerY: number, r: number, angleInDegrees: number) => {
-    const angleInRadians = ((angleInDegrees - 180) * Math.PI) / 180.0;
-    return {
-      x: centerX + r * Math.cos(angleInRadians),
-      y: centerY + r * Math.sin(angleInRadians),
-    };
+
+  const polarToCartesian = (centerX: number, centerY: number, r: number, deg: number) => {
+    const rad = ((deg - 180) * Math.PI) / 180.0;
+    return { x: centerX + r * Math.cos(rad), y: centerY + r * Math.sin(rad) };
   };
 
   const describeArc = (x: number, y: number, r: number, startAngle: number, endAngle: number) => {
     const start = polarToCartesian(x, y, r, endAngle);
     const end = polarToCartesian(x, y, r, startAngle);
     const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
-    return ['M', start.x, start.y, 'A', r, r, 0, largeArcFlag, 0, end.x, end.y].join(' ');
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
   };
 
   const backgroundArcPath = describeArc(cx, cy, radius, 0, 180);
   const activeArcPath = describeArc(cx, cy, radius, 0, Math.min(angle, 179.9));
 
   const getGaugeColor = () => {
-    if (alertColor === 'RED') return '#f59e0b'; // Amber yellow matching reference image!
+    if (alertColor === 'RED') return '#ef4444';
     if (alertColor === 'ORANGE') return '#f97316';
     return '#10b981';
   };
 
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardHeaderTitle}>Telemetry & Flood Risk</Text>
+  const getAlertBg = () => {
+    if (alertColor === 'RED') return '#fff1f2';
+    if (alertColor === 'ORANGE') return '#fff7ed';
+    return '#f0fdf4';
+  };
 
+  const getAlertBorder = () => {
+    if (alertColor === 'RED') return '#fecdd3';
+    if (alertColor === 'ORANGE') return '#fed7aa';
+    return '#bbf7d0';
+  };
+
+  const getRiskText = () => {
+    if (alertColor === 'RED') return 'CRITICAL FLOOD RISK';
+    if (alertColor === 'ORANGE') return 'ELEVATED FLOOD RISK';
+    return 'LOW RISK — SAFE ZONE';
+  };
+
+  return (
+    <View style={[styles.card, { backgroundColor: getAlertBg(), borderColor: getAlertBorder() }]}>
+      {/* Zone + Time header */}
+      <View style={styles.topRow}>
+        <View style={styles.zoneTag}>
+          <Droplets size={13} color={getGaugeColor()} />
+          <Text style={[styles.zoneText, { color: getGaugeColor() }]}>
+            {zoneId.toUpperCase().replace('_', ' ')}
+          </Text>
+        </View>
+        <Text style={styles.updatedText}>Updated {lastUpdated}</Text>
+      </View>
+
+      {/* Risk level label */}
+      <Text style={[styles.riskTitle, { color: getGaugeColor() }]}>{getRiskText()}</Text>
+
+      {/* Gauge SVG */}
       <View style={styles.gaugeContainer}>
         <Svg width={200} height={110} viewBox="0 0 200 110">
           <G>
-            {/* Dark background track */}
             <Path
               d={backgroundArcPath}
               fill="none"
-              stroke="#1e293b"
+              stroke="#e2e8f0"
               strokeWidth={strokeWidth}
               strokeLinecap="round"
             />
-            {/* Active percentage arc */}
             <Path
               d={activeArcPath}
               fill="none"
@@ -73,17 +102,32 @@ export const SecurityGaugeCard: React.FC<SecurityGaugeCardProps> = ({ prediction
         </Svg>
 
         <View style={styles.textOverlay}>
-          <Text style={styles.percentText}>{prob.toFixed(0)}%</Text>
-          <Text style={styles.riskLabel}>
-            {alertColor === 'RED' ? 'High Flood Risk' : alertColor === 'ORANGE' ? 'Moderate Risk' : 'Normal Risk'}
-          </Text>
+          <Text style={[styles.percentText, { color: getGaugeColor() }]}>{prob.toFixed(0)}%</Text>
+          <Text style={styles.probLabel}>AI Flood Risk</Text>
         </View>
       </View>
 
-      <View style={styles.footerRow}>
-        <View style={styles.triggerPill}>
-          <View style={[styles.dot, { backgroundColor: getGaugeColor() }]} />
-          <Text style={styles.triggerText}>{trigger}</Text>
+      {/* Trigger pill */}
+      <View style={[styles.triggerPill, { borderColor: getGaugeColor() + '40' }]}>
+        <AlertTriangle size={12} color={getGaugeColor()} />
+        <Text style={[styles.triggerText, { color: getGaugeColor() }]}>{trigger}</Text>
+      </View>
+
+      {/* Status row */}
+      <View style={styles.statusRow}>
+        <View style={styles.statItem}>
+          <CloudRain size={14} color="#64748b" />
+          <Text style={styles.statLabel}>96.4% Model Acc.</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.statItem}>
+          <ThermometerSun size={14} color="#64748b" />
+          <Text style={styles.statLabel}>RandomForest AI</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.statItem}>
+          <Droplets size={14} color="#64748b" />
+          <Text style={styles.statLabel}>Real-time Sensors</Text>
         </View>
       </View>
     </View>
@@ -92,28 +136,47 @@ export const SecurityGaugeCard: React.FC<SecurityGaugeCardProps> = ({ prediction
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
     borderRadius: 24,
     paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
     marginHorizontal: 16,
-    marginVertical: 10,
+    marginVertical: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderWidth: 1.5,
     alignItems: 'center',
   },
-  cardHeaderTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 8,
-    letterSpacing: -0.5,
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 6,
+  },
+  zoneTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  zoneText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  updatedText: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  riskTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
   gaugeContainer: {
     alignItems: 'center',
@@ -128,41 +191,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   percentText: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontSize: 38,
+    fontWeight: '900',
     letterSpacing: -1,
   },
-  riskLabel: {
-    fontSize: 13,
+  probLabel: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#94a3b8',
     marginTop: -2,
-  },
-  footerRow: {
-    marginTop: 4,
-    width: '100%',
-    alignItems: 'center',
   },
   triggerPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    marginTop: 4,
+    marginBottom: 12,
   },
   triggerText: {
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  statItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#64748b',
     fontWeight: '600',
-    color: '#334155',
+  },
+  divider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#e2e8f0',
   },
 });

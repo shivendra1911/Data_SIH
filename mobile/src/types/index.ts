@@ -16,7 +16,7 @@ export interface SOSPayload {
   device_uuid: string;
   lat: number;
   lng: number;
-  status: SOSStatus;
+  status: SOSStatus | 'SAFE';
   sos_type?: SOSType;
   is_mesh_relayed: boolean;
   timestamp?: string;

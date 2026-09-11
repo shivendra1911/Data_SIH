@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,10 +7,11 @@ import {
   ScrollView,
   RefreshControl,
   Text,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ZonePrediction, NetworkMode, LocationSyncPayload } from '../types';
-import { fetchCurrentPrediction, flushOfflineSOSQueue, sendSOSPayload } from '../services/api';
+import { ZonePrediction, NetworkMode, LocationSyncPayload, SOSType, SOSPayload } from '../types';
+import { fetchCurrentPrediction, sendSOSPayload, flushOfflineSOSQueue } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
 import { meshManager, meshEngine } from '../services/bluetoothMesh';
 import {
@@ -25,23 +26,22 @@ import {
   stopDangerTimer,
 } from '../services/dangerEscalation';
 
-import { TopPillNav } from '../components/TopPillNav';
+import { TopPillNav, CitizenTab } from '../components/TopPillNav';
 import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
-import { MapSessionCard } from '../components/MapSessionCard';
-import { PeopleBeaconCard } from '../components/PeopleBeaconCard';
-import { DarkSessionDrawer } from '../components/DarkSessionDrawer';
-import { TriageModal } from '../components/TriageModal';
+import { NearbyVictimsHelpCard } from '../components/NearbyVictimsHelpCard';
+import { MeshRelayFeed } from '../components/MeshRelayFeed';
 import { MeshStatusBadge } from '../components/MeshStatusBadge';
 import { BluetoothWalkieTalkie } from '../components/BluetoothWalkieTalkie';
 import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
 import { OfflineMapContainer } from '../components/OfflineMapContainer';
+import { SOSBigButton } from '../components/SOSBigButton';
 import { Navigation } from 'lucide-react-native';
 
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
 export const HomeScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'telemetry' | 'rescue' | 'map'>('telemetry');
+  const [activeTab, setActiveTab] = useState<CitizenTab>('status');
   const [prediction, setPrediction] = useState<ZonePrediction | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -53,6 +53,8 @@ export const HomeScreen: React.FC = () => {
   const [lastLocation, setLastLocation] = useState<LocationSyncPayload | null>(null);
   const [showRedAlertOverlay, setShowRedAlertOverlay] = useState<boolean>(false);
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
+  const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
+  const [userName] = useState<string>('Citizen');
 
   useEffect(() => {
     initDeviceUuid();
@@ -68,13 +70,11 @@ export const HomeScreen: React.FC = () => {
         await AsyncStorage.setItem(DEVICE_UUID_KEY, storedUuid);
       }
       setDeviceUuid(storedUuid);
-
-      // Start 5-minute periodic location sync routine
       start5MinPeriodicLocationTracker(storedUuid, 'chamoli_01');
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
     } catch (e) {
-      console.warn('Failed to initialize device UUID & location tracker:', e);
+      console.warn('[HomeScreen] Device UUID init failed:', e);
     }
   };
 
@@ -85,12 +85,10 @@ export const HomeScreen: React.FC = () => {
       setPrediction(data);
       setNetworkMode('ONLINE');
 
-      // Trigger push notification & 5-minute danger countdown if RED ZONE alert is active
       if (data.alert_color === 'RED' || data.flood_probability_percent > 75.0) {
         triggerRedZoneEmergencyAlert(data.zone_id, data.flood_probability_percent, data.primary_trigger);
         setShowRedAlertOverlay(true);
 
-        // Initiate 5-minute countdown for auto-danger escalation
         startRedZoneDangerTimer(
           deviceUuid,
           300,
@@ -102,7 +100,7 @@ export const HomeScreen: React.FC = () => {
         );
       }
     } catch (e) {
-      console.warn('Prediction load error:', e);
+      console.warn('[HomeScreen] Prediction offline — switching to BLE mesh mode:', e);
       setNetworkMode('BLE_MESH');
     } finally {
       setLoading(false);
@@ -127,21 +125,56 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  // Citizen taps "I AM SAFE"
   const handleConfirmSafe = async () => {
     await markUserAsSafeConfirmed(deviceUuid);
     setRemainingCountdown(null);
     stopDangerTimer();
+    setSosStatus('SAFE');
+
+    const lat = lastLocation ? lastLocation.lat : 30.5573;
+    const lng = lastLocation ? lastLocation.lng : 79.5642;
 
     await sendSOSPayload({
       device_uuid: deviceUuid,
-      lat: lastLocation ? lastLocation.lat : 30.5573,
-      lng: lastLocation ? lastLocation.lng : 79.5642,
+      lat,
+      lng,
       status: 'SAFE',
       is_mesh_relayed: networkMode === 'BLE_MESH',
       timestamp: new Date().toISOString(),
     });
-
     await checkOfflineQueue();
+  };
+
+  // Citizen selects an SOS type
+  const handleSOSTrigger = async (type: SOSType) => {
+    setSosStatus('SOS');
+    const lat = lastLocation ? lastLocation.lat : 30.5573;
+    const lng = lastLocation ? lastLocation.lng : 79.5642;
+
+    const payload: SOSPayload = {
+      device_uuid: deviceUuid,
+      lat,
+      lng,
+      status: 'SOS',
+      sos_type: type,
+      is_mesh_relayed: networkMode === 'BLE_MESH',
+      timestamp: new Date().toISOString(),
+    };
+
+    // If online, post to backend; otherwise broadcast via BLE mesh
+    if (networkMode !== 'BLE_MESH') {
+      await sendSOSPayload(payload);
+    } else {
+      await meshEngine.broadcastMultiHopSOS(payload);
+    }
+    await checkOfflineQueue();
+  };
+
+  // SOS triggered from Red Zone overlay
+  const handleEmergencySOSFromOverlay = async () => {
+    setShowRedAlertOverlay(false);
+    await handleSOSTrigger('TRAPPED');
   };
 
   const handleSyncQueue = async () => {
@@ -154,32 +187,30 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
-  const handleEmergencySOSFromOverlay = async () => {
-    setShowRedAlertOverlay(false);
-    await sendSOSPayload({
-      device_uuid: deviceUuid,
-      lat: lastLocation ? lastLocation.lat : 30.5573,
-      lng: lastLocation ? lastLocation.lng : 79.5642,
-      status: 'SOS',
-      sos_type: 'TRAPPED',
-      is_mesh_relayed: networkMode === 'BLE_MESH',
-      timestamp: new Date().toISOString(),
-    });
-    await checkOfflineQueue();
-  };
-
   const peers = meshEngine.getConnectedPeers();
+
+  const isRedZone =
+    prediction?.alert_color === 'RED' ||
+    (prediction?.flood_probability_percent ?? 0) > 75;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#eaebe5" />
 
-      {/* Top Navigation Pill Bar */}
+      {/* Top Nav with NeerNetra branding and tab pills */}
       <TopPillNav
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
-        onFilterPress={onRefresh}
+        onTabChange={setActiveTab}
+        networkMode={networkMode}
       />
+
+      {/* 5-minute danger countdown — always rendered above all tabs */}
+      {remainingCountdown !== null && remainingCountdown > 0 && (
+        <SafeConfirmationCountdown
+          remainingSeconds={remainingCountdown}
+          onConfirmSafe={handleConfirmSafe}
+        />
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -188,7 +219,7 @@ export const HomeScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f59e0b" />
         }
       >
-        {/* Connectivity & Mesh Status Badge */}
+        {/* Network / Mesh status badge (always visible) */}
         <MeshStatusBadge
           mode={networkMode}
           peerCount={peerCount}
@@ -197,75 +228,76 @@ export const HomeScreen: React.FC = () => {
           syncing={syncing}
         />
 
-        {/* 5-Min Last Known Location Bar */}
+        {/* Last known GPS location bar */}
         {lastLocation && (
           <View style={styles.locationSyncBar}>
-            <Navigation size={14} color="#0284c7" />
+            <Navigation size={13} color="#0284c7" />
             <Text style={styles.locSyncText}>
-              5-Min GPS Sync: <Text style={styles.boldCoords}>{lastLocation.lat.toFixed(4)}, {lastLocation.lng.toFixed(4)}</Text> • Battery {lastLocation.battery_level}%
+              5-Min GPS Sync:{' '}
+              <Text style={styles.boldCoords}>
+                {lastLocation.lat.toFixed(4)}, {lastLocation.lng.toFixed(4)}
+              </Text>{' '}
+              • Battery {lastLocation.battery_level ?? '--'}%
             </Text>
           </View>
         )}
 
-        {/* 5-Minute Unresponsive Safety Confirmation Banner */}
-        {remainingCountdown !== null && remainingCountdown > 0 && (
-          <SafeConfirmationCountdown
-            remainingSeconds={remainingCountdown}
-            onConfirmSafe={handleConfirmSafe}
-          />
-        )}
-
-        {/* Tab 1: Telemetry & Overview */}
-        {activeTab === 'telemetry' && (
+        {/* ========== TAB 1: STATUS ========== */}
+        {activeTab === 'status' && (
           <>
+            {/* Flood risk gauge */}
             <SecurityGaugeCard prediction={prediction} />
-            <OfflineMapContainer
-              lastLocation={lastLocation}
-              peers={peers}
-              isRedZone={prediction?.alert_color === 'RED'}
+
+            {/* Primary SOS + I AM SAFE buttons */}
+            <SOSBigButton
+              onSOSTrigger={handleSOSTrigger}
+              onConfirmSafe={handleConfirmSafe}
+              currentStatus={sosStatus}
             />
-            <BluetoothWalkieTalkie />
-            <PeopleBeaconCard beacons={[]} />
-            <DarkSessionDrawer />
+
+            {/* Nearby citizens needing / offering help */}
+            <NearbyVictimsHelpCard />
           </>
         )}
 
-        {/* Tab 2: Rescue & Triage Beacon */}
-        {activeTab === 'rescue' && (
+        {/* ========== TAB 2: MESH ========== */}
+        {activeTab === 'mesh' && (
           <>
-            <TriageModal
-              deviceUuid={deviceUuid}
-              networkMode={networkMode}
-              onStatusSubmitted={() => checkOfflineQueue()}
-            />
+            {/* Walkie-talkie offline chat */}
             <BluetoothWalkieTalkie />
-            <OfflineMapContainer
-              lastLocation={lastLocation}
-              peers={peers}
-              isRedZone={prediction?.alert_color === 'RED'}
-            />
-            <PeopleBeaconCard beacons={[]} />
-            <DarkSessionDrawer />
+
+            {/* Nearby citizens reachable over BLE */}
+            <NearbyVictimsHelpCard />
+
+            {/* Active relay feed */}
+            <MeshRelayFeed peers={peers} />
           </>
         )}
 
-        {/* Tab 3: Live Map Focus */}
+        {/* ========== TAB 3: MAP ========== */}
         {activeTab === 'map' && (
           <>
+            {/* Offline vector map with GPS pin and BLE peer markers */}
             <OfflineMapContainer
               lastLocation={lastLocation}
               peers={peers}
-              isRedZone={prediction?.alert_color === 'RED'}
+              isRedZone={isRedZone}
             />
-            <MapSessionCard />
-            <BluetoothWalkieTalkie />
-            <SecurityGaugeCard prediction={prediction} />
-            <DarkSessionDrawer />
+
+            {/* Still show SOS buttons so citizen can act from map tab */}
+            <SOSBigButton
+              onSOSTrigger={handleSOSTrigger}
+              onConfirmSafe={handleConfirmSafe}
+              currentStatus={sosStatus}
+            />
+
+            {/* Compact relay list */}
+            <MeshRelayFeed peers={peers} />
           </>
         )}
       </ScrollView>
 
-      {/* Full Screen Red Zone Warning Notification Modal Overlay */}
+      {/* Full-screen Red Zone warning modal */}
       <RedZoneAlertOverlay
         visible={showRedAlertOverlay}
         prediction={prediction}
@@ -283,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eaebe5',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
   locationSyncBar: {
     flexDirection: 'row',
@@ -296,12 +328,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 14,
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   locSyncText: {
     color: '#0369a1',
     fontSize: 11,
     fontWeight: '600',
+    flex: 1,
   },
   boldCoords: {
     color: '#0f172a',
