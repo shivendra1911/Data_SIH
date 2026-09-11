@@ -109,6 +109,9 @@ export interface DisasterEpicenter {
 export interface CitizenLocation {
   id: string;
   device_uuid: string;
+  zone_id?: ZoneId;
+  name?: string;
+  phone?: string;
   lat: number;
   lng: number;
   is_live: boolean;
@@ -118,8 +121,55 @@ export interface CitizenLocation {
   battery_pct: number;
   status: "SOS" | "SAFE" | "HELPING";
   sos_type?: string;
+  medical_distress?: "NONE" | "CRITICAL_INJURY" | "HYPOTHERMIA" | "ELDERLY_IMMOBILE" | "WATER_RISING";
   mesh_hops: number;
+  mesh_relay_chain?: string[];
   breadcrumbs?: [number, number][];
+}
+
+export interface SafeEvacuationRoute {
+  id: string;
+  zone_id: ZoneId;
+  route_name: string;
+  start_point_name: string;
+  start_coords: [number, number];
+  assembly_point_name: string;
+  assembly_coords: [number, number];
+  elevation_gain_m: number;
+  distance_km: number;
+  walk_time_minutes: number;
+  risk_avoidance_status: "100% CLEAR OF FLOOD PLAIN" | "ELEVATED RIDGE TRAIL" | "HIGHWAY ELEVATED CORRIDOR";
+  waypoints: [number, number][];
+  shelter_capacity: number;
+  shelter_facilities: string[];
+}
+
+export interface EmergencyResponder {
+  id: string;
+  zone_id: ZoneId;
+  type: "AMBULANCE" | "POLICE" | "NDRF" | "SDRF";
+  unit_name: string;
+  station_location: string;
+  coords: [number, number];
+  contact_number: string;
+  personnel_count: number;
+  vehicle_fleet: string;
+  distance_km: number;
+  eta_minutes: number;
+  status: "STANDBY" | "DISPATCHED" | "EN_ROUTE" | "ON_SCENE";
+  equipment: string[];
+}
+
+export interface EvacuationGuidelines {
+  zone_id: ZoneId;
+  zone_name: string;
+  alert_level: "RED" | "ORANGE";
+  alarm_tone: string;
+  immediate_actions: string[];
+  high_ground_directives: string[];
+  offline_mesh_protocol: string;
+  disaster_radio_mhz: string;
+  emergency_helplines: { agency: string; phone: string }[];
 }
 
 export interface RegionalAlert {

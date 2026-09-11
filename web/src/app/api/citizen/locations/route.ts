@@ -16,10 +16,14 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+  const zoneIdFilter = searchParams.get("zone_id");
   const statusFilter = searchParams.get("status");
   const isLiveFilter = searchParams.get("is_live");
 
   let result = citizenStore;
+  if (zoneIdFilter) {
+    result = result.filter((c) => !c.zone_id || c.zone_id === zoneIdFilter);
+  }
   if (statusFilter) {
     result = result.filter((c) => c.status === statusFilter);
   }

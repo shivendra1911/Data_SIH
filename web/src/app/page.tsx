@@ -15,6 +15,9 @@ import ClusterTriagePanel from "@/components/Dashboard/ClusterTriagePanel";
 import LiveSOSFeed from "@/components/Dashboard/LiveSOSFeed";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar";
+import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
+import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
+import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
 
 // Dynamically import Vectrus-style WebCodecs Scroll Video Hero with SSR disabled
 const ScrollVideoHero = dynamic(
@@ -42,6 +45,9 @@ import {
   CitizenLocation,
   RegionalAlert,
   NationalSentinelScan,
+  SafeEvacuationRoute,
+  EmergencyResponder,
+  EvacuationGuidelines,
 } from "@/lib/types";
 
 import {
@@ -49,6 +55,10 @@ import {
   INITIAL_MOCK_CLUSTERS,
   INITIAL_MOCK_SOS_EVENTS,
   INITIAL_CITIZEN_LOCATIONS,
+  SAFE_EVACUATION_ROUTES,
+  EMERGENCY_RESPONDERS_GRID,
+  ZONE_EVACUATION_GUIDELINES,
+  DEFAULT_EMERGENCY_RESPONDERS,
 } from "@/lib/constants";
 import { fetchActiveClusters, fetchCurrentPrediction } from "@/lib/api";
 import { subscribeToSOSEvents } from "@/lib/supabase";
@@ -84,10 +94,82 @@ export default function DashboardPage() {
   const [showRescueLayer, setShowRescueLayer] = useState<boolean>(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
   const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
+  const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
   const [citizens, setCitizens] = useState<CitizenLocation[]>(INITIAL_CITIZEN_LOCATIONS);
   const [sentinelScan, setSentinelScan] = useState<NationalSentinelScan | null>(null);
   const [loadingScan, setLoadingScan] = useState<boolean>(false);
   const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(true);
+
+  // Active zone data derivations
+  const activeSafeRoutes: SafeEvacuationRoute[] =
+    SAFE_EVACUATION_ROUTES[selectedZone.id] ||
+    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
+    [];
+
+  const activeResponders: EmergencyResponder[] =
+    EMERGENCY_RESPONDERS_GRID[selectedZone.id] ||
+    DEFAULT_EMERGENCY_RESPONDERS;
+
+  const activeGuidelines: EvacuationGuidelines | undefined =
+    ZONE_EVACUATION_GUIDELINES[selectedZone.id];
+
+  const activeCitizens: CitizenLocation[] = citizens.filter(
+    (c) => !c.zone_id || c.zone_id === selectedZone.id
+  );
+
+  const handleDispatchResponderUnit = async (responder: EmergencyResponder) => {
+    try {
+      await fetch("/api/responders/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zone_id: selectedZone.id,
+          responder_id: responder.id,
+          target_coords: selectedZone.center,
+          incident_description: `Urgent tactical dispatch for ${selectedZone.name}`,
+        }),
+      });
+      if (soundEnabled) playAlertSound();
+    } catch (e) {
+      console.warn("Responder dispatch error:", e);
+    }
+  };
+
+  const handleMultiAgencyDispatch = async () => {
+    try {
+      await fetch("/api/responders/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zone_id: selectedZone.id,
+          agency_type: "ALL",
+          target_coords: selectedZone.center,
+          incident_description: `MULTI-AGENCY CRITICAL FLOOD DISPATCH: All branches mobilize for ${selectedZone.name}`,
+        }),
+      });
+      if (soundEnabled) playAlertSound();
+    } catch (e) {
+      console.warn("Multi-agency dispatch error:", e);
+    }
+  };
+
+  const handleBroadcastGuidelines = async (message?: string) => {
+    try {
+      await fetch("/api/guidelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zone_id: selectedZone.id,
+          message:
+            message ||
+            `MANDATORY EVACUATION GUIDELINES DISPATCHED for ${selectedZone.name}. Head toward designated high ground safe routes immediately.`,
+        }),
+      });
+      if (soundEnabled) playAlertSound();
+    } catch (e) {
+      console.warn("Guideline broadcast error:", e);
+    }
+  };
 
   // High-frequency alert sound synthesizer
   const playAlertSound = useCallback(() => {
@@ -330,6 +412,7 @@ export default function DashboardPage() {
           onSimulateSOS={handleSimulateSOS}
           onOpenMobileModal={() => setIsMobileModalOpen(true)}
           onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
+          onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
           floodRiskPercent={displayedRisk}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled((prev) => !prev)}
@@ -374,7 +457,9 @@ export default function DashboardPage() {
                 sosEvents={sosEvents}
                 clusters={clusters}
                 activeZone={selectedZone}
-                citizens={citizens}
+                citizens={activeCitizens}
+                safeRoutes={activeSafeRoutes}
+                responders={activeResponders}
                 selectedEventId={selectedEventId}
                 onSelectEvent={handleSelectEvent}
                 onDispatchCluster={handleDispatchCluster}
@@ -420,7 +505,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Primary Row 3: Tactical Distress Beacons & Automated K-Means Rescue Triage */}
+        {/* Primary Row 3: Citizen Distress Telemetry Matrix (Live GPS vs Last Known Offline) */}
+        <CitizenTrackingMatrix
+          citizens={activeCitizens}
+          onFocusCoordinates={(coords) => handleFocusCoords(coords[0], coords[1])}
+          onDispatchToCitizen={(cit) => {
+            const foundResp = activeResponders[0];
+            if (foundResp) handleDispatchResponderUnit(foundResp);
+          }}
+        />
+
+        {/* Primary Row 4: Emergency Response Grid (Ambulances, Police & NDRF/SDRF) */}
+        <EmergencyResponderGrid
+          responders={activeResponders}
+          zoneName={selectedZone.name}
+          onDispatchUnit={handleDispatchResponderUnit}
+          onMultiAgencyDispatch={handleMultiAgencyDispatch}
+        />
+
+        {/* Primary Row 5: Tactical Distress Beacons & Automated K-Means Rescue Triage */}
         <div className="tilt-card rounded-2xl glass-panel border border-white/60 p-4 space-y-4 shadow-sm mx-0">
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
@@ -489,7 +592,16 @@ export default function DashboardPage() {
         riskPercent={displayedRisk}
       />
 
-      </div>
+      {/* Safe Evacuation Routes & Survival Guidelines Modal */}
+      <SafeRouteGuidelineModal
+        isOpen={isGuidelineModalOpen}
+        onClose={() => setIsGuidelineModalOpen(false)}
+        activeZone={selectedZone}
+        safeRoutes={activeSafeRoutes}
+        guidelines={activeGuidelines}
+        onBroadcastGuidelines={handleBroadcastGuidelines}
+      />
+    </div>
 
       {/* Floating Quick-Switch Pill */}
       <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 glass-panel border border-white/60 rounded-full p-1.5 shadow-xl">

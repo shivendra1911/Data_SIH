@@ -15,6 +15,7 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
+  Compass,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -25,6 +26,7 @@ interface HeaderProps {
   onSimulateSOS: () => void;
   onOpenMobileModal: () => void;
   onOpenRegionalBroadcast?: () => void;
+  onOpenSafeRoutesGuidelines?: () => void;
   floodRiskPercent: number;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -36,6 +38,7 @@ export default function Header({
   onSimulateSOS,
   onOpenMobileModal,
   onOpenRegionalBroadcast,
+  onOpenSafeRoutesGuidelines,
   floodRiskPercent,
   soundEnabled,
   onToggleSound,
@@ -116,6 +119,18 @@ export default function Header({
 
         {/* RIGHT: Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Solid Safe Routes & Guidelines */}
+          {onOpenSafeRoutesGuidelines && (
+            <button
+              onClick={onOpenSafeRoutesGuidelines}
+              aria-label="Open Verified Safe Evacuation Routes and Survival Guidelines"
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold border border-emerald-400 shadow-sm text-xs min-h-[44px] flex items-center gap-1.5 transition active:scale-[0.98]"
+            >
+              <Compass className="w-3.5 h-3.5 text-white" aria-hidden />
+              <span>Safe Routes & Guide</span>
+            </button>
+          )}
+
           {/* Solid Broadcast Alert */}
           <button
             onClick={onOpenRegionalBroadcast}

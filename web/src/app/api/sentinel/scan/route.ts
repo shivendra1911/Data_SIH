@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { INDIA_FLOOD_ZONES } from "@/lib/constants";
+import { INDIA_FLOOD_ZONES, SAFE_EVACUATION_ROUTES } from "@/lib/constants";
 import { evaluateAIFloodRisk } from "@/lib/aiEngine";
 import { ScannedZoneSummary, NationalSentinelScan } from "@/lib/types";
 
@@ -42,6 +42,11 @@ export async function GET(request: Request) {
         if (!lastDispatch || now - lastDispatch.timestamp > 5 * 60 * 1000) {
           const alertId = `auto-sos-${zone.id}-${Date.now().toString(36)}`;
           const targetNodes = Math.floor(1200 + Math.random() * 450);
+          const safeRoutesForZone = SAFE_EVACUATION_ROUTES[zone.id] || SAFE_EVACUATION_ROUTES["chamoli_01"];
+          const primarySafeRoute = safeRoutesForZone?.[0];
+          const safeRouteText = primarySafeRoute
+            ? ` Designated Safe Route: ${primarySafeRoute.route_name} to ${primarySafeRoute.assembly_point_name} (+${primarySafeRoute.elevation_gain_m}m).`
+            : "";
 
           autoDispatchedRecords.set(zone.id, {
             timestamp: now,
@@ -53,7 +58,7 @@ export async function GET(request: Request) {
             alert_id: alertId,
             zone_name: zone.name,
             timestamp: new Date().toISOString(),
-            message: `AUTONOMOUS SOS: Critical ${evalResult.primary_trigger} detected in ${zone.name}. Mandatory evacuation active.`,
+            message: `AUTONOMOUS SOS: Critical ${evalResult.primary_trigger} detected in ${zone.name}. Mandatory evacuation active.${safeRouteText}`,
             target_nodes_count: targetNodes,
           });
 

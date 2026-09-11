@@ -19,7 +19,14 @@ import {
   CitizenLocation,
   DisasterEpicenter,
   SurgeCheckpoint,
+  SafeEvacuationRoute,
+  EmergencyResponder,
 } from "@/lib/types";
+import {
+  SAFE_EVACUATION_ROUTES,
+  EMERGENCY_RESPONDERS_GRID,
+  DEFAULT_EMERGENCY_RESPONDERS,
+} from "@/lib/constants";
 import {
   AlertTriangle,
   CheckCircle,
@@ -35,6 +42,10 @@ import {
   Globe,
   Clock,
   Flame,
+  Truck,
+  Shield,
+  LifeBuoy,
+  Compass,
 } from "lucide-react";
 
 interface EmergencyMapProps {
@@ -44,6 +55,8 @@ interface EmergencyMapProps {
   clusters: SOSCluster[];
   activeZone: HazardZone;
   citizens?: CitizenLocation[];
+  safeRoutes?: SafeEvacuationRoute[];
+  responders?: EmergencyResponder[];
   selectedEventId?: string;
   onSelectEvent?: (event: SOSEvent) => void;
   onDispatchCluster?: (clusterId: number) => void;
@@ -262,6 +275,66 @@ const createLastKnownLocationIcon = (citizen: CitizenLocation) => {
   });
 };
 
+const createAssemblyIcon = (name: string, capacity: number) => {
+  return L.divIcon({
+    className: "custom-div-icon",
+    html: `
+      <div style="
+        background: #059669;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-weight: 800;
+        font-size: 10px;
+        border: 2px solid white;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+        cursor: pointer;
+      ">
+        <span>⛺</span>
+        <span>${name.split(" ")[0]} (Cap: ${capacity})</span>
+      </div>
+    `,
+    iconSize: [120, 30],
+    iconAnchor: [60, 15],
+    popupAnchor: [0, -15],
+  });
+};
+
+const createResponderIcon = (type: string, eta: number) => {
+  const bg = type === "AMBULANCE" ? "#dc2626" : type === "POLICE" ? "#0284c7" : "#d97706";
+  const emoji = type === "AMBULANCE" ? "🚑" : type === "POLICE" ? "🚓" : "🚤";
+  return L.divIcon({
+    className: "custom-div-icon",
+    html: `
+      <div style="
+        background: ${bg};
+        color: white;
+        padding: 3px 6px;
+        border-radius: 6px;
+        font-weight: 800;
+        font-size: 9px;
+        border: 1.5px solid white;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+      ">
+        <span>${emoji}</span>
+        <span>${type} (~${eta}m)</span>
+      </div>
+    `,
+    iconSize: [90, 24],
+    iconAnchor: [45, 12],
+    popupAnchor: [0, -12],
+  });
+};
+
 export default function EmergencyMap({
   center,
   zoom,
@@ -269,6 +342,8 @@ export default function EmergencyMap({
   clusters,
   activeZone,
   citizens = [],
+  safeRoutes,
+  responders,
   selectedEventId,
   onSelectEvent,
   onDispatchCluster,
@@ -277,7 +352,20 @@ export default function EmergencyMap({
   const [showEpicenter, setShowEpicenter] = useState<boolean>(true);
   const [showLiveCitizens, setShowLiveCitizens] = useState<boolean>(true);
   const [showLastKnownCitizens, setShowLastKnownCitizens] = useState<boolean>(true);
+  const [showSafeRoutes, setShowSafeRoutes] = useState<boolean>(true);
+  const [showResponders, setShowResponders] = useState<boolean>(true);
   const [basemap, setBasemap] = useState<"topo" | "satellite" | "osm">("topo");
+
+  const activeSafeRoutes =
+    safeRoutes ||
+    SAFE_EVACUATION_ROUTES[activeZone.id] ||
+    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
+    [];
+
+  const activeResponders =
+    responders ||
+    EMERGENCY_RESPONDERS_GRID[activeZone.id] ||
+    DEFAULT_EMERGENCY_RESPONDERS;
 
   const basemapConfigs = {
     topo: {
@@ -633,6 +721,83 @@ export default function EmergencyMap({
               </Popup>
             </Marker>
           ))}
+
+        {/* Verified Safe Evacuation Routes */}
+        {showSafeRoutes &&
+          activeSafeRoutes.map((route) => (
+            <React.Fragment key={route.id}>
+              <Polyline
+                positions={route.waypoints}
+                pathOptions={{
+                  color: "#10b981",
+                  weight: 5,
+                  opacity: 0.85,
+                  dashArray: "8, 8",
+                }}
+              />
+              <Marker
+                position={route.assembly_coords}
+                icon={createAssemblyIcon(route.assembly_point_name, route.shelter_capacity)}
+              >
+                <Popup>
+                  <div className="p-2 space-y-1.5 text-slate-100 min-w-[220px]">
+                    <div className="flex items-center justify-between border-b border-emerald-500/40 pb-1">
+                      <span className="text-xs font-bold text-emerald-400">
+                        ⛺ HIGH GROUND SHELTER
+                      </span>
+                      <span className="text-[10px] text-slate-300 font-bold">
+                        +{route.elevation_gain_m}m Gain
+                      </span>
+                    </div>
+                    <div className="text-xs font-bold text-white">
+                      {route.assembly_point_name}
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      Capacity: <strong>{route.shelter_capacity} citizens</strong>
+                    </div>
+                    <div className="text-[10px] text-emerald-300 font-mono">
+                      Safe Route: {route.distance_km}km • ~{route.walk_time_minutes} min walk
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            </React.Fragment>
+          ))}
+
+        {/* Emergency Responders Grid (Ambulances, Police, NDRF) */}
+        {showResponders &&
+          activeResponders.map((resp) => (
+            <Marker
+              key={resp.id}
+              position={resp.coords}
+              icon={createResponderIcon(resp.type, resp.eta_minutes)}
+            >
+              <Popup>
+                <div className="p-2 space-y-1.5 text-slate-100 min-w-[230px]">
+                  <div className="flex items-center justify-between border-b border-slate-700 pb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1">
+                      {resp.type === "AMBULANCE" ? "🚑" : resp.type === "POLICE" ? "🚓" : "🚤"} {resp.type} UNIT
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-600 text-white">
+                      ETA ~{resp.eta_minutes} MINS
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold text-white">
+                    {resp.unit_name}
+                  </div>
+                  <div className="text-[11px] text-slate-300">
+                    Station: {resp.station_location}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Fleet: {resp.vehicle_fleet}
+                  </div>
+                  <div className="text-[10px] font-mono text-emerald-400 pt-1">
+                    Hotline: {resp.contact_number}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
       </MapContainer>
 
       {/* Tactical Layers Floating Control */}
@@ -651,6 +816,30 @@ export default function EmergencyMap({
           }`}
         >
           <span>💥 GLOF Epicenter & Wave</span>
+        </button>
+
+        {/* Safe Evacuation Routes */}
+        <button
+          onClick={() => setShowSafeRoutes((prev) => !prev)}
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
+            showSafeRoutes
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
+          }`}
+        >
+          <span>🏃‍♂️ Safe Routes ({activeSafeRoutes.length})</span>
+        </button>
+
+        {/* Emergency Responders */}
+        <button
+          onClick={() => setShowResponders((prev) => !prev)}
+          className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition text-left min-h-[36px] ${
+            showResponders
+              ? "bg-violet-50 text-violet-800 border border-violet-300"
+              : "bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
+          }`}
+        >
+          <span>🚑 Responders ({activeResponders.length})</span>
         </button>
 
         {/* Critical Infrastructure */}
