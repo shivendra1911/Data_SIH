@@ -130,31 +130,31 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         {/* 4) Hero Top Navbar */}
         <nav className="absolute top-0 left-0 right-0 z-40 px-5 sm:px-10 pt-6 pb-4 flex items-center justify-between pointer-events-auto">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white backdrop-blur-xl shadow-lg">
-              <ShieldAlert className="w-5 h-5 text-violet-400" aria-hidden />
+            <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-xl shadow-lg">
+              <ShieldAlert className="w-5 h-5 text-white" aria-hidden />
             </div>
             <div>
-              <span className="text-base font-black text-white tracking-wider uppercase" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                Neer<span className="text-violet-400">Netra</span>
+              <span className="text-base font-bold text-white tracking-wider uppercase font-display">
+                Neer<span className="text-white/80">Netra</span>
               </span>
-              <span className="hidden sm:inline-flex ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/25 text-violet-200 border border-violet-400/40 uppercase tracking-wider backdrop-blur-md">
-                All-India Sentinel
+              <span className="hidden sm:inline-flex ml-2.5 text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/15 uppercase tracking-[2px] backdrop-blur-md font-sans">
+                /ALL-INDIA SENTINEL
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white text-xs shadow-sm">
+            <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-xl text-white text-xs shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-200">
-                12 River Basins Scanning
+              <span className="font-semibold text-[10px] uppercase tracking-[2.5px] text-white/90 font-sans">
+                12 Basins Scanning
               </span>
             </div>
 
             <button
               onClick={scrollToCommandCenter}
               aria-label="Jump directly to Command Center"
-              className="btn-solid-primary text-xs flex items-center gap-1.5 h-[38px] px-4"
+              className="btn-solid-primary text-xs flex items-center gap-2 h-[38px] px-5"
             >
               <span>Command Center</span>
               <ArrowDown className="w-3.5 h-3.5" aria-hidden />
@@ -176,42 +176,47 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/30 backdrop-blur-xl text-white text-xs shadow-md">
-                <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" aria-hidden />
-                <span className="font-bold text-[11px] uppercase tracking-wider text-slate-100">
-                  Autonomous Flash Flood Detection & Auto-SOS System
-                </span>
+              <div className="corwdy-subtitle">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span>/AUTONOMOUS FLASH FLOOD DETECTION &amp; AUTO-SOS</span>
               </div>
 
-              <h1
-                className="text-3xl sm:text-5xl lg:text-6xl font-light text-white uppercase tracking-tight leading-tight drop-shadow-xl"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
                 Predicting Flash Floods Across India <br className="hidden sm:inline" />
-                <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-300 via-indigo-200 to-cyan-300">
+                <span className="font-extrabold text-white">
                   With Autonomous SOS Response
                 </span>
               </h1>
 
-              <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mx-auto leading-relaxed drop-shadow font-medium">
+              <p className="text-xs sm:text-sm text-white/75 max-w-2xl mx-auto leading-relaxed drop-shadow font-sans font-medium">
                 Real-time physics-informed AI evaluating Himalayan valleys, Northeast floodplains, and Western Ghats catchments simultaneously. Autonomously dispatches emergency evacuation alerts to citizen devices upon threshold breach.
               </p>
 
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+              <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
                 <button
                   onClick={() => advanceScroll(0.45)}
-                  className="btn-solid-primary text-xs sm:text-sm font-bold uppercase tracking-wider shadow-2xl min-h-[44px] px-6 py-2.5 flex items-center gap-2"
+                  className="btn-solid-primary"
                 >
                   <span>Scroll to Scrub Video & Radar</span>
-                  <ArrowDown className="w-4 h-4 animate-bounce" aria-hidden />
+                  <ArrowDown className="w-3.5 h-3.5" aria-hidden />
                 </button>
 
                 <button
                   onClick={scrollToCommandCenter}
-                  className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white text-xs sm:text-sm font-bold tracking-wider uppercase backdrop-blur-md transition flex items-center gap-2 min-h-[44px]"
+                  className="btn-solid-dark"
                 >
                   <span>Skip to Command Center</span>
-                  <ArrowRight className="w-4 h-4" aria-hidden />
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+                </button>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={scrollToCommandCenter}
+                  className="underline-link"
+                >
+                  <span>Explore All 12 Basins</span>
+                  <span className="hover-line-fill" />
                 </button>
               </div>
             </div>
@@ -228,43 +233,48 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 backdrop-blur-xl text-cyan-200 text-xs shadow-md">
-                <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" aria-hidden />
-                <span className="font-bold text-[11px] uppercase tracking-wider">
-                  Cryo-Seismic Telemetry • GLOF Early Breach Radar
-                </span>
+              <div className="corwdy-subtitle text-emerald-400/90">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>/CRYO-SEISMIC TELEMETRY • GLOF EARLY BREACH RADAR</span>
               </div>
 
-              <h2
-                className="text-3xl sm:text-5xl lg:text-6xl font-light text-white uppercase tracking-tight leading-tight drop-shadow-xl"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
+              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
                 Safeguarding Downstream Basins <br className="hidden sm:inline" />
-                <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-teal-200 to-emerald-300">
+                <span className="font-extrabold text-white">
                   With High-Precision Sensor Telemetry
                 </span>
               </h2>
 
-              <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mx-auto leading-relaxed drop-shadow font-medium">
+              <p className="text-xs sm:text-sm text-white/75 max-w-2xl mx-auto leading-relaxed drop-shadow font-sans font-medium">
                 Dynamic 2D shallow-water kinematic equations coupled with 4.6M cryo-seismic tremor detection to anticipate glacial moraine breach hours before peak flood surge arrival.
               </p>
 
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+              <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
                 <Link
                   href="/radar"
-                  className="btn-solid-emerald text-xs sm:text-sm font-bold uppercase tracking-wider shadow-2xl min-h-[44px] px-6 py-2.5 flex items-center gap-2"
+                  className="btn-solid-emerald"
                 >
-                  <Compass className="w-4 h-4" aria-hidden />
+                  <Compass className="w-3.5 h-3.5" aria-hidden />
                   <span>Open Tactical GIS Radar</span>
                 </Link>
 
                 <button
                   onClick={() => advanceScroll(0.85)}
-                  className="btn-solid-primary text-xs sm:text-sm font-bold uppercase tracking-wider shadow-2xl min-h-[44px] px-6 py-2.5 flex items-center gap-2"
+                  className="btn-solid-primary"
                 >
                   <span>Advance to Rescue Operations</span>
-                  <ArrowDown className="w-4 h-4" aria-hidden />
+                  <ArrowDown className="w-3.5 h-3.5" aria-hidden />
                 </button>
+              </div>
+
+              <div className="pt-2">
+                <Link
+                  href="/radar"
+                  className="underline-link"
+                >
+                  <span>View High-Resolution Radar</span>
+                  <span className="hover-line-fill" />
+                </Link>
               </div>
             </div>
           </div>
@@ -280,51 +290,57 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-500/20 border border-rose-400/40 backdrop-blur-xl text-rose-200 text-xs shadow-md">
-                <Activity className="w-3.5 h-3.5 text-rose-400 animate-pulse" aria-hidden />
-                <span className="font-bold text-[11px] uppercase tracking-wider">
-                  Zero-Minute Emergency Relay • Android APK Integration
-                </span>
+              <div className="corwdy-subtitle text-rose-400/90">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                <span>/ZERO-MINUTE EMERGENCY RELAY • ANDROID APK INTEGRATION</span>
               </div>
 
-              <h2
-                className="text-3xl sm:text-5xl lg:text-6xl font-light text-white uppercase tracking-tight leading-tight drop-shadow-xl"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
+              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
                 Autonomous Rescue Triage <br className="hidden sm:inline" />
-                <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-amber-200 to-violet-300">
+                <span className="font-extrabold text-white">
                   & Citizen Distress Grid
                 </span>
               </h2>
 
-              <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mx-auto leading-relaxed drop-shadow font-medium">
+              <p className="text-xs sm:text-sm text-white/75 max-w-2xl mx-auto leading-relaxed drop-shadow font-sans font-medium">
                 Live GPS vs Last Known Beacons tracked with uncertainty drift buffers, automated high-ground evacuation routing, and 24/7 autonomous sirens across 108 Ambulance and NDRF response units.
               </p>
 
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+              <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
                 <button
                   onClick={scrollToCommandCenter}
-                  className="btn-solid-primary text-xs sm:text-sm font-bold uppercase tracking-wider shadow-2xl min-h-[44px] px-7 py-3 flex items-center gap-2"
+                  className="btn-solid-primary"
                 >
                   <span>Enter Live Tactical Command</span>
-                  <ArrowDown className="w-4 h-4" aria-hidden />
+                  <ArrowDown className="w-3.5 h-3.5" aria-hidden />
                 </button>
 
                 <Link
                   href="/rescue"
-                  className="px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-bold tracking-wider uppercase transition shadow-lg flex items-center gap-2 min-h-[44px]"
+                  className="btn-solid-danger"
                 >
-                  <Users className="w-4 h-4" aria-hidden />
+                  <Users className="w-3.5 h-3.5" aria-hidden />
                   <span>Citizen Rescue Grid</span>
                 </Link>
 
                 <button
                   onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-                  className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs sm:text-sm font-bold tracking-wider uppercase backdrop-blur-md transition flex items-center gap-1.5 min-h-[44px]"
+                  className="circle-btn"
+                  title="Back to Top"
+                  aria-label="Back to top"
                 >
                   <ChevronUp className="w-4 h-4" aria-hidden />
-                  <span>Top</span>
                 </button>
+              </div>
+
+              <div className="pt-2">
+                <Link
+                  href="/rescue"
+                  className="underline-link"
+                >
+                  <span>Access Citizen Grid &amp; SOS</span>
+                  <span className="hover-line-fill" />
+                </Link>
               </div>
             </div>
           </div>
@@ -332,18 +348,18 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         </div>
 
         {/* 6) Interactive HUD Progress & Scrub Controller (Bottom-Right) */}
-        <div className="absolute bottom-8 right-6 sm:right-10 z-40 pointer-events-auto flex items-center gap-3 bg-slate-950/60 backdrop-blur-xl border border-white/20 rounded-full px-4 py-2 shadow-2xl text-white">
+        <div className="absolute bottom-8 right-6 sm:right-10 z-40 pointer-events-auto flex items-center gap-3 bg-[#161a20]/80 backdrop-blur-xl border border-white/15 rounded-full px-4 py-2 shadow-2xl text-white font-sans">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase font-mono text-slate-300 font-bold">Scrub</span>
-            <span className="text-xs font-mono font-black text-violet-300">
+            <span className="text-[10px] uppercase font-bold tracking-[2px] text-white/60">Scrub</span>
+            <span className="text-xs font-bold text-white">
               {Math.round(p * 100)}%
             </span>
           </div>
 
-          <div className="w-px h-4 bg-white/20" />
+          <div className="w-px h-4 bg-white/15" />
 
           {/* 3 Stage Navigation Dots */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {[
               { num: 1, target: 0.05, label: "Overview" },
               { num: 2, target: 0.45, label: "Radar" },
@@ -354,10 +370,10 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
                 onClick={() => advanceScroll(s.target)}
                 title={`Jump to Stage ${s.num}: ${s.label}`}
                 aria-label={`Jump to Stage ${s.num}`}
-                className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center transition ${
+                className={`w-6 h-6 rounded-full text-[10px] font-bold uppercase transition flex items-center justify-center ${
                   activeStage === s.num
-                    ? "bg-violet-500 text-white shadow-md scale-110"
-                    : "bg-white/20 text-slate-300 hover:bg-white/30"
+                    ? "bg-white text-[#161a20] shadow-md scale-105"
+                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
                 }`}
               >
                 {s.num}
@@ -365,7 +381,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             ))}
           </div>
 
-          <div className="w-px h-4 bg-white/20" />
+          <div className="w-px h-4 bg-white/15" />
 
           {/* Smooth Advance Button */}
           <button
@@ -375,16 +391,16 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
               else scrollToCommandCenter();
             }}
             aria-label="Advance to next stage"
-            className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center transition active:scale-95 text-white"
+            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white hover:text-[#161a20] flex items-center justify-center transition active:scale-95 text-white"
           >
-            <ArrowDown className="w-3.5 h-3.5" aria-hidden />
+            <ArrowDown className="w-3 h-3" aria-hidden />
           </button>
         </div>
 
         {/* 7) Bottom Central Scroll Hint Indicator */}
         {p < 0.15 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-1.5 text-slate-300 text-[11px] font-mono tracking-widest uppercase animate-pulse">
-            <span>Scroll To Scrub Video</span>
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-1.5 text-white/70 text-[10px] font-sans tracking-[3px] uppercase animate-pulse">
+            <span>/Scroll To Scrub Video</span>
             <ArrowDown className="w-3.5 h-3.5" />
           </div>
         )}

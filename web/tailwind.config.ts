@@ -9,18 +9,23 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      // Rabto Design System Tokens — modern-startup-design skill
+      // Corwdy Service Effect Design Tokens
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
-        display: ["Space Grotesk", "Inter", "sans-serif"],
+        sans: ["var(--font-montserrat)", "Montserrat", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["var(--font-syne)", "var(--font-montserrat)", "Montserrat", "sans-serif"],
+        montserrat: ["var(--font-montserrat)", "Montserrat", "sans-serif"],
+        syne: ["var(--font-syne)", "Syne", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "Menlo", "monospace"],
       },
       colors: {
-        // Override defaults with Rabto white-first palette
-        background: "#ffffff",
-        surface: "#f8f9fa",
-        "surface-raised": "#f1f3f5",
-        "surface-border": "#e5e7eb",
+        corwdy: {
+          bg: "#161a20",
+          surface: "#1b2027",
+          border: "rgba(255, 255, 255, 0.1)",
+          text: "#ffffff",
+          muted: "rgba(255, 255, 255, 0.75)",
+          subtle: "rgba(255, 255, 255, 0.5)",
+        },
         // Rabto accent tokens
         rabto: {
           purple: "#7C3AED",

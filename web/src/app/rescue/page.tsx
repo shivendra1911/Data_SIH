@@ -177,40 +177,40 @@ export default function RescueCitizenGridPage() {
         />
 
         {/* Live Mobile APK LAN Synchronization Bar */}
-        <div className="glass-panel border-b border-white/60 px-4 lg:px-6 py-2.5 backdrop-blur-md">
+        <div className="bg-[#1b2027]/80 border-b border-white/10 px-4 lg:px-6 py-3 backdrop-blur-md font-sans text-white">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
             
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold">Active Mobile Wi-Fi Sync:</span>
-                <code className="font-mono bg-white/80 px-1.5 py-0.2 rounded border border-emerald-200">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 shadow-xs font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-bold uppercase tracking-wider text-[10px]">Active Mobile Wi-Fi Sync:</span>
+                <code className="font-mono bg-white/10 px-2 py-0.5 rounded text-white text-[11px]">
                   172.16.184.105:3000
                 </code>
               </div>
 
-              <div className="flex items-center gap-2 text-slate-700">
+              <div className="flex items-center gap-2 text-white/70">
                 <span className="font-semibold">Registered Distress Beacons:</span>
-                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-extrabold text-[11px]">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 font-bold text-[10px] uppercase tracking-wider">
                   {sosCitizens.length} SOS Active
                 </span>
-                <span className="text-slate-500 text-[11px]">
+                <span className="text-white/50 text-[11px]">
                   ({liveCount} Live GPS &bull; {offlineCount} Last Known Offline)
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 onClick={() => setIsMobileModalOpen(true)}
-                className="btn-solid-dark text-xs h-[34px] px-3.5 flex items-center gap-1.5"
+                className="btn-solid-dark text-xs h-[38px] px-4 flex items-center gap-1.5"
               >
-                <Smartphone className="w-3.5 h-3.5 text-indigo-300" />
-                <span>Pair Android Device / Test Packet</span>
+                <Smartphone className="w-3.5 h-3.5 text-white/80" />
+                <span>Pair Android APK</span>
               </button>
               <Link
                 href="/radar"
-                className="btn-solid-primary text-xs h-[34px] px-3.5 flex items-center gap-1.5"
+                className="btn-solid-primary text-xs h-[38px] px-4 flex items-center gap-1.5"
               >
                 <Compass className="w-3.5 h-3.5" />
                 <span>Open Tactical Radar</span>
@@ -221,15 +221,15 @@ export default function RescueCitizenGridPage() {
 
         {/* Dispatch Notification Alert */}
         {dispatchNotice && (
-          <div className="max-w-[1800px] mx-auto w-full px-4 pt-3">
-            <div className="p-3 rounded-xl bg-indigo-900/90 text-white border border-indigo-500/80 shadow-md backdrop-blur-md flex items-center justify-between text-xs font-semibold animate-in fade-in">
-              <div className="flex items-center gap-2">
+          <div className="max-w-[1800px] mx-auto w-full px-4 pt-3 font-sans">
+            <div className="p-3.5 rounded-2xl bg-[#1b2027] text-white border border-emerald-400/40 shadow-xl backdrop-blur-md flex items-center justify-between text-xs font-semibold animate-in fade-in">
+              <div className="flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>{dispatchNotice}</span>
               </div>
               <button
                 onClick={() => setDispatchNotice(null)}
-                className="text-slate-300 hover:text-white"
+                className="text-white/60 hover:text-white"
               >
                 Dismiss
               </button>
@@ -238,22 +238,25 @@ export default function RescueCitizenGridPage() {
         )}
 
         {/* Main Operational Stage */}
-        <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-[1800px] mx-auto w-full space-y-6">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-[1800px] mx-auto w-full space-y-6 font-sans">
           
           {/* Section 1: Citizen Distress Telemetry Matrix */}
-          <div className="rounded-2xl glass-panel border border-white/70 p-4 sm:p-5 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+          <div className="rounded-2xl glass-panel border border-white/10 p-5 sm:p-6 shadow-sm space-y-4 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div>
-                <h2 className="text-base font-black text-slate-950 uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <Users className="w-4 h-4 text-rose-600" />
+                <div className="corwdy-subtitle mb-1">
+                  <span>/CITIZEN DISTRESS TELEMETRY</span>
+                </div>
+                <h2 className="text-base font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                  <Users className="w-4 h-4 text-rose-400" />
                   Citizen Distress Telemetry Matrix (Live GPS vs Last Known Location)
                 </h2>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-white/70">
                   Real-time distress signals transmitted from citizen mobile devices. Distinguishes live GPS pings from offline last-known beacons with estimated flood drift radii and multi-hop BLE mesh lineages.
                 </p>
               </div>
 
-              <span className="text-xs font-mono font-medium text-slate-500">
+              <span className="text-[11px] font-mono font-medium text-white/50">
                 Auto-Synchronized every 2000ms &bull; Sector: {selectedZone.name}
               </span>
             </div>
@@ -262,7 +265,6 @@ export default function RescueCitizenGridPage() {
               citizens={citizens}
               compact={false}
               onFocusCoordinates={() => {
-                // Navigate to radar page centered on these coords
                 window.location.href = "/radar";
               }}
               onDispatchToCitizen={(cit) => {
@@ -273,14 +275,17 @@ export default function RescueCitizenGridPage() {
           </div>
 
           {/* Section 2: Emergency Response Grid (108 ALS, Police, NDRF) */}
-          <div className="rounded-2xl glass-panel border border-white/70 p-4 sm:p-5 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+          <div className="rounded-2xl glass-panel border border-white/10 p-5 sm:p-6 shadow-sm space-y-4 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div>
-                <h2 className="text-base font-black text-slate-950 uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <Truck className="w-4 h-4 text-indigo-600" />
-                  Emergency Responder Fleet & Multi-Agency Dispatch Grid
+                <div className="corwdy-subtitle mb-1">
+                  <span>/FLEET DISPATCH GRID</span>
+                </div>
+                <h2 className="text-base font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                  <Truck className="w-4 h-4 text-sky-400" />
+                  Emergency Responder Fleet &amp; Multi-Agency Dispatch Grid
                 </h2>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-white/70">
                   Surrounding 108 Advanced Life Support (ALS) Ambulances, State Police Thanas, and NDRF Battalions with mountain transit ETAs, equipment lists, and hotlines.
                 </p>
               </div>
@@ -288,7 +293,7 @@ export default function RescueCitizenGridPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleMultiAgencyDispatch}
-                  className="btn-solid-danger text-xs h-[34px] px-3.5 flex items-center gap-1.5 shadow-sm"
+                  className="btn-solid-danger text-xs h-[38px] px-4 flex items-center gap-1.5 shadow-sm"
                 >
                   <AlertOctagon className="w-3.5 h-3.5" />
                   <span>Execute Multi-Agency Dispatch</span>
@@ -335,17 +340,17 @@ export default function RescueCitizenGridPage() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-white/60 glass-panel px-6 py-4 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 mt-8">
-        <div className="font-semibold text-slate-900">
+      <footer className="border-t border-white/10 bg-[#161a20]/90 backdrop-blur-md px-6 py-5 text-center text-xs text-white/70 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
+        <div className="font-semibold text-white">
           NeerNetra &bull; Citizen Rescue Fleet Operations &bull; SIH 2026 PS: SIH26192
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+          <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block pulse-green" />
             Mobile Sync Server: 172.16.184.105:3000
           </span>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-600">NDRF: 1078 &bull; SDMA: 1070 &bull; Ambulance: 108</span>
+          <span className="text-white/20">|</span>
+          <span className="text-white/70">NDRF: 1078 &bull; SDMA: 1070 &bull; Ambulance: 108</span>
         </div>
       </footer>
     </div>

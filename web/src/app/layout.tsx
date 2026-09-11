@@ -1,6 +1,21 @@
 import type { Metadata } from "next";
+import { Montserrat, Syne } from "next/font/google";
 import "./globals.css";
 import SmoothScrollProvider from "@/components/Providers/SmoothScrollProvider";
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: "--font-montserrat",
+  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
+const syne = Syne({
+  subsets: ["latin"],
+  variable: "--font-syne",
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "NEERNETRA — Tactical Hydrological Command Platform",
@@ -18,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-[#05070e] text-slate-100 antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+      <body className={`${montserrat.variable} ${syne.variable} font-sans min-h-screen bg-[#161a20] text-white antialiased selection:bg-white selection:text-[#161a20]`}>
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
       </body>
     </html>

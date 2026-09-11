@@ -24,65 +24,65 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
     seismic_mag: 4.2,
   };
 
-  // Tile base classes — Rabto frosted glass architecture
-  const tile = "tilt-card flex items-center gap-2.5 p-2.5 rounded-xl backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 shadow-md transition-all text-white text-in-out is-visible";
+  // Tile base classes — Corwdy dark slate surface
+  const tile = "tilt-card flex items-center gap-3 p-3 rounded-2xl backdrop-blur-md bg-[#1b2027]/75 hover:bg-[#212730]/90 border border-white/10 shadow-md transition-all text-white font-sans";
   const iconBox = (color: string) =>
-    `w-8 h-8 rounded-lg flex items-center justify-center shrink-0 relative z-10 ${color}`;
-  const label = "text-[10px] uppercase tracking-wider text-slate-300 font-bold";
-  const value = "text-sm font-black text-white flex items-baseline gap-1.5";
+    `w-9 h-9 rounded-full flex items-center justify-center shrink-0 relative z-10 ${color}`;
+  const label = "text-[10px] uppercase tracking-[2px] text-white/70 font-semibold font-sans";
+  const value = "text-sm font-bold text-white flex items-baseline gap-1.5 font-sans";
 
   return (
-    <div className="w-full bg-slate-950/25 backdrop-blur-md border-y border-white/15 px-4 lg:px-8 py-2.5 shadow-sm text-white">
+    <div className="w-full bg-[#161a20]/80 backdrop-blur-md border-y border-white/10 px-4 lg:px-8 py-3 shadow-md text-white font-sans">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-[1800px] mx-auto text-xs">
 
         {/* River Stage */}
         <div className={tile}>
-          <div className={iconBox("bg-sky-500/20 border border-sky-400/40")}>
-            <Waves className="w-4 h-4 text-sky-400" aria-hidden />
+          <div className={iconBox("bg-white/10 border border-white/15")}>
+            <Waves className="w-4 h-4 text-white" aria-hidden />
           </div>
           <div className="relative z-10">
             <div className={label}>
-              River Stage <span className="text-red-400 font-bold">▲ +1.4m/h</span>
+              River Stage <span className="text-red-400 font-bold">▲ +1.4m</span>
             </div>
             <div className={value}>
               {telemetry.river_level_m.toFixed(1)}m
-              <span className="text-[10px] text-slate-400 font-normal">/ {activeZone.dangerMarkM}m</span>
+              <span className="text-[10px] text-white/50 font-normal">/ {activeZone.dangerMarkM}m</span>
             </div>
           </div>
         </div>
 
         {/* Catchment Rainfall */}
         <div className={tile}>
-          <div className={iconBox("bg-blue-500/20 border border-blue-400/40")}>
-            <CloudRain className="w-4 h-4 text-blue-400" aria-hidden />
+          <div className={iconBox("bg-white/10 border border-white/15")}>
+            <CloudRain className="w-4 h-4 text-white" aria-hidden />
           </div>
           <div className="relative z-10">
             <div className={label}>Catchment Rain</div>
             <div className={value}>
               {telemetry.rainfall_mm.toFixed(1)}
-              <span className="text-[10px] text-gray-400 font-normal">mm/h</span>
-              <span className="text-[9px] text-amber-700 font-bold px-1 rounded bg-amber-50 border border-amber-200">HEAVY</span>
+              <span className="text-[10px] text-white/50 font-normal">mm/h</span>
+              <span className="text-[9px] text-amber-300 font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/30 uppercase tracking-wider">HEAVY</span>
             </div>
           </div>
         </div>
 
         {/* Soil Saturation */}
         <div className={tile}>
-          <div className={iconBox("bg-emerald-500/20 border border-emerald-400/40")}>
+          <div className={iconBox("bg-white/10 border border-white/15")}>
             <Mountain className="w-4 h-4 text-emerald-400" aria-hidden />
           </div>
           <div className="relative z-10">
             <div className={label}>Soil Saturation</div>
             <div className={value}>
               {telemetry.soil_moisture_pct.toFixed(1)}%
-              <span className="text-[9px] text-red-300 font-bold px-1 rounded bg-red-500/20 border border-red-500/40">OVERSATURATED</span>
+              <span className="text-[9px] text-red-300 font-bold px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 uppercase tracking-wider">OVERSATURATED</span>
             </div>
           </div>
         </div>
 
         {/* Seismic / GLOF */}
         <div className={tile}>
-          <div className={iconBox("bg-red-500/20 border border-red-400/40")}>
+          <div className={iconBox("bg-white/10 border border-white/15")}>
             <Activity className={`w-4 h-4 text-red-400 ${isDanger ? "animate-pulse" : ""}`} aria-hidden />
           </div>
           <div className="relative z-10">
@@ -90,7 +90,7 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
             <div className={value}>
               {telemetry.seismic_mag.toFixed(1)}M
               {telemetry.seismic_mag > 3 && (
-                <span className="text-[9px] text-red-300 font-bold px-1 rounded bg-red-500/20 border border-red-500/40">BREACH RISK</span>
+                <span className="text-[9px] text-red-300 font-bold px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 uppercase tracking-wider">BREACH RISK</span>
               )}
             </div>
           </div>
@@ -98,22 +98,22 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
 
         {/* Evacuation Window */}
         <div className={tile}>
-          <div className={iconBox("bg-amber-500/20 border border-amber-400/40")}>
+          <div className={iconBox("bg-white/10 border border-white/15")}>
             <Clock className="w-4 h-4 text-amber-400" aria-hidden />
           </div>
           <div className="relative z-10">
             <div className={label}>Evacuation Window</div>
             <div className={`${value} text-amber-300`}>
               {hours}h {mins}m
-              <span className="text-[10px] text-slate-400 font-normal">to Peak</span>
+              <span className="text-[10px] text-white/50 font-normal">to Peak</span>
             </div>
           </div>
         </div>
 
         {/* Peak Discharge */}
         <div className={tile}>
-          <div className={iconBox("bg-violet-500/20 border border-violet-400/40")}>
-            <Gauge className="w-4 h-4 text-violet-400" aria-hidden />
+          <div className={iconBox("bg-white/10 border border-white/15")}>
+            <Gauge className="w-4 h-4 text-white" aria-hidden />
           </div>
           <div className="relative z-10">
             <div className={label}>Peak Discharge</div>
@@ -121,7 +121,7 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
               {activeZone.hydrograph
                 ? Math.max(...activeZone.hydrograph.map((h) => h.discharge_cumecs)).toLocaleString("en-IN")
                 : "1,240"}
-              <span className="text-[10px] text-slate-400 font-normal">m³/s</span>
+              <span className="text-[10px] text-white/50 font-normal">m³/s</span>
             </div>
           </div>
         </div>

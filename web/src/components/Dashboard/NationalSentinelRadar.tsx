@@ -128,22 +128,22 @@ export default function NationalSentinelRadar({
   return (
     <div className="w-full space-y-3 text-white">
       {/* Top Banner: Status + Autonomous Mode Controller */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 max-w-[1800px] mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 max-w-[1800px] mx-auto font-sans">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-white uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                All-India Autonomous Sentinel
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold text-white uppercase tracking-[2.5px] font-display">
+                /ALL-INDIA SENTINEL
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/25 text-red-300 border border-red-500/40 shadow-xs">
-                {criticalCount} Critical Threats Detected
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 uppercase tracking-wider">
+                {criticalCount} Critical
               </span>
-              <span className="hidden sm:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-xs">
-                {warningCount} Under Warning
+              <span className="hidden sm:inline-flex text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider">
+                {warningCount} Warning
               </span>
             </div>
           </div>
@@ -154,10 +154,10 @@ export default function NationalSentinelRadar({
           <button
             onClick={onToggleAutoDispatch}
             aria-label="Toggle autonomous SOS auto-dispatch mode"
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 min-h-[36px] shadow-sm ${
+            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[2px] transition flex items-center gap-1.5 min-h-[38px] shadow-sm ${
               autoDispatchEnabled
                 ? "bg-red-600 text-white hover:bg-red-500"
-                : "bg-white/10 text-slate-300 hover:bg-white/20 border border-white/15"
+                : "bg-white/10 text-white/70 hover:bg-white/20 border border-white/15"
             }`}
           >
             <Zap className={`w-3.5 h-3.5 ${autoDispatchEnabled ? "fill-white" : ""}`} aria-hidden />
@@ -171,7 +171,7 @@ export default function NationalSentinelRadar({
             className="btn-solid-primary text-xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
-            <span>Scan All India Now</span>
+            <span>Scan Now</span>
           </button>
         </div>
       </div>
@@ -204,27 +204,27 @@ export default function NationalSentinelRadar({
               <button
                 key={zone.zone_id}
                 onClick={() => onSelectZoneById(zone.zone_id)}
-                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between w-[180px] shadow-xs backdrop-blur-md ${
+                className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between w-[185px] shadow-sm backdrop-blur-md font-sans ${
                   isSelected
-                    ? "bg-indigo-600/35 border-indigo-400 ring-2 ring-indigo-400/80 text-white"
+                    ? "bg-white/15 border-white ring-2 ring-white/50 text-white"
                     : isRed
-                    ? "bg-red-950/30 border-red-500/40 hover:bg-red-950/50 text-white"
+                    ? "bg-red-950/25 border-red-500/35 hover:bg-red-950/45 text-white"
                     : isOrange
-                    ? "bg-amber-950/30 border-amber-500/40 hover:bg-amber-950/50 text-white"
-                    : "bg-white/10 border-white/15 hover:bg-white/20 text-white"
+                    ? "bg-amber-950/25 border-amber-500/35 hover:bg-amber-950/45 text-white"
+                    : "bg-[#1b2027]/75 border-white/10 hover:bg-[#212730]/90 text-white"
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[9px] font-bold uppercase text-slate-400 truncate max-w-[100px]">
+                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                    <span className="text-[9px] font-semibold uppercase tracking-[1.5px] text-white/60 truncate max-w-[100px]">
                       {zone.state}
                     </span>
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase shadow-xs ${
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
                         isRed
                           ? "bg-red-600 text-white"
                           : isOrange
-                          ? "bg-amber-500 text-slate-950"
+                          ? "bg-amber-500 text-[#161a20]"
                           : "bg-emerald-600 text-white"
                       }`}
                     >
@@ -237,10 +237,10 @@ export default function NationalSentinelRadar({
                   </div>
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-300">
+                <div className="mt-2.5 flex items-center justify-between text-[10px] text-white/70 font-sans">
                   <span>Stage: <strong className="text-white font-bold">{zone.river_level_m.toFixed(1)}m</strong></span>
                   {zone.auto_dispatched && (
-                    <span className="text-red-400 font-bold flex items-center gap-0.5">
+                    <span className="text-red-400 font-bold flex items-center gap-1">
                       <Radio className="w-2.5 h-2.5 animate-ping" /> SOS
                     </span>
                   )}

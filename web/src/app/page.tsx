@@ -123,7 +123,7 @@ export default function NationalSentinelPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="relative min-h-screen flex flex-col bg-transparent text-slate-950 font-sans selection:bg-violet-600 selection:text-white">
+    <div className="relative min-h-screen flex flex-col bg-transparent text-white font-sans selection:bg-white selection:text-[#161a20]">
       {/* Background Video for Continuous Scroll Animation */}
       <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
         <video
@@ -135,7 +135,7 @@ export default function NationalSentinelPage() {
           preload="auto"
           className="w-full h-full object-cover scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/40 to-slate-950/75 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/80 via-[#161a20]/45 to-[#161a20]/85 pointer-events-none" />
       </div>
 
       {/* Cinematic Hero Section */}
@@ -179,71 +179,74 @@ export default function NationalSentinelPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
               href="/radar"
-              className="p-4 rounded-2xl border border-white/20 hover:border-emerald-400/80 bg-white/5 hover:bg-white/10 transition flex items-center justify-between group shadow-lg text-white"
+              className="p-5 rounded-2xl border border-white/10 hover:border-white/30 bg-[#1b2027]/75 hover:bg-[#212730]/90 transition flex items-center justify-between group shadow-lg text-white font-sans"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
-                  <Compass className="w-5 h-5" />
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-full bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
+                  <Compass className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Tactical GIS Radar & Inundation Command
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display uppercase tracking-tight">
+                    Tactical GIS Radar &amp; Inundation Command
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">
                       LIVE GIS
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-300">
-                    Full-view spatial radar, Topo/Sat overlays, flood wave vectors & safe routes
+                  <p className="text-xs text-white/70">
+                    Full-view spatial radar, Topo/Sat overlays, flood wave vectors &amp; safe routes
                   </p>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition" />
+              <ArrowRight className="w-4 h-4 text-white/70 group-hover:translate-x-1 transition" />
             </Link>
 
             <Link
               href="/rescue"
-              className="p-4 rounded-2xl border border-white/20 hover:border-rose-400/80 bg-white/5 hover:bg-white/10 transition flex items-center justify-between group shadow-lg text-white"
+              className="p-5 rounded-2xl border border-white/10 hover:border-white/30 bg-[#1b2027]/75 hover:bg-[#212730]/90 transition flex items-center justify-between group shadow-lg text-white font-sans"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-400/40 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
-                  <Users className="w-5 h-5" />
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-full bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
+                  <Users className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Citizen Distress & Emergency Response Grid
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/40">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display uppercase tracking-tight">
+                    Citizen Distress &amp; Emergency Response Grid
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30 uppercase tracking-wider">
                       APK SYNC
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-300">
+                  <p className="text-xs text-white/70">
                     Mobile APK distress telemetry, Live GPS vs Last Known Beacons, 108/Police/NDRF dispatch
                   </p>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-rose-400 group-hover:translate-x-1 transition" />
+              <ArrowRight className="w-4 h-4 text-white/70 group-hover:translate-x-1 transition" />
             </Link>
           </div>
 
           {/* Section 1: Pan-India Autonomous Sentinel Basin Surveillance (12 Basins) */}
-          <div className="space-y-4 text-white">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-3">
+          <div className="space-y-4 text-white font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div>
-                <h2 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <Radio className="w-4 h-4 text-red-500" />
-                  Pan-India Autonomous Sentinel Basin Surveillance (12 Basins)
+                <div className="corwdy-subtitle mb-1">
+                  <span>/PAN-INDIA BASIN SURVEILLANCE</span>
+                </div>
+                <h2 className="text-base font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                  <Radio className="w-4 h-4 text-red-400" />
+                  Autonomous Sentinel Basin Surveillance (12 Basins)
                 </h2>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-white/70">
                   Continuous multi-basin telemetry monitoring river stage anomalies, flood crest velocity, and autonomous red alerts across India.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => setAutoDispatchEnabled((p) => !p)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
+                  className={`text-[10px] uppercase font-bold tracking-[1.5px] px-4 py-2 rounded-full border transition flex items-center gap-1.5 ${
                     autoDispatchEnabled
-                      ? "bg-emerald-500/25 text-emerald-300 border-emerald-400/50"
-                      : "bg-white/10 text-slate-300 border-white/20"
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                      : "bg-white/10 text-white/70 border-white/15"
                   }`}
                 >
                   <Zap className="w-3.5 h-3.5" />
@@ -252,7 +255,7 @@ export default function NationalSentinelPage() {
                 <button
                   onClick={runNationalScan}
                   disabled={loadingScan}
-                  className="btn-solid-primary text-xs h-[34px] px-3"
+                  className="btn-solid-primary text-xs h-[38px] px-4"
                 >
                   <span>{loadingScan ? "Scanning..." : "Scan All Basins"}</span>
                 </button>
@@ -277,17 +280,15 @@ export default function NationalSentinelPage() {
           {/* Section 2: Multi-Horizon Forecast & AI Hydrological Risk Engine */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* Left 7 Cols: Multi-Horizon Forecast Simulation & Directives */}
-            <div className="lg:col-span-7 space-y-4">
+            <div className="lg:col-span-7 space-y-4 font-sans">
               {/* Multi-Horizon Surge Forecast Simulation */}
               <div className="space-y-3 text-white">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-indigo-400" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                      Multi-Horizon Hydrodynamic Wave Forecast
-                    </h3>
+                  <div className="corwdy-subtitle">
+                    <Clock className="w-3.5 h-3.5 text-white/80" />
+                    <span>/MULTI-HORIZON WAVE FORECAST</span>
                   </div>
-                  <span className="text-[11px] text-slate-300 font-mono">
+                  <span className="text-[11px] text-white/60 font-mono">
                     Sector: {selectedZone.name}
                   </span>
                 </div>
@@ -295,22 +296,22 @@ export default function NationalSentinelPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                   {[
                     { key: "NOW", label: "T - 0 (NOW)", desc: "Baseline / Anomaly" },
-                    { key: "+2H", label: "+2 HOURS", desc: "Runoff Accumulation" },
-                    { key: "+6H", label: "+6 HOURS", desc: "Peak Inundation Crest" },
-                    { key: "+12H", label: "+12 HOURS", desc: "Downstream Propagation" },
-                    { key: "+24H", label: "+24 HOURS", desc: "Recession & Normal" },
+                    { key: "+2H", label: "+2 HOURS", desc: "Runoff Influx" },
+                    { key: "+6H", label: "+6 HOURS", desc: "Peak Crest" },
+                    { key: "+12H", label: "+12 HOURS", desc: "Propagation" },
+                    { key: "+24H", label: "+24 HOURS", desc: "Recession" },
                   ].map((h) => (
                     <button
                       key={h.key}
                       onClick={() => setForecastHorizon(h.key as ForecastHorizon)}
-                      className={`p-2 rounded-xl text-left border transition ${
+                      className={`p-3 rounded-2xl text-left border transition ${
                         forecastHorizon === h.key
-                          ? "btn-solid-primary shadow-md"
-                          : "bg-white/10 text-slate-200 border-white/15 hover:bg-white/20"
+                          ? "bg-white text-[#161a20] border-white font-bold shadow-md"
+                          : "bg-[#1b2027]/75 text-white/80 border-white/10 hover:bg-[#212730]/90"
                       }`}
                     >
-                      <div className="font-bold">{h.label}</div>
-                      <div className="text-[10px] opacity-80 truncate">{h.desc}</div>
+                      <div className="font-bold text-[11px] uppercase tracking-wider">{h.label}</div>
+                      <div className="text-[9px] opacity-70 truncate mt-0.5">{h.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -373,19 +374,19 @@ export default function NationalSentinelPage() {
         }}
       />
 
-      {/* Quick Jump Floating Pill */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-slate-950/70 backdrop-blur-md border border-white/25 rounded-full p-1.5 shadow-2xl text-white">
+      {/* Quick Jump Floating Pill (Corwdy Capsule) */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-[#161a20]/85 backdrop-blur-xl border border-white/15 rounded-full p-2 shadow-2xl text-white font-sans">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           aria-label="Scroll to top"
-          className="px-3 py-1.5 rounded-full text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/15 transition flex items-center gap-1 min-h-[36px]"
+          title="Back to Top"
+          className="circle-btn w-[36px] h-[36px]"
         >
-          <ChevronUp className="w-3.5 h-3.5" />
-          <span>Top</span>
+          <ChevronUp className="w-4 h-4" />
         </button>
         <Link
           href="/radar"
-          className="px-3.5 py-1.5 rounded-full btn-solid-primary text-xs font-bold uppercase transition flex items-center gap-1.5 min-h-[36px]"
+          className="btn-solid-primary text-xs h-[36px] px-4"
         >
           <span>Tactical Radar</span>
           <ArrowRight className="w-3.5 h-3.5" />
@@ -393,7 +394,7 @@ export default function NationalSentinelPage() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-white/15 bg-slate-950/40 backdrop-blur-md px-6 py-4 text-center text-xs text-slate-300 flex flex-col sm:flex-row items-center justify-between gap-3 mt-8">
+      <footer className="border-t border-white/10 bg-[#161a20]/90 backdrop-blur-md px-6 py-5 text-center text-xs text-white/70 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
         <div className="font-semibold text-white">
           NeerNetra — India Flash Flood Early Warning System &bull; SIH 2026 PS: SIH26192
         </div>
@@ -403,7 +404,7 @@ export default function NationalSentinelPage() {
             12 Basins Online
           </span>
           <span className="text-white/20">|</span>
-          <span className="text-slate-300">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
+          <span className="text-white/70">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
         </div>
       </footer>
     </div>

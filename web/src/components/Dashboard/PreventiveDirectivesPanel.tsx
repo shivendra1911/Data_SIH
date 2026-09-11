@@ -92,26 +92,26 @@ export default function PreventiveDirectivesPanel({
   const pendingCount = directives.filter((d) => !d.executed).length;
 
   return (
-    <div className="flex flex-col h-full space-y-3 text-white">
+    <div className="flex flex-col h-full space-y-3 text-white font-sans">
       {/* Header */}
       <div className="flex items-center justify-between relative z-10 pb-1">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center shadow-xs text-red-400">
+          <div className="w-8 h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center shadow-xs text-white">
             <ShieldAlert className="w-4 h-4" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-black text-white uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-bold text-white uppercase tracking-[1.5px] font-display">
               Pre-Disaster Mitigation Directives
             </h2>
-            <p className="text-[11px] font-medium text-slate-300">
-              Autonomous Dam Buffer, Highway Diversions & Evacuation Orders
+            <p className="text-[11px] font-medium text-white/70">
+              Autonomous Dam Buffer, Highway Diversions &amp; Evacuation Orders
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 uppercase shadow-xs">
-            {pendingCount} Orders Pending
+          <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 uppercase tracking-wider">
+            {pendingCount} Pending
           </span>
         </div>
       </div>
@@ -124,43 +124,43 @@ export default function PreventiveDirectivesPanel({
           return (
             <div
               key={directive.id}
-              className={`p-3.5 rounded-xl border transition-all ${
+              className={`p-4 rounded-2xl border transition-all ${
                 directive.executed
-                  ? "backdrop-blur-md bg-white/5 border-white/10 opacity-75 text-slate-300"
+                  ? "backdrop-blur-md bg-white/5 border-white/10 opacity-75 text-white/60"
                   : isImmediate
-                  ? "backdrop-blur-md bg-red-950/30 border-red-500/40 shadow-sm text-white"
-                  : "backdrop-blur-md bg-white/10 border-white/15 shadow-xs text-white"
+                  ? "backdrop-blur-md bg-red-950/25 border-red-500/35 shadow-sm text-white"
+                  : "backdrop-blur-md bg-[#1b2027]/75 border-white/10 hover:bg-[#212730]/90 shadow-xs text-white"
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-white/10 border border-white/20 shrink-0 mt-0.5 shadow-xs">
+                  <div className="p-2.5 rounded-full bg-white/10 border border-white/15 shrink-0 mt-0.5 shadow-xs">
                     {getCategoryIcon(directive.category)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <span className="text-xs font-bold text-white tracking-tight font-display">
                         {directive.title}
                       </span>
                       <span
-                        className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-xs ${
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
                           directive.priority === "IMMEDIATE"
                             ? "bg-red-600 text-white"
-                            : "bg-amber-500 text-slate-950"
+                            : "bg-amber-500 text-[#161a20]"
                         }`}
                       >
                         {directive.priority}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-200 font-normal mt-1 leading-relaxed">
+                    <p className="text-xs text-white/75 font-normal mt-1.5 leading-relaxed font-sans">
                       {directive.action}
                     </p>
 
-                    <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-300 font-semibold">
-                      <span>Execution Deadline: <strong className="text-red-400 font-black">{directive.deadline}</strong></span>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-white/60 font-medium">
+                      <span>Execution Deadline: <strong className="text-red-400 font-bold">{directive.deadline}</strong></span>
                       <span>•</span>
-                      <span>Target Sector: <strong className="text-slate-100 font-black">{directive.category}</strong></span>
+                      <span>Sector: <strong className="text-white font-bold">{directive.category}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -169,7 +169,7 @@ export default function PreventiveDirectivesPanel({
                 <button
                   onClick={() => handleAuthorize(directive.id)}
                   aria-label={directive.executed ? "Order executed" : "Authorize dispatch directive"}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition min-h-[40px] shrink-0 flex items-center justify-center gap-1.5 active:scale-95 shadow-md ${
+                  className={`shrink-0 ${
                     directive.executed
                       ? "btn-solid-emerald"
                       : "btn-solid-primary"
@@ -177,13 +177,13 @@ export default function PreventiveDirectivesPanel({
                 >
                   {directive.executed ? (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-white" aria-hidden />
+                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden />
                       <span>Executed</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-3.5 h-3.5 text-white" aria-hidden />
-                      <span>Authorize Order</span>
+                      <Send className="w-3.5 h-3.5" aria-hidden />
+                      <span>Authorize</span>
                     </>
                   )}
                 </button>
