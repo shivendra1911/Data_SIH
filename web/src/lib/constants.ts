@@ -7,7 +7,11 @@ import {
   RegionalAlert,
 } from "./types";
 
-export const HIMALAYAN_ZONES: HazardZone[] = [
+// Alias for backward compat
+export const HIMALAYAN_ZONES: HazardZone[] = [];
+
+// All-India Flood Monitoring Zones — SIH 2026 PS: SIH26192
+export const INDIA_FLOOD_ZONES: HazardZone[] = [
   {
     id: "chamoli_01",
     name: "Chamoli (Rishi Ganga - Dhauliganga Valley)",
@@ -342,7 +346,122 @@ export const HIMALAYAN_ZONES: HazardZone[] = [
       },
     ],
   },
+  // ─── ASSAM / BRAHMAPUTRA ──────────────────────────────────────────────
+  {
+    id: "assam_brahmaputra_01",
+    name: "Brahmaputra Floodplain (Majuli Island)",
+    district: "Jorhat / Majuli, Assam",
+    center: [26.9500, 94.2200],
+    currentRisk: 71.3,
+    alertColor: "ORANGE" as const,
+    primaryTrigger: "Brahmaputra Embankment Breach — Monsoon Peak Discharge 61,000 cumecs",
+    leadTimeMinutes: 120,
+    dangerMarkM: 89.0,
+    warningMarkM: 87.5,
+    telemetry: { rainfall_mm: 92.0, soil_moisture_pct: 94.0, slope_deg: 4.5, river_level_m: 87.8, seismic_mag: 0.3 },
+    hydrograph: [
+      { time: "-06h", level_m: 85.2, discharge_cumecs: 42000, isPredicted: false },
+      { time: "-04h", level_m: 86.1, discharge_cumecs: 48000, isPredicted: false },
+      { time: "-02h", level_m: 86.9, discharge_cumecs: 53000, isPredicted: false },
+      { time: "NOW",  level_m: 87.8, discharge_cumecs: 61000, isPredicted: false },
+      { time: "+02h", level_m: 88.6, discharge_cumecs: 71000, isPredicted: true },
+      { time: "+04h", level_m: 89.3, discharge_cumecs: 78000, isPredicted: true },
+      { time: "+06h", level_m: 88.1, discharge_cumecs: 65000, isPredicted: true },
+      { time: "+08h", level_m: 86.4, discharge_cumecs: 52000, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-601", category: "HIGHWAY", title: "NH-27 Floodplain Bypass Activation", action: "Alert NHAI to activate Kaziranga bypass. Suspend NH-27 through Majuli floodplain.", priority: "IMMEDIATE", deadline: "T - 90 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-a1", name: "Majuli Ferry Ghat Evacuation Point", type: "SHELTER", coords: [26.9488, 94.1932], riskLevel: "HIGH", bufferDistanceM: 30 }],
+  },
+  // ─── KERALA / WESTERN GHATS ─────────────────────────────────────────
+  {
+    id: "kerala_chalakudy_01",
+    name: "Chalakudy River (Western Ghats Runoff)",
+    district: "Thrissur, Kerala",
+    center: [10.3010, 76.3316],
+    currentRisk: 58.7,
+    alertColor: "ORANGE" as const,
+    primaryTrigger: "Orographic Rainfall 148mm — Poringalkuthu Reservoir Overflow Risk",
+    leadTimeMinutes: 95,
+    dangerMarkM: 12.5,
+    warningMarkM: 10.0,
+    telemetry: { rainfall_mm: 148.0, soil_moisture_pct: 97.0, slope_deg: 28.0, river_level_m: 9.8, seismic_mag: 0.1 },
+    hydrograph: [
+      { time: "-06h", level_m: 7.2, discharge_cumecs: 800, isPredicted: false },
+      { time: "-04h", level_m: 8.1, discharge_cumecs: 1200, isPredicted: false },
+      { time: "-02h", level_m: 9.1, discharge_cumecs: 1800, isPredicted: false },
+      { time: "NOW",  level_m: 9.8, discharge_cumecs: 2400, isPredicted: false },
+      { time: "+02h", level_m: 11.4, discharge_cumecs: 3600, isPredicted: true },
+      { time: "+04h", level_m: 13.1, discharge_cumecs: 4800, isPredicted: true },
+      { time: "+06h", level_m: 11.8, discharge_cumecs: 3900, isPredicted: true },
+      { time: "+08h", level_m: 10.2, discharge_cumecs: 2800, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-701", category: "DAM", title: "Poringalkuthu Dam Controlled Release", action: "Open 4 of 6 sluice gates at 60% to prevent uncontrolled overflow into Chalakudy town.", priority: "IMMEDIATE", deadline: "T - 45 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-b1", name: "Chalakudy Town Riverside Shelter", type: "SHELTER", coords: [10.2998, 76.3289], riskLevel: "HIGH", bufferDistanceM: 20 }],
+  },
+  // ─── BIHAR / KOSI PLAINS ────────────────────────────────────────────
+  {
+    id: "bihar_kosi_01",
+    name: "Kosi River Embankment (Supaul Zone)",
+    district: "Supaul, Bihar",
+    center: [25.8921, 86.5973],
+    currentRisk: 47.2,
+    alertColor: "YELLOW" as const,
+    primaryTrigger: "Kosi Embankment Seepage — Nepal Birpur Barrage Spill Release",
+    leadTimeMinutes: 300,
+    dangerMarkM: 33.5,
+    warningMarkM: 32.0,
+    telemetry: { rainfall_mm: 55.0, soil_moisture_pct: 88.0, slope_deg: 1.8, river_level_m: 31.8, seismic_mag: 0.2 },
+    hydrograph: [
+      { time: "-06h", level_m: 30.1, discharge_cumecs: 18000, isPredicted: false },
+      { time: "-04h", level_m: 30.8, discharge_cumecs: 21000, isPredicted: false },
+      { time: "-02h", level_m: 31.4, discharge_cumecs: 24000, isPredicted: false },
+      { time: "NOW",  level_m: 31.8, discharge_cumecs: 27000, isPredicted: false },
+      { time: "+02h", level_m: 32.5, discharge_cumecs: 32000, isPredicted: true },
+      { time: "+04h", level_m: 33.8, discharge_cumecs: 39000, isPredicted: true },
+      { time: "+06h", level_m: 32.9, discharge_cumecs: 34000, isPredicted: true },
+      { time: "+08h", level_m: 31.6, discharge_cumecs: 26000, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-801", category: "HIGHWAY", title: "NH-107 Embankment Load Advisory", action: "Deploy Bihar Police to restrict heavy trucks on embankment roads to prevent overload failure.", priority: "ADVISORY", deadline: "T - 180 mins", executed: false },
+    ],
+    infrastructure: [{ id: "infra-c1", name: "Kosi Western Embankment (KWE)", type: "BARRAGE", coords: [25.9012, 86.5821], riskLevel: "MODERATE", bufferDistanceM: 200 }],
+  },
+  // ─── ODISHA / MAHANADI DELTA ────────────────────────────────────────
+  {
+    id: "odisha_mahanadi_01",
+    name: "Mahanadi Delta (Cuttack Floodplain)",
+    district: "Cuttack, Odisha",
+    center: [20.4625, 85.8828],
+    currentRisk: 34.5,
+    alertColor: "YELLOW" as const,
+    primaryTrigger: "Hirakud Reservoir Spillway — Coastal Inundation Watch",
+    leadTimeMinutes: 480,
+    dangerMarkM: 15.0,
+    warningMarkM: 13.5,
+    telemetry: { rainfall_mm: 38.0, soil_moisture_pct: 76.0, slope_deg: 2.2, river_level_m: 12.8, seismic_mag: 0.1 },
+    hydrograph: [
+      { time: "-06h", level_m: 11.2, discharge_cumecs: 12000, isPredicted: false },
+      { time: "-04h", level_m: 11.8, discharge_cumecs: 14000, isPredicted: false },
+      { time: "-02h", level_m: 12.4, discharge_cumecs: 17000, isPredicted: false },
+      { time: "NOW",  level_m: 12.8, discharge_cumecs: 19000, isPredicted: false },
+      { time: "+02h", level_m: 13.6, discharge_cumecs: 24000, isPredicted: true },
+      { time: "+04h", level_m: 14.2, discharge_cumecs: 28000, isPredicted: true },
+      { time: "+06h", level_m: 13.8, discharge_cumecs: 25000, isPredicted: true },
+      { time: "+08h", level_m: 12.9, discharge_cumecs: 20000, isPredicted: true },
+    ],
+    preventiveDirectives: [
+      { id: "dir-901", category: "PILGRIMAGE", title: "Puri Coastal Evacuation Advisory", action: "Issue evacuation notice for coastal villages within 5km. Coordinate with Odisha SDRF.", priority: "STANDBY", deadline: "T - 300 mins", executed: true },
+    ],
+    infrastructure: [{ id: "infra-d1", name: "Cuttack River Wall", type: "BARRAGE", coords: [20.4525, 85.8923], riskLevel: "SAFE", bufferDistanceM: 150 }],
+  },
 ];
+
+// Backward-compat alias — points to Uttarakhand/HP zones (first 5)
+HIMALAYAN_ZONES.push(...INDIA_FLOOD_ZONES.slice(0, 5));
 
 export const INITIAL_MOCK_SOS_EVENTS: SOSEvent[] = [
   {

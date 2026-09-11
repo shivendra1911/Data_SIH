@@ -1,11 +1,17 @@
 export type AlertColor = "RED" | "ORANGE" | "YELLOW" | "GREEN";
 
 export type ZoneId =
+  // Uttarakhand / HP
   | "chamoli_01"
   | "kedarnath_01"
   | "joshimath_01"
   | "rishikesh_01"
-  | "uttarkashi_01";
+  | "uttarkashi_01"
+  // All-India zones
+  | "assam_brahmaputra_01"
+  | "kerala_chalakudy_01"
+  | "bihar_kosi_01"
+  | "odisha_mahanadi_01";
 
 export type ForecastHorizon = "NOW" | "+2H" | "+6H" | "+12H" | "+24H";
 

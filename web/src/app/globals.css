@@ -3,44 +3,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   NEERNETRA — Rabto Design System
+   White-first, Inter/Space Grotesk, purple/red accent
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 @layer base {
   :root {
-    --background: 224 71% 4%;
-    --foreground: 210 40% 98%;
+    /* Rabto Color Tokens */
+    --clr-bg: #ffffff;
+    --clr-surface: #f8f9fa;
+    --clr-surface-2: #f1f3f5;
+    --clr-border: #e5e7eb;
+    --clr-text: #111111;
+    --clr-text-muted: #6b7280;
+    --clr-text-subtle: #9ca3af;
+    --clr-accent: #7C3AED;
+    --clr-accent-light: #ede9fe;
+    --clr-accent-2: #6366f1;
+    --clr-danger: #dc2626;
+    --clr-danger-light: #fee2e2;
+    --clr-success: #16a34a;
+    --clr-success-light: #dcfce7;
+    --clr-warning: #d97706;
+    --clr-warning-light: #fef3c7;
+    --clr-info: #0284c7;
+    --clr-info-light: #e0f2fe;
+    /* Rabto FX spotlight — red glare as per global-logic-media skill */
+    --clr-glare: rgba(124, 58, 237, 0.15);
   }
 
   body {
-    @apply bg-[#05070e] text-slate-100 antialiased overflow-x-hidden;
+    @apply antialiased overflow-x-hidden;
+    background-color: var(--clr-bg);
+    color: var(--clr-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--clr-text);
   }
 }
 
-/* ==========================================================================
-   Rabto FX Engine — 3D Tilt Physics & Radial Glare Spotlight System
-   ========================================================================== */
-
+/* =========================================================
+   Rabto FX Engine — 60fps 3D Tilt Physics
+   ========================================================= */
 .tilt-card {
   position: relative;
   overflow: hidden;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), 
-              border-color 0.25s ease, 
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s ease,
               box-shadow 0.28s ease;
   will-change: transform;
+  border-radius: 16px;
 }
 
 .tilt-card:hover {
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 
-              0 0 25px -5px rgba(56, 189, 248, 0.15);
+  box-shadow: 0 20px 40px -15px rgba(124, 58, 237, 0.15),
+              0 4px 12px -2px rgba(0, 0, 0, 0.08);
 }
 
-/* Radial Glare Spotlight Follower (Rabto FX) */
+/* Rabto FX Radial Glare Spotlight Cursor Follower */
 .tilt-card::after {
   content: '';
   position: absolute;
   inset: 0;
   background: radial-gradient(
     550px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(56, 189, 248, 0.14),
+    var(--clr-glare),
     transparent 50%
   );
   pointer-events: none;
@@ -48,29 +85,107 @@
   transition: opacity 0.3s ease;
   z-index: 1;
 }
-
 .tilt-card:hover::after {
   opacity: 1;
 }
 
-/* HUD Cyber Grid Background */
-.hud-grid {
-  background-size: 36px 36px;
-  background-image: 
-    linear-gradient(to right, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+/* =========================================================
+   GSAP Word-by-Word Reveal (Rabto gsap-word-reveal skill)
+   ========================================================= */
+.glm-word-reveal {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.15em;
+  margin-bottom: -0.15em;
+}
+.glm-word-inner {
+  display: inline-block;
+  transform: translateY(100%);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .glm-word-inner {
+    transform: none !important;
+    opacity: 1 !important;
+  }
 }
 
-/* Tactical Glowing Border Accents */
-.glow-border-cyan {
-  box-shadow: 0 0 15px -3px rgba(6, 182, 212, 0.25), inset 0 0 15px -3px rgba(6, 182, 212, 0.1);
+/* =========================================================
+   Dot Grid Hero Background (modern-startup-design skill)
+   ========================================================= */
+.dot-grid {
+  background-image: radial-gradient(circle, #d1d5db 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-.glow-border-rose {
-  box-shadow: 0 0 15px -3px rgba(244, 63, 94, 0.3), inset 0 0 15px -3px rgba(244, 63, 94, 0.15);
+/* =========================================================
+   Status Badge Colors
+   ========================================================= */
+.badge-critical {
+  background: var(--clr-danger-light);
+  color: var(--clr-danger);
+  border: 1px solid #fca5a5;
+}
+.badge-warning {
+  background: var(--clr-warning-light);
+  color: var(--clr-warning);
+  border: 1px solid #fcd34d;
+}
+.badge-safe {
+  background: var(--clr-success-light);
+  color: var(--clr-success);
+  border: 1px solid #86efac;
+}
+.badge-info {
+  background: var(--clr-info-light);
+  color: var(--clr-info);
+  border: 1px solid #7dd3fc;
 }
 
-/* Custom Tactical Leaflet Radar Pulse Markers */
+/* =========================================================
+   Animated Risk Arc (Alert ring)
+   ========================================================= */
+.risk-ring {
+  stroke-dasharray: 226;
+  stroke-dashoffset: 226;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: ringFill 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes ringFill {
+  to { stroke-dashoffset: var(--dash-end, 0); }
+}
+
+/* =========================================================
+   Leaflet Map — Light Theme
+   ========================================================= */
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.15) !important;
+  padding: 4px !important;
+}
+.leaflet-popup-tip {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+}
+.leaflet-container {
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+  height: 100%;
+  background: #f1f3f5 !important;
+}
+.leaflet-control-zoom a {
+  background: #fff !important;
+  color: #111 !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+/* =========================================================
+   Radar Pulse Markers — Citizen Pins
+   ========================================================= */
 .radar-pulse-container {
   position: relative;
   display: flex;
@@ -79,86 +194,122 @@
   width: 44px;
   height: 44px;
 }
-
 .radar-wave {
   position: absolute;
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(244, 63, 94, 0.45);
+  background: rgba(220, 38, 38, 0.35);
   animation: radar-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-
 .radar-wave-delayed {
   animation-delay: 0.9s;
 }
-
 .radar-dot {
   position: relative;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #f43f5e;
+  background: #dc2626;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 14px #f43f5e;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.6);
 }
-
 .radar-dot.safe {
-  background: #10b981;
-  box-shadow: 0 0 14px #10b981;
+  background: #16a34a;
+  box-shadow: 0 0 12px rgba(22, 163, 74, 0.6);
 }
-
 .radar-dot.helping {
-  background: #38bdf8;
-  box-shadow: 0 0 14px #38bdf8;
+  background: #7C3AED;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
 }
-
 @keyframes radar-ping {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.9;
-  }
-  80%, 100% {
-    transform: scale(2.8);
-    opacity: 0;
-  }
+  0% { transform: scale(0.6); opacity: 0.9; }
+  80%, 100% { transform: scale(2.8); opacity: 0; }
 }
 
-/* Dark Tactical Map Popup Styling */
-.leaflet-popup-content-wrapper {
-  background: #090d16 !important;
-  color: #f8fafc !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 14px !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
-  padding: 4px !important;
-  backdrop-filter: blur(12px);
+/* =========================================================
+   Custom Scrollbars — Light
+   ========================================================= */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f3f5; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* =========================================================
+   Marquee Animation (Lenis-powered partner logos)
+   ========================================================= */
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  gap: 48px;
+  animation: marquee-scroll 32s linear infinite;
 }
 
-.leaflet-popup-tip {
-  background: #090d16 !important;
-  border: 1px solid #1e293b !important;
+/* =========================================================
+   Utility: Gradient Text
+   ========================================================= */
+.gradient-text {
+  background: linear-gradient(135deg, #7C3AED 0%, #6366f1 40%, #0284c7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #7C3AED 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.leaflet-container {
-  font-family: inherit;
-  width: 100%;
-  height: 100%;
-  background: #05070e !important;
+/* =========================================================
+   Button Base States (WCAG AA 4.5:1, 44×44px touch target)
+   ========================================================= */
+.btn-primary {
+  @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white
+         bg-violet-700 hover:bg-violet-600 active:scale-95
+         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2
+         transition-all duration-200 ease-out min-h-[44px] shadow-sm;
+}
+.btn-danger {
+  @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white
+         bg-red-600 hover:bg-red-500 active:scale-95
+         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2
+         transition-all duration-200 ease-out min-h-[44px];
+}
+.btn-ghost {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm
+         text-gray-700 bg-white hover:bg-gray-50 active:scale-95 border border-gray-200
+         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500
+         transition-all duration-200 ease-out min-h-[44px];
 }
 
-/* Custom Sleek Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* =========================================================
+   Card Base
+   ========================================================= */
+.card {
+  @apply bg-white border border-gray-200 rounded-2xl shadow-sm;
 }
-::-webkit-scrollbar-track {
-  background: #05070e;
+.card-header {
+  @apply px-5 py-4 border-b border-gray-100 flex items-center gap-3;
 }
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 3px;
+.card-body {
+  @apply p-5;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+
+/* =========================================================
+   Pulse animations for live status
+   ========================================================= */
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
 }
+.pulse-red { animation: pulse-red 1.5s ease infinite; }
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+}
+.pulse-green { animation: pulse-green 2s ease infinite; }

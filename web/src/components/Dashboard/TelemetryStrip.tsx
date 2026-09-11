@@ -2,14 +2,7 @@
 
 import React from "react";
 import { HazardZone } from "@/lib/types";
-import {
-  Waves,
-  CloudRain,
-  Mountain,
-  Activity,
-  Clock,
-  Gauge,
-} from "lucide-react";
+import { Waves, CloudRain, Mountain, Activity, Clock, Gauge } from "lucide-react";
 
 interface TelemetryStripProps {
   activeZone: HazardZone;
@@ -31,116 +24,108 @@ export default function TelemetryStrip({ activeZone, riskPercent }: TelemetryStr
     seismic_mag: 4.2,
   };
 
+  // Tile base classes — Rabto light design system
+  const tile = "tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-gray-200 hover:border-violet-300 hover:shadow-sm transition";
+  const iconBox = (color: string) =>
+    `w-8 h-8 rounded-lg flex items-center justify-center shrink-0 relative z-10 ${color}`;
+  const label = "text-[10px] uppercase tracking-wider text-gray-500 font-semibold";
+  const value = "text-sm font-black text-gray-900 flex items-baseline gap-1.5";
+
   return (
-    <div className="w-full bg-slate-950/90 border-y border-slate-800/80 backdrop-blur-xl px-4 lg:px-8 py-2.5">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4 max-w-[1750px] mx-auto text-xs">
-        {/* Metric 1: River Gauge & Rising Velocity */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-cyan-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <Waves className="w-4 h-4 text-sky-400" />
+    <div className="w-full bg-white border-y border-gray-200 px-4 lg:px-8 py-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-[1800px] mx-auto text-xs">
+
+        {/* River Stage */}
+        <div className={tile}>
+          <div className={iconBox("bg-sky-50 border border-sky-200")}>
+            <Waves className="w-4 h-4 text-sky-600" aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold flex items-center gap-1">
-              <span>River Stage</span>
-              <span className="text-rose-400 font-bold">▲ +1.4m/h</span>
+            <div className={label}>
+              River Stage <span className="text-red-500 font-bold">▲ +1.4m/h</span>
             </div>
-            <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
+            <div className={value}>
               {telemetry.river_level_m.toFixed(1)}m
-              <span className="text-[10px] text-slate-400 font-normal">
-                / {activeZone.dangerMarkM}m
-              </span>
+              <span className="text-[10px] text-gray-400 font-normal">/ {activeZone.dangerMarkM}m</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 2: Catchment Rainfall Intensity */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-blue-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <CloudRain className="w-4 h-4 text-blue-400" />
+        {/* Catchment Rainfall */}
+        <div className={tile}>
+          <div className={iconBox("bg-blue-50 border border-blue-200")}>
+            <CloudRain className="w-4 h-4 text-blue-600" aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Catchment Rain
-            </div>
-            <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
-              {telemetry.rainfall_mm.toFixed(1)}{" "}
-              <span className="text-[10px] text-slate-400 font-normal">mm/h</span>
-              <span className="text-[9px] text-amber-400 font-bold px-1 rounded bg-amber-500/10 border border-amber-500/20">
-                HEAVY
-              </span>
+            <div className={label}>Catchment Rain</div>
+            <div className={value}>
+              {telemetry.rainfall_mm.toFixed(1)}
+              <span className="text-[10px] text-gray-400 font-normal">mm/h</span>
+              <span className="text-[9px] text-amber-700 font-bold px-1 rounded bg-amber-50 border border-amber-200">HEAVY</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 3: Soil Pore Saturation */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-emerald-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <Mountain className="w-4 h-4 text-emerald-400" />
+        {/* Soil Saturation */}
+        <div className={tile}>
+          <div className={iconBox("bg-emerald-50 border border-emerald-200")}>
+            <Mountain className="w-4 h-4 text-emerald-600" aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Soil Saturation
-            </div>
-            <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
+            <div className={label}>Soil Saturation</div>
+            <div className={value}>
               {telemetry.soil_moisture_pct.toFixed(1)}%
-              <span className="text-[9px] text-rose-400 font-bold px-1 rounded bg-rose-500/10 border border-rose-500/20">
-                OVERSATURATED
-              </span>
+              <span className="text-[9px] text-red-700 font-bold px-1 rounded bg-red-50 border border-red-200">OVERSATURATED</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 4: Cryo-Seismic Tremor Frequency */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-rose-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <Activity className="w-4 h-4 text-rose-400 animate-pulse" />
+        {/* Seismic / GLOF */}
+        <div className={tile}>
+          <div className={iconBox("bg-red-50 border border-red-200")}>
+            <Activity className={`w-4 h-4 text-red-600 ${isDanger ? "animate-pulse" : ""}`} aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Cryo-Seismic (GLOF)
-            </div>
-            <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
-              {telemetry.seismic_mag.toFixed(1)}M{" "}
-              <span className="text-[9px] text-rose-400 font-bold px-1 rounded bg-rose-500/15 border border-rose-500/30">
-                BREACH RISK
-              </span>
+            <div className={label}>Cryo-Seismic (GLOF)</div>
+            <div className={value}>
+              {telemetry.seismic_mag.toFixed(1)}M
+              {telemetry.seismic_mag > 3 && (
+                <span className="text-[9px] text-red-700 font-bold px-1 rounded bg-red-50 border border-red-200">BREACH RISK</span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Metric 5: Lead-Time to Inundation Breach */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-amber-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <Clock className="w-4 h-4 text-amber-400" />
+        {/* Evacuation Window */}
+        <div className={tile}>
+          <div className={iconBox("bg-amber-50 border border-amber-200")}>
+            <Clock className="w-4 h-4 text-amber-600" aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Evacuation Window
-            </div>
-            <div className="text-sm font-black font-mono text-amber-300">
-              {hours}h {mins}m{" "}
-              <span className="text-[10px] text-slate-400 font-normal">to Surge Peak</span>
+            <div className={label}>Evacuation Window</div>
+            <div className={`${value} text-amber-700`}>
+              {hours}h {mins}m
+              <span className="text-[10px] text-gray-400 font-normal">to Peak</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 6: Peak Discharge Rate & Catchment */}
-        <div className="tilt-card flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 hover:border-purple-500/40 transition">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0 relative z-10">
-            <Gauge className="w-4 h-4 text-purple-400" />
+        {/* Peak Discharge */}
+        <div className={tile}>
+          <div className={iconBox("bg-violet-50 border border-violet-200")}>
+            <Gauge className="w-4 h-4 text-violet-600" aria-hidden />
           </div>
           <div className="relative z-10">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
-              Peak Discharge
-            </div>
-            <div className="text-sm font-black font-mono text-white flex items-baseline gap-1">
-              1,240 <span className="text-[10px] text-slate-400 font-normal">m³/s</span>
-              <span className="text-[9px] text-cyan-400 font-semibold uppercase">
-                Alaknanda
-              </span>
+            <div className={label}>Peak Discharge</div>
+            <div className={value}>
+              {activeZone.hydrograph
+                ? Math.max(...activeZone.hydrograph.map((h) => h.discharge_cumecs)).toLocaleString("en-IN")
+                : "1,240"}
+              <span className="text-[10px] text-gray-400 font-normal">m³/s</span>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

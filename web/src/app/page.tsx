@@ -42,7 +42,7 @@ import {
   RegionalAlert,
 } from "@/lib/types";
 import {
-  HIMALAYAN_ZONES,
+  INDIA_FLOOD_ZONES,
   INITIAL_MOCK_CLUSTERS,
   INITIAL_MOCK_SOS_EVENTS,
   INITIAL_CITIZEN_LOCATIONS,
@@ -64,13 +64,13 @@ export default function DashboardPage() {
   // Initialize Rabto FX 60fps 3D tilt physics & radial spotlight engine
   useRabtoTilt();
 
-  const [selectedZone, setSelectedZone] = useState<HazardZone>(HIMALAYAN_ZONES[0]);
+  const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(true);
   const [forecastHorizon, setForecastHorizon] = useState<ForecastHorizon>("NOW");
   const [sosEvents, setSOSEvents] = useState<SOSEvent[]>(INITIAL_MOCK_SOS_EVENTS);
   const [clusters, setClusters] = useState<SOSCluster[]>(INITIAL_MOCK_CLUSTERS);
-  const [mapCenter, setMapCenter] = useState<[number, number]>(HIMALAYAN_ZONES[0].center);
+  const [mapCenter, setMapCenter] = useState<[number, number]>(INDIA_FLOOD_ZONES[0].center);
   const [mapZoom, setMapZoom] = useState<number>(12);
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
@@ -252,17 +252,17 @@ export default function DashboardPage() {
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#05070e] text-slate-100 font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* 0. Vectrus-Style 500vh WebCodecs Hardware-Accelerated Video Scrub Hero & Sequential Typography */}
+    <div className="min-h-screen flex flex-col bg-white text-gray-900 font-sans selection:bg-violet-100 selection:text-violet-800">
+      {/* 0. Vectrus-Style 500vh WebCodecs Hardware-Accelerated Video Scrub Hero */}
       <ScrollVideoHero
         onEnterCommandCenter={() => {
           document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" });
         }}
       />
 
-      {/* Primary Command Operations Center Anchor */}
-      <div id="command-center" className="min-h-screen flex flex-col bg-[#05070e] hud-grid relative">
-        {/* 1. Tactical Command Header with HUD Telemetry Status */}
+      {/* Primary Command Operations Center */}
+      <div id="command-center" className="min-h-screen flex flex-col bg-gray-50 dot-grid relative">
+        {/* 1. Tactical Command Header */}
         <Header
           selectedZone={selectedZone}
           onSelectZone={handleSelectZone}
@@ -295,9 +295,8 @@ export default function DashboardPage() {
 
         {/* Primary Row 1: Geospatial Inundation Map (8 cols) + AI Hydrological Risk Engine (4 cols) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Tactical Geospatial Map */}
           <div className="lg:col-span-8 flex flex-col">
-            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
+            <div className="tilt-card w-full h-[520px] lg:h-[570px] rounded-2xl overflow-hidden border border-gray-200 shadow-sm relative bg-white">
               <MapWrapper
                 center={mapCenter}
                 zoom={mapZoom}
@@ -350,32 +349,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Primary Row 3: Tactical Distress Beacons & Automated K-Means Rescue Triage (Collapsible) */}
-        <div className="tilt-card border border-slate-800/80 rounded-2xl bg-slate-950/70 p-4 space-y-4 shadow-xl">
+        {/* Primary Row 3: Tactical Distress Beacons & Automated K-Means Rescue Triage */}
+        <div className="card tilt-card border border-gray-200 rounded-2xl bg-white p-4 space-y-4 shadow-sm mx-0">
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-                <LifeBuoy className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-600">
+                <LifeBuoy className="w-4 h-4" aria-hidden />
               </div>
               <div>
-                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                  Field Distress Beacons & Automated K-Means Rescue Triage
+                <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  Field Distress Beacons & Rescue Triage
                 </h3>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  Offline BLE Mesh Relays • Realtime Latency &lt;450ms • Connected Field Nodes: {sosEvents.length}
+                <p className="text-xs text-gray-500">
+                  BLE Mesh Relay Network • Latency &lt;450ms • Active Nodes: {sosEvents.length}
                 </p>
               </div>
             </div>
 
             <button
               onClick={() => setShowRescueLayer((prev) => !prev)}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-850 text-xs font-mono font-semibold text-slate-300 border border-slate-800 flex items-center gap-2 transition min-h-[40px]"
+              aria-label={showRescueLayer ? "Collapse triage feed" : "Expand field telemetry"}
+              className="btn-ghost text-xs"
             >
-              <span>{showRescueLayer ? "Collapse Triage Feed" : "Expand Field Telemetry"}</span>
+              <span>{showRescueLayer ? "Collapse" : "Expand Field Telemetry"}</span>
               {showRescueLayer ? (
-                <ChevronUp className="w-3.5 h-3.5" />
+                <ChevronUp className="w-3.5 h-3.5" aria-hidden />
               ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className="w-3.5 h-3.5" aria-hidden />
               )}
             </button>
           </div>
@@ -420,37 +420,43 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* Floating Tactical Quick-Switch Pill */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-slate-900/95 border border-slate-700/80 rounded-full p-1.5 shadow-2xl backdrop-blur-md">
+      {/* Floating Quick-Switch Pill */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-white border border-gray-200 rounded-full p-1.5 shadow-xl backdrop-blur-md">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="px-4 py-2 rounded-full text-[11px] font-mono font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1.5 min-h-[44px]"
-          title="Scroll to Cinematic Overview"
+          aria-label="Scroll to cinematic overview"
+          className="px-4 py-2 rounded-full text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition flex items-center gap-1.5 min-h-[44px]"
         >
-          <ChevronUp className="w-3.5 h-3.5" />
-          <span>Cinematic Overview</span>
+          <ChevronUp className="w-3.5 h-3.5" aria-hidden />
+          <span>Overview</span>
         </button>
         <button
           onClick={() => document.getElementById("command-center")?.scrollIntoView({ behavior: "smooth" })}
-          className="px-4 py-2 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[11px] font-mono font-bold uppercase transition flex items-center gap-1.5 min-h-[44px]"
-          title="Jump to Tactical Command Center"
+          aria-label="Jump to command center dashboard"
+          className="px-4 py-2 rounded-full bg-violet-700 hover:bg-violet-600 text-white text-xs font-bold uppercase transition flex items-center gap-1.5 min-h-[44px]"
         >
           <span>Command Center</span>
-          <ChevronDown className="w-3.5 h-3.5" />
+          <ChevronDown className="w-3.5 h-3.5" aria-hidden />
         </button>
       </div>
 
-      {/* Command Footer */}
-      <footer className="mt-auto border-t border-slate-800/80 bg-slate-950 px-6 py-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="font-mono text-[11px] text-slate-400">
-          NEERNETRA • Smart India Hackathon PS: SIH26192 • Himalayan Flash Flood & GLOF Early Warning System
+      {/* Footer */}
+      <footer className="border-t border-gray-200 bg-white px-6 py-5 text-center text-xs text-gray-500 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="font-semibold text-gray-700">
+          NeerNetra — India Flash Flood Early Warning System &bull; SIH 2026 PS: SIH26192
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-slate-400 font-mono text-[11px]">
-          <span className="text-emerald-400">● CWC Station Telemetry Online</span>
-          <span>•</span>
-          <span className="text-sky-400">● Android Relay: 172.16.183.190:3000</span>
-          <span>•</span>
-          <span>NDRF Hotlines: 1078 / SDMA: 1070</span>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block pulse-green" />
+            CWC Telemetry Online
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="flex items-center gap-1.5 text-violet-600 font-medium">
+            <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
+            Android Bridge: 172.16.183.190:3000
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-600">Emergency: NDRF 1078 &bull; SDMA 1070</span>
         </div>
       </footer>
     </div>
