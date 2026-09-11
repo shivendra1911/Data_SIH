@@ -272,7 +272,8 @@ def fetch_all_zones():
         time.sleep(0.5)  # Rate limit courtesy
 
     df = pd.DataFrame(records)
-    output = f"realtime_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    output = os.path.join(base_dir, f"realtime_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
     df.to_csv(output, index=False)
     print(f"\n[OK] Saved {len(df)} zone readings to {output}")
     print("\nSummary:")
