@@ -9,3 +9,4 @@ __pycache__/
 *.log
 crash_log.txt
 *.db
+*.apk
