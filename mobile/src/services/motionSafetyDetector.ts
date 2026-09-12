@@ -42,41 +42,46 @@ class MotionSafetyDetector {
         return false;
       }
 
-      // 100ms interval (10Hz) is optimal for human gesture detection with minimal battery impact
-      Accelerometer.setUpdateInterval(100);
-      Gyroscope.setUpdateInterval(100);
+      // Set update intervals individually — may fail on web/emulator, that's fine
+      try { Accelerometer.setUpdateInterval(100); } catch {}
+      try { Gyroscope.setUpdateInterval(100); } catch {}
 
+      // Attach Gyroscope listener independently — failure here won't break accelerometer
       if (gyroAvailable) {
-        this.gyroSubscription = Gyroscope.addListener(({ x, y, z }) => {
-          // Angular velocity magnitude in rad/s
-          this.currentGyroVelocity = Math.sqrt(x * x + y * y + z * z);
-        });
+        try {
+          this.gyroSubscription = Gyroscope.addListener(({ x, y, z }) => {
+            this.currentGyroVelocity = Math.sqrt(x * x + y * y + z * z);
+          });
+        } catch (gyroErr) {
+          console.warn('[MotionSafetyDetector] Gyroscope unavailable on this device, falling back to accelerometer only:', gyroErr);
+          this.gyroSubscription = null;
+        }
       }
 
+      // Attach Accelerometer listener independently — primary sensor
       if (accelAvailable) {
-        this.accelSubscription = Accelerometer.addListener(({ x, y, z }) => {
-          // Linear acceleration magnitude in g
-          const rawMag = Math.sqrt(x * x + y * y + z * z);
-          // Delta acceleration subtracting 1.0g baseline gravity
-          const deltaA = Math.abs(rawMag - 1.0);
+        try {
+          this.accelSubscription = Accelerometer.addListener(({ x, y, z }) => {
+            const rawMag = Math.sqrt(x * x + y * y + z * z);
+            const deltaA = Math.abs(rawMag - 1.0);
 
-          // Combined energy metric (normalized 0 to 1)
-          const energy = Math.min(1.0, deltaA * 0.7 + (this.currentGyroVelocity / 3.0) * 0.3);
-          if (this.callbacks?.onMovementEnergy) {
-            this.callbacks.onMovementEnergy(energy);
-          }
+            const energy = Math.min(1.0, deltaA * 0.7 + (this.currentGyroVelocity / 3.0) * 0.3);
+            if (this.callbacks?.onMovementEnergy) {
+              this.callbacks.onMovementEnergy(energy);
+            }
 
-          // Human deliberate motion threshold:
-          // Either significant dynamic acceleration + rotational wrist tilt
-          // OR a decisive shake/lift pulse
-          const isHumanMotion =
-            (deltaA >= 0.42 && this.currentGyroVelocity >= 1.0) ||
-            deltaA >= 0.75;
+            const isHumanMotion =
+              (deltaA >= 0.42 && this.currentGyroVelocity >= 1.0) ||
+              deltaA >= 0.75;
 
-          if (isHumanMotion) {
-            this.handleMotionStrike();
-          }
-        });
+            if (isHumanMotion) {
+              this.handleMotionStrike();
+            }
+          });
+        } catch (accelErr) {
+          console.warn('[MotionSafetyDetector] Accelerometer listener failed:', accelErr);
+          this.accelSubscription = null;
+        }
       }
 
       this.isMonitoring = true;
