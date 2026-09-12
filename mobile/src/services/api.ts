@@ -8,12 +8,12 @@ const getBaseUrl = (): string => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   // Active host LAN IP for physical device testing over Wi-Fi / Hotspot
-  const HOST_LAN_IP = '172.16.191.155';
+  const HOST_LAN_IP = '172.16.185.225';
   if (Platform.OS === 'android') {
-    // Physical phones on same Wi-Fi reach host laptop via LAN IP
-    return `http://${HOST_LAN_IP}:8000`;
+    // Physical phones on same Wi-Fi reach host laptop via LAN IP on Next.js port 3000
+    return `http://${HOST_LAN_IP}:3000`;
   }
-  return 'http://localhost:8000';
+  return 'http://localhost:3000';
 };
 
 const BASE_URL = getBaseUrl();
