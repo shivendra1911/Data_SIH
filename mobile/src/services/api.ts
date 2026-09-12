@@ -2,18 +2,13 @@ import { Platform } from 'react-native';
 import { ZonePrediction, SOSPayload } from '../types';
 import { getOfflineSOSQueue, clearOfflineSOSQueue, setOfflineSOSQueue, saveSOSToOfflineQueue } from './offlineStorage';
 
-// Dynamic API URL: environment override -> active host LAN IP -> emulator fallback -> localhost
+// Dynamic API URL: environment override -> deployed live Vercel cloud backend
 const getBaseUrl = (): string => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  // Active host LAN IP for physical device testing over Wi-Fi / Hotspot
-  const HOST_LAN_IP = '172.16.185.225';
-  if (Platform.OS === 'android') {
-    // Physical phones on same Wi-Fi reach host laptop via LAN IP on Next.js port 3000
-    return `http://${HOST_LAN_IP}:3000`;
-  }
-  return 'http://localhost:3000';
+  // Live Cloud Command Center on Vercel (connects any APK on 4G, 5G, or Wi-Fi)
+  return 'https://data-sih.vercel.app';
 };
 
 const BASE_URL = getBaseUrl();
