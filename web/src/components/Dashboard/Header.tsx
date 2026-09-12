@@ -9,7 +9,6 @@ import {
   ShieldAlert,
   MapPin,
   Radio,
-  Smartphone,
   Satellite,
   ChevronDown,
   Compass,
@@ -24,7 +23,7 @@ interface HeaderProps {
   selectedZone: HazardZone;
   onSelectZone: (zone: HazardZone) => void;
   onSimulateSOS?: () => void;
-  onOpenMobileModal: () => void;
+  onOpenMobileModal?: () => void;
   onOpenRegionalBroadcast?: () => void;
   onOpenSafeRoutesGuidelines?: () => void;
   onDetectLiveLocation?: () => void;
@@ -191,23 +190,6 @@ export default function Header({
             </button>
           )}
 
-          {/* Connected Citizen & Responder Mobile APKs */}
-          <button
-            type="button"
-            onClick={onOpenMobileModal}
-            aria-label="Citizen & Responder Mobile APK Sync"
-            className="h-10 sm:h-11 min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-[#f8fafc] border border-slate-700 text-xs font-semibold flex items-center gap-2 shadow-sm transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
-            title="Connected Citizen Mobile APKs & Offline Mesh Network"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />
-            <span className="hidden sm:inline font-medium whitespace-nowrap">Mobile APKs</span>
-            {connectedMobileCount !== undefined && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-slate-800 text-emerald-300 border border-slate-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse" />
-                {connectedMobileCount}
-              </span>
-            )}
-          </button>
 
           {/* Indian Disaster Helpline */}
           <a
