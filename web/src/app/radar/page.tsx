@@ -23,7 +23,6 @@ import {
   EmergencyResponder,
 } from "@/lib/types";
 import { fetchActiveClusters } from "@/lib/api";
-import { useRabtoTilt } from "@/lib/useRabtoTilt";
 import {
   Compass,
   MapPin,
@@ -51,7 +50,6 @@ const MapWrapper = dynamic(() => import("@/components/Map/MapWrapper"), {
 });
 
 export default function TacticalRadarPage() {
-  useRabtoTilt();
   const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
   const [sosEvents, setSOSEvents] = useState<SOSEvent[]>([]);
   const [clusters, setClusters] = useState<SOSCluster[]>([]);
@@ -200,23 +198,25 @@ export default function TacticalRadarPage() {
           connectedMobileCount={citizens.length}
         />
 
-        {/* Live status strip — Frosted Glass Theme */}
-        <div className="bg-[#161a20]/80 backdrop-blur-xl border-b border-white/10 px-4 lg:px-6 py-3 shadow-md font-sans text-white">
+        {/* Live status strip — informational only. Zone Broadcast and Citizen
+            SOS are already one tap away via the nav tabs / floating command
+            menu, so they no longer need a second, duplicate row of buttons here. */}
+        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
           <div className="flex flex-wrap items-center gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="font-extrabold text-white uppercase tracking-[1.5px] text-[11px] font-display">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+            <span className="font-extrabold text-slate-950 uppercase tracking-[1.5px] text-[11px] font-display">
               LIVE FLOOD RADAR MAP:
             </span>
-            <span className="font-bold text-white bg-white/10 px-3 py-0.5 rounded-full border border-white/15">
+            <span className="font-bold text-slate-900 bg-[#faf9f5] px-3 py-0.5 rounded-full border border-slate-300">
               {selectedZone.name} ({selectedZone.district})
             </span>
-            <span className="text-white/60 font-medium">
+            <span className="text-slate-500 font-medium">
               &bull; Danger Mark: {selectedZone.dangerMarkM}m &bull; Slope: {selectedZone.telemetry.slope_deg}&deg;
             </span>
             {citizens.filter((c) => c.status === "SOS").length > 0 && (
               <Link
                 href="/rescue"
-                className="ml-auto h-[32px] px-3.5 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm animate-pulse"
+                className="ml-auto h-[32px] px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs animate-pulse"
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>{citizens.filter((c) => c.status === "SOS").length} Active SOS &bull; Open Rescue Hub</span>

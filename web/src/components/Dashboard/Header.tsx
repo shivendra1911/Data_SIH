@@ -266,17 +266,17 @@ export default function Header({
   });
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#161a20]/90 backdrop-blur-2xl shadow-2xl">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-300 bg-white shadow-xs">
       {/* Active Screen Alert Notification */}
       {activeScreenAlert && (
-        <div className="bg-red-600/90 backdrop-blur-md text-white px-4 py-2 text-xs font-extrabold flex items-center justify-between border-b border-red-500/50 animate-pulse">
+        <div className="bg-red-600 text-white px-4 py-2 text-xs font-extrabold flex items-center justify-between border-b border-red-700 animate-pulse">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-300" />
             <span>{activeScreenAlert}</span>
           </div>
           <button
             onClick={() => setActiveScreenAlert(null)}
-            className="px-2 py-0.5 rounded-full bg-black/40 hover:bg-black/60 text-white text-[10px] uppercase font-mono transition"
+            className="px-2 py-0.5 rounded bg-red-800 hover:bg-red-900 text-white text-[10px] uppercase font-mono"
           >
             Dismiss
           </button>
@@ -284,56 +284,56 @@ export default function Header({
       )}
 
       {/* Top Telemetry Ticker (IST Time + Nationwide Alert Status + Active Basin) */}
-      <div className="bg-[#101317]/90 border-b border-white/5 px-4 py-1.5 text-[11px] text-white/60 flex justify-between items-center font-mono">
+      <div className="bg-[#faf9f5] border-b border-slate-200 px-4 py-1 text-[11px] text-slate-700 flex justify-between items-center font-mono">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-          <span className="font-semibold text-white/90 tracking-wide truncate">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-700 animate-pulse shrink-0" />
+          <span className="font-semibold text-slate-900 tracking-wide truncate">
             NEERNETRA CWC-NDMA EARLY WARNING NETWORK
           </span>
-          <span className="hidden md:inline text-white/20 shrink-0">|</span>
-          <span className="hidden md:inline text-white/70 truncate">
-            Active Basin: <strong className="text-white font-bold">{selectedZone.name}</strong> ({selectedZone.district})
+          <span className="hidden md:inline text-slate-400 shrink-0">|</span>
+          <span className="hidden md:inline text-slate-700 truncate">
+            Active Basin: <strong>{selectedZone.name}</strong> ({selectedZone.district})
           </span>
         </div>
         <div className="flex items-center gap-3 font-semibold shrink-0">
-          <span className="text-white/80">IST: {currentTime || "--:--:--"}</span>
-          <span className="text-white/20 hidden sm:inline">|</span>
-          <span className="text-emerald-400 hidden sm:inline">SAT-TELEMETRY: OPTIMAL</span>
+          <span className="text-slate-800">IST: {currentTime || "--:--:--"}</span>
+          <span className="text-slate-400 hidden sm:inline">|</span>
+          <span className="text-emerald-800 hidden sm:inline">SAT-TELEMETRY: OPTIMAL</span>
         </div>
       </div>
 
       {/* Main Command Bar */}
-      <div className="px-3 sm:px-6 py-2.5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* LEFT: Branding + Basin Selector + Risk Badge (Strictly in one row) */}
-        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+      <div className="px-3 sm:px-6 py-2.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white">
+        {/* LEFT: Branding + Basin Selector */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Logo & National Command Title */}
           <Link
             href="/"
-            className="flex items-center gap-2.5 group shrink-0"
+            className="flex items-center gap-2 sm:gap-2.5 group"
             aria-label="NeerNetra Home - Early Flood Warning"
           >
-            <div className="w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center font-black text-sm tracking-tight border border-white/15 shadow-inner transition group-hover:bg-white/20 group-hover:scale-105">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-sm tracking-tight border border-slate-900 shadow-sm transition group-hover:bg-black">
               <ShieldAlert className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm sm:text-base tracking-tight text-white font-display">
+                <span className="font-black text-sm sm:text-base tracking-tight text-slate-950">
                   NEERNETRA
                 </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/80 border border-white/15">
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
                   GOVT OF INDIA
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>NDRF / SDMA Command</span>
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                <span>NDRF / SDMA Disaster Command Network</span>
               </div>
             </div>
           </Link>
 
           {/* Basin & Location Selector Dropdown */}
-          <div className="relative flex items-center shrink-0">
-            <MapPin className="w-3.5 h-3.5 text-white/50 absolute left-3 pointer-events-none" aria-hidden />
+          <div className="relative flex items-center ml-1 sm:ml-3">
+            <MapPin className="w-3.5 h-3.5 text-slate-500 absolute left-3 pointer-events-none" aria-hidden />
             <select
               id="header-zone-select"
               value={selectedZone.id}
@@ -342,27 +342,27 @@ export default function Header({
                 if (zone) onSelectZone(zone);
               }}
               aria-label="Select river basin"
-              className="bg-[#1b2027]/90 text-white text-xs font-bold pl-8 pr-8 py-2 rounded-xl border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/40 shadow-inner cursor-pointer appearance-none hover:border-white/30 transition"
+              className="bg-[#faf9f5] text-slate-900 text-xs font-bold pl-8 pr-8 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs cursor-pointer appearance-none hover:border-slate-400 transition"
             >
-              <optgroup label="All-India River Basins" className="bg-[#1b2027] text-white">
+              <optgroup label="All-India River Basins">
                 {INDIA_FLOOD_ZONES.map((zone) => (
-                  <option key={zone.id} value={zone.id} className="bg-[#1b2027] text-white">
+                  <option key={zone.id} value={zone.id} className="bg-white text-slate-900">
                     {zone.name.split("(")[0].trim()} ({zone.district})
                   </option>
                 ))}
               </optgroup>
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-white/50 absolute right-3 pointer-events-none" aria-hidden />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 pointer-events-none" aria-hidden />
           </div>
 
-          {/* Color-Coded Risk Badge: NEVER wraps onto a 2nd row */}
+          {/* Color-Coded Risk Badge: Red >= 70%, Yellow 35-69%, Green < 35% */}
           <span
-            className={`text-[11px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wider whitespace-nowrap shrink-0 border ${
+            className={`text-[11px] font-black px-3 py-1 rounded-xl uppercase tracking-wider ${
               isDanger
-                ? "bg-red-500/20 text-red-300 border-red-500/40 animate-pulse shadow-sm shadow-red-500/20"
+                ? "bg-red-50 text-red-700 border border-red-300 animate-pulse"
                 : isWarning
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                ? "bg-amber-50 text-amber-800 border border-amber-300"
+                : "bg-emerald-50 text-emerald-800 border border-emerald-300"
             }`}
           >
             {isDanger ? "🚨 High Alert" : isWarning ? "⚠️ Warning" : "✅ Safe"} {floodRiskPercent.toFixed(0)}%
@@ -370,13 +370,13 @@ export default function Header({
         </div>
 
         {/* CENTER: Main Navigation Tabs */}
-        <nav aria-label="Main Navigation" className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10 text-xs font-bold self-center shadow-inner">
+        <nav aria-label="Main Navigation" className="flex items-center gap-1 p-1 rounded-xl bg-[#faf9f5] border border-slate-200 text-xs font-bold self-center">
           <Link
             href="/"
-            className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
+            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
               pathname === "/"
-                ? "bg-white text-[#161a20] shadow-md"
-                : "text-white/70 hover:text-white hover:bg-white/10"
+                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
+                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
             }`}
           >
             <Satellite className="w-3.5 h-3.5" />
@@ -385,10 +385,10 @@ export default function Header({
 
           <Link
             href="/radar"
-            className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
+            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
               pathname === "/radar"
-                ? "bg-white text-[#161a20] shadow-md"
-                : "text-white/70 hover:text-white hover:bg-white/10"
+                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
+                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
             }`}
           >
             <Compass className="w-3.5 h-3.5" />
@@ -397,10 +397,10 @@ export default function Header({
 
           <Link
             href="/rescue"
-            className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
+            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
               pathname === "/rescue"
-                ? "bg-white text-[#161a20] shadow-md"
-                : "text-white/70 hover:text-white hover:bg-white/10"
+                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
+                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
             }`}
           >
             <Users className="w-3.5 h-3.5" />
@@ -408,12 +408,14 @@ export default function Header({
           </Link>
         </nav>
 
-        {/* RIGHT: National Helpline button in sleek glass pill */}
-        <div className="flex items-center gap-2 self-end md:self-center">
+        {/* RIGHT: Only the one action that must never be hidden behind a menu
+            on a disaster-alert government platform — the national helpline.
+            Every other action now lives in the floating command button. */}
+        <div className="flex items-center gap-2 self-end lg:self-center">
           <a
             href="tel:1078"
             aria-label="Call National Disaster Helpline 1078"
-            className="h-[38px] px-4 rounded-full bg-red-500/15 hover:bg-red-500/25 text-red-300 hover:text-white border border-red-500/30 text-xs font-bold flex items-center gap-1.5 shadow-sm transition active:scale-95 whitespace-nowrap"
+            className="h-[38px] px-3.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
             title="NDRF Emergency Helpline: 1078"
           >
             <span>📞 Helpline 1078</span>

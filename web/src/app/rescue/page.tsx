@@ -20,7 +20,6 @@ import {
   EmergencyResponder,
   SafeEvacuationRoute,
 } from "@/lib/types";
-import { useRabtoTilt } from "@/lib/useRabtoTilt";
 import {
   Users,
   Truck,
@@ -35,7 +34,6 @@ import {
 } from "lucide-react";
 
 export default function RescueCitizenGridPage() {
-  useRabtoTilt();
   const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
   const [citizens, setCitizens] = useState<CitizenLocation[]>([]);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -205,20 +203,22 @@ export default function RescueCitizenGridPage() {
           connectedMobileCount={citizens.length}
         />
 
-        {/* Live Mobile Telemetry Bar — Frosted Glass Theme */}
-        <div className="bg-[#161a20]/80 backdrop-blur-xl border-b border-white/10 px-4 lg:px-6 py-3 shadow-md font-sans text-white">
+        {/* Live Mobile Telemetry Bar — status only. Mobile pairing lives in
+            the floating command menu and the Live Map is one tap away in
+            the nav tabs, so they no longer need a duplicate button here. */}
+        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
           <div className="flex flex-wrap items-center gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
               <span className="font-extrabold uppercase tracking-wider text-[10px]">Live Phone Sync Active</span>
             </div>
 
-            <div className="flex items-center gap-2 text-white/70">
-              <span className="font-bold text-white">Distress Queue:</span>
-              <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-black text-[10px] uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-slate-600">
+              <span className="font-bold text-slate-900">Distress Queue:</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black text-[10px] uppercase tracking-wider">
                 {sosCitizens.length} Active SOS
               </span>
-              <span className="text-white/50 text-[11px]">
+              <span className="text-slate-500 text-[11px]">
                 ({liveCount} Live GPS &bull; {offlineCount} Offline Mesh)
               </span>
             </div>

@@ -22,18 +22,18 @@ interface CommandFABProps {
 function toneClasses(tone: FabAction["tone"] = "default") {
   switch (tone) {
     case "danger":
-      return "bg-red-600/90 hover:bg-red-500 text-white border-red-500/50 shadow-red-600/20";
+      return "bg-red-600 hover:bg-red-700 text-white border-red-500";
     case "success":
-      return "bg-emerald-600/90 hover:bg-emerald-500 text-white border-emerald-500/50 shadow-emerald-600/20";
+      return "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500";
     case "dark":
-      return "bg-[#1b2027]/95 hover:bg-[#252c38] text-white border-white/20";
+      return "bg-slate-900 hover:bg-black text-white border-slate-800";
     case "amber":
-      return "bg-amber-500/90 hover:bg-amber-400 text-slate-950 border-amber-400/50";
+      return "bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400";
     case "blue":
-      return "bg-blue-600/90 hover:bg-blue-500 text-white border-blue-500/50";
+      return "bg-blue-600 hover:bg-blue-700 text-white border-blue-500";
     case "default":
     default:
-      return "bg-[#1b2027]/95 hover:bg-[#252c38] text-white border-white/15 hover:border-white/30";
+      return "bg-white/95 hover:bg-slate-50 text-slate-900 border-slate-300";
   }
 }
 
@@ -82,7 +82,7 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
         role="menu"
         aria-hidden={!open}
       >
-        <span className="text-[10px] font-black uppercase tracking-wider text-white bg-black/80 backdrop-blur-md px-3 py-1 rounded-full shadow-lg border border-white/10 mb-0.5 font-display">
+        <span className="text-[10px] font-black uppercase tracking-wider text-white bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-full shadow-md mb-0.5">
           {menuLabel}
         </span>
         {actions.map((action) => (
@@ -94,14 +94,14 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
               setOpen(false);
             }}
             title={action.title || action.label}
-            className={`h-[44px] pl-4 pr-5 rounded-full border text-xs font-bold flex items-center gap-2.5 shadow-2xl backdrop-blur-xl transition active:scale-95 whitespace-nowrap ${toneClasses(
+            className={`h-[42px] pl-3.5 pr-4 rounded-full border text-xs font-bold flex items-center gap-2 shadow-lg backdrop-blur-md transition whitespace-nowrap ${toneClasses(
               action.tone
             )}`}
           >
             {action.icon}
             <span>{action.label}</span>
             {action.badge !== undefined && action.badge !== "" && (
-              <span className="ml-0.5 min-w-[20px] h-[20px] px-1 rounded-full bg-white/20 text-[10px] font-black flex items-center justify-center">
+              <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-black/15 text-[10px] font-black flex items-center justify-center">
                 {action.badge}
               </span>
             )}
@@ -114,7 +114,7 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
         onClick={() => setOpen((p) => !p)}
         aria-label={open ? "Close command actions" : "Open command actions"}
         aria-expanded={open}
-        className="w-14 h-14 rounded-full bg-white hover:bg-slate-100 text-[#161a20] shadow-2xl border border-white/40 flex items-center justify-center transition motion-reduce:transition-none active:scale-95 hover:scale-105"
+        className="w-14 h-14 rounded-full bg-slate-900 hover:bg-black text-white shadow-xl border border-slate-800 flex items-center justify-center transition motion-reduce:transition-none active:scale-95"
       >
         <Plus
           className={`w-6 h-6 transition-transform duration-200 motion-reduce:transition-none ${
