@@ -384,28 +384,28 @@ export default function NationalSentinelPage() {
           }}
         />
 
-        {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE
-            Only takes up screen space when there's something the operator
-            actually needs to act on (active or halted) — no permanent
-            "standby" bar cluttering the page on every normal visit. */}
+        {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE — Rabto High-Tech Translucent HUD */}
         {isSirenBroadcasting ? (
-          <div className="bg-red-600 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shadow-md sticky top-[61px] z-40">
+          <div className="mx-4 sm:mx-6 lg:mx-8 my-2 rounded-2xl bg-red-950/80 backdrop-blur-2xl border border-red-500/40 text-white p-3.5 sm:px-5 sm:py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xl relative z-40">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-lg animate-pulse shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-red-600/30 border border-red-500/40 flex items-center justify-center text-base animate-pulse shrink-0 shadow-inner">
                 🚨
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    EMERGENCY CELL SIREN ACTIVE ON {sirenState.targetDevicesCount.toLocaleString()} CITIZEN MOBILE DEVICES
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black uppercase tracking-wider text-red-200 font-display">
+                    {sirenState.targetDevicesCount > 0
+                      ? `EMERGENCY CELL SIREN ACTIVE ON ${sirenState.targetDevicesCount.toLocaleString()} CITIZEN DEVICES`
+                      : `EMERGENCY CELL SIREN ARMED • CITIZEN APK STANDBY`}
                   </span>
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-white text-red-700 uppercase">
-                    MOBILE APK ONLY
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-red-500/30 text-red-100 uppercase border border-red-500/40 font-bold">
+                    MOBILE APK BROADCAST
                   </span>
                 </div>
-                <p className="text-xs text-red-100 mt-0.5 font-medium">
-                  Broadcasting civic evacuation siren &amp; forced vibration to all phones located in {selectedZone.name.split("(")[0].trim()}.
-                  Web command audio is muted for operator composure.
+                <p className="text-xs text-red-200/80 mt-0.5 font-medium">
+                  {sirenState.targetDevicesCount > 0
+                    ? `Broadcasting civic evacuation siren & forced vibration to active mobile phones in ${selectedZone.name.split("(")[0].trim()}. Web command audio is muted.`
+                    : `Cell broadcast beacon is armed for ${selectedZone.name.split("(")[0].trim()}. Ready to transmit instant vibration and alert tone once mobile nodes pair.`}
                 </p>
               </div>
             </div>
@@ -416,9 +416,9 @@ export default function NationalSentinelPage() {
                   autonomousAlertEngine.haltMobileSiren(selectedZone.id);
                   showToast("Mobile emergency siren halted for citizen devices.");
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-red-700 font-extrabold text-xs transition shadow-xs flex items-center gap-1.5"
+                className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition active:scale-95 flex items-center gap-1.5 border border-white/15 min-h-[38px]"
               >
-                <VolumeX className="w-3.5 h-3.5" />
+                <VolumeX className="w-3.5 h-3.5 text-red-300" />
                 <span>Halt Mobile Siren</span>
               </button>
               <button
@@ -429,9 +429,9 @@ export default function NationalSentinelPage() {
                     displayedRisk,
                     selectedZone.center
                   );
-                  showToast(`Emergency siren re-transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+                  showToast(`Emergency siren re-transmitted to mobile devices.`);
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-red-800 hover:bg-red-900 text-white font-extrabold text-xs transition shadow-xs flex items-center gap-1.5 border border-red-500"
+                className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-red-600/30 min-h-[38px]"
               >
                 <BellRing className="w-3.5 h-3.5" />
                 <span>Re-Broadcast Siren</span>
@@ -439,13 +439,13 @@ export default function NationalSentinelPage() {
             </div>
           </div>
         ) : isSirenHalted ? (
-          <div className="bg-amber-500 text-slate-950 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs sticky top-[61px] z-40">
+          <div className="mx-4 sm:mx-6 lg:mx-8 my-2 rounded-2xl bg-amber-950/80 backdrop-blur-2xl border border-amber-500/40 text-white p-3 sm:px-5 sm:py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xl relative z-40">
             <div className="flex items-center gap-2.5">
               <span className="text-base">⚠️</span>
-              <span className="text-xs font-black uppercase tracking-wider">
+              <span className="text-xs font-black uppercase tracking-wider text-amber-200 font-display">
                 MOBILE SIREN HALTED BY OPERATOR:
               </span>
-              <span className="text-xs font-semibold">
+              <span className="text-xs font-semibold text-amber-100/80">
                 Citizen devices in {selectedZone.name.split("(")[0].trim()} on audio standby. Auto-dispatch temporarily suspended.
               </span>
             </div>
@@ -457,11 +457,11 @@ export default function NationalSentinelPage() {
                   displayedRisk,
                   selectedZone.center
                 );
-                showToast(`Emergency siren resumed on ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+                showToast(`Emergency siren resumed on mobile devices.`);
               }}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-950 hover:bg-black text-white font-bold text-xs transition shadow-xs flex items-center gap-1.5"
+              className="px-4 py-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-md flex items-center gap-1.5 active:scale-95"
             >
-              <BellRing className="w-3.5 h-3.5 text-amber-400" />
+              <BellRing className="w-3.5 h-3.5 text-slate-950" />
               <span>Resume Mobile Siren</span>
             </button>
           </div>
@@ -517,56 +517,56 @@ export default function NationalSentinelPage() {
             />
           </section>
 
-          {/* Section 3: Navigation Cards to Map and Rescue in White & Vanilla Theme */}
+          {/* Section 3: Navigation Cards to Map and Rescue in Rabto 3D Tilt Glass */}
           <section aria-label="Quick Hub Navigation" className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
               href="/radar"
-              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
+              className="tilt-card tilt-card-physics p-6 rounded-3xl border border-white/10 hover:border-white/25 bg-[#1b2027]/85 backdrop-blur-xl transition-all flex items-center justify-between group shadow-xl text-white"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
-                  <Compass className="w-6 h-6 text-slate-900" />
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="w-12 h-12 rounded-2xl bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-110 group-hover:bg-white/20 transition-all shadow-inner">
+                  <Compass className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
+                  <h2 className="text-base font-extrabold text-white flex items-center gap-2 font-display">
                     <span>Live Flood Radar Map</span>
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 uppercase tracking-wider">
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
                       LIVE GIS
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                  <p className="text-xs text-white/70 mt-0.5 font-medium">
                     View satellite imagery, real river heights, and verified safe evacuation shelters
                   </p>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
+              <ArrowRight className="w-5 h-5 text-white/50 group-hover:text-white group-hover:translate-x-1.5 transition-all relative z-10" />
             </Link>
 
             <Link
               href="/rescue"
-              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
+              className="tilt-card tilt-card-physics p-6 rounded-3xl border border-white/10 hover:border-white/25 bg-[#1b2027]/85 backdrop-blur-xl transition-all flex items-center justify-between group shadow-xl text-white"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
-                  <Users className="w-6 h-6 text-slate-900" />
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="w-12 h-12 rounded-2xl bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-110 group-hover:bg-white/20 transition-all shadow-inner">
+                  <Users className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
+                  <h2 className="text-base font-extrabold text-white flex items-center gap-2 font-display">
                     <span>Citizen Rescue &amp; SOS Hub</span>
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 uppercase tracking-wider">
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wider">
                       LIVE SOS
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                  <p className="text-xs text-white/70 mt-0.5 font-medium">
                     Live mobile distress beacons, medical emergencies, and local rescue team dispatch
                   </p>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
+              <ArrowRight className="w-5 h-5 text-white/50 group-hover:text-white group-hover:translate-x-1.5 transition-all relative z-10" />
             </Link>
           </section>
 
-          {/* Section 4: Secondary Operations & Directives in White & Vanilla Theme */}
+          {/* Section 4: Secondary Operations & Directives in Rabto Theme */}
           <section aria-label="Safety Directives" className="space-y-4">
             <PreventiveDirectivesPanel activeZone={selectedZone} />
           </section>
@@ -599,17 +599,17 @@ export default function NationalSentinelPage() {
       />
 
       {/* Footer in Frosted Glass Theme */}
-      <footer className="border-t border-white/20 bg-white/85 backdrop-blur-xl px-6 py-5 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
-        <div className="font-bold text-slate-900">
+      <footer className="border-t border-white/10 bg-[#12151a]/90 backdrop-blur-2xl px-6 py-5 text-center text-xs text-white/70 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
+        <div className="font-bold text-white font-display">
           NeerNetra — India Flash Flood Early Warning System &bull; SIH 2026 PS: SIH26192
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 text-emerald-800 font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse" />
+          <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
             12 Basins Online
           </span>
-          <span className="text-slate-300">|</span>
-          <span className="text-slate-600 font-medium">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
+          <span className="text-white/20">|</span>
+          <span className="text-white/60 font-medium">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
         </div>
       </footer>
     </div>
