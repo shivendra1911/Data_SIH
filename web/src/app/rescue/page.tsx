@@ -22,7 +22,6 @@ import {
 } from "@/lib/types";
 import {
   Users,
-  Smartphone,
   Truck,
   MapPin,
   Send,
@@ -32,7 +31,6 @@ import {
   CheckCircle2,
   AlertOctagon,
   Volume2,
-  Compass,
 } from "lucide-react";
 
 export default function RescueCitizenGridPage() {
@@ -198,48 +196,31 @@ export default function RescueCitizenGridPage() {
           onOpenMobileModal={() => setIsMobileModalOpen(true)}
           onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
           onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
+          onDetectLiveLocation={detectLiveLocation}
           floodRiskPercent={selectedZone.currentRisk}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled((p) => !p)}
           connectedMobileCount={citizens.length}
         />
 
-        {/* Live Mobile Telemetry Bar in Frosted Theme */}
+        {/* Live Mobile Telemetry Bar — status only. Mobile pairing lives in
+            the floating command menu and the Live Map is one tap away in
+            the nav tabs, so they no longer need a duplicate button here. */}
         <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <span className="font-extrabold uppercase tracking-wider text-[10px]">Live Phone Sync Active</span>
-              </div>
-
-              <div className="flex items-center gap-2 text-slate-600">
-                <span className="font-bold text-slate-900">Distress Queue:</span>
-                <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black text-[10px] uppercase tracking-wider">
-                  {sosCitizens.length} Active SOS
-                </span>
-                <span className="text-slate-500 text-[11px]">
-                  ({liveCount} Live GPS &bull; {offlineCount} Offline Mesh)
-                </span>
-              </div>
+          <div className="flex flex-wrap items-center gap-3 max-w-[1800px] mx-auto w-full text-xs">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+              <span className="font-extrabold uppercase tracking-wider text-[10px]">Live Phone Sync Active</span>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={() => setIsMobileModalOpen(true)}
-                className="h-[36px] px-4 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-xs flex items-center gap-1.5 transition shadow-2xs"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-slate-700" />
-                <span>Pair Mobile APK</span>
-              </button>
-              <Link
-                href="/radar"
-                className="h-[36px] px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs"
-              >
-                <Compass className="w-3.5 h-3.5" />
-                <span>Open Live Radar</span>
-              </Link>
+            <div className="flex items-center gap-2 text-slate-600">
+              <span className="font-bold text-slate-900">Distress Queue:</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black text-[10px] uppercase tracking-wider">
+                {sosCitizens.length} Active SOS
+              </span>
+              <span className="text-slate-500 text-[11px]">
+                ({liveCount} Live GPS &bull; {offlineCount} Offline Mesh)
+              </span>
             </div>
           </div>
         </div>

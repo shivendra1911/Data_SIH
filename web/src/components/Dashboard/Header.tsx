@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -22,21 +22,24 @@ import {
   Zap,
   Shield,
   Megaphone,
+  Navigation,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import AddButtonModal, {
   CustomActionButton,
   getStoredCustomButtons,
 } from "./AddButtonModal";
+import CommandFAB, { FabAction } from "./CommandFAB";
 
 interface HeaderProps {
   selectedZone: HazardZone;
   onSelectZone: (zone: HazardZone) => void;
-  isDemoMode?: boolean;
-  onToggleDemoMode?: () => void;
   onSimulateSOS?: () => void;
   onOpenMobileModal: () => void;
   onOpenRegionalBroadcast?: () => void;
   onOpenSafeRoutesGuidelines?: () => void;
+  onDetectLiveLocation?: () => void;
   floodRiskPercent: number;
   soundEnabled?: boolean;
   onToggleSound?: () => void;
@@ -50,7 +53,7 @@ function getCustomIcon(name: string) {
     case "Phone":
       return <Phone className="w-3.5 h-3.5" />;
     case "AlertTriangle":
-      return <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />;
+      return <AlertTriangle className="w-3.5 h-3.5" />;
     case "Radio":
       return <Radio className="w-3.5 h-3.5" />;
     case "Megaphone":
@@ -58,36 +61,42 @@ function getCustomIcon(name: string) {
     case "Shield":
       return <Shield className="w-3.5 h-3.5" />;
     case "Zap":
-      return <Zap className="w-3.5 h-3.5 text-amber-400" />;
+      return <Zap className="w-3.5 h-3.5" />;
     case "ExternalLink":
     default:
       return <ExternalLink className="w-3.5 h-3.5" />;
   }
 }
 
-function getCustomColorClasses(color: string) {
+// Maps a custom button's saved color to a CommandFAB tone so it renders
+// consistent with every other action in the expandable menu.
+function customColorToTone(color: string): FabAction["tone"] {
   switch (color) {
     case "red":
-      return "bg-red-600 hover:bg-red-700 text-white border border-red-500";
+      return "danger";
     case "emerald":
-      return "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500";
+      return "success";
     case "blue":
-      return "bg-blue-600 hover:bg-blue-700 text-white border border-blue-500";
+      return "blue";
     case "amber":
-      return "bg-amber-500 hover:bg-amber-600 text-slate-950 border border-amber-400";
+      return "amber";
     case "slate":
     default:
-      return "bg-slate-900 hover:bg-black text-white border border-slate-800";
+      return "dark";
   }
 }
 
 export default function Header({
   selectedZone,
   onSelectZone,
+  onSimulateSOS,
   onOpenMobileModal,
   onOpenRegionalBroadcast,
   onOpenSafeRoutesGuidelines,
+  onDetectLiveLocation,
   floodRiskPercent,
+  soundEnabled,
+  onToggleSound,
   isMobileSirenActive = false,
   onToggleMobileSiren,
   connectedMobileCount,
@@ -156,6 +165,106 @@ export default function Header({
   const isDanger = floodRiskPercent >= 70;
   const isWarning = floodRiskPercent >= 35 && floodRiskPercent < 70;
 
+  // Build the single consolidated action list for the floating command menu.
+  // Every button that used to compete for space in the header row now lives
+  // here, reachable from one always-visible floating trigger.
+  const fabActions: FabAction[] = [];
+
+  if (onOpenRegionalBroadcast) {
+    fabActions.push({
+      id: "zone-broadcast",
+      label: "Zone Broadcast",
+      icon: <Radio className="w-3.5 h-3.5" />,
+      onClick: onOpenRegionalBroadcast,
+      tone: "default",
+    });
+  }
+
+  if (onOpenSafeRoutesGuidelines) {
+    fabActions.push({
+      id: "safe-shelters",
+      label: "Safe Shelters",
+      icon: <Compass className="w-3.5 h-3.5" />,
+      onClick: onOpenSafeRoutesGuidelines,
+      tone: "default",
+    });
+  }
+
+  fabActions.push({
+    id: "mobile-apks",
+    label: "Mobile APKs",
+    icon: <Smartphone className="w-3.5 h-3.5" />,
+    onClick: onOpenMobileModal,
+    tone: "default",
+    badge: connectedMobileCount !== undefined ? connectedMobileCount : undefined,
+  });
+
+  if (onDetectLiveLocation) {
+    fabActions.push({
+      id: "use-my-location",
+      label: "Use My Location",
+      icon: <Navigation className="w-3.5 h-3.5" />,
+      onClick: onDetectLiveLocation,
+      tone: "default",
+    });
+  }
+
+  if (onToggleSound) {
+    fabActions.push({
+      id: "toggle-sound",
+      label: soundEnabled === false ? "Alert Sound: Off" : "Alert Sound: On",
+      icon:
+        soundEnabled === false ? (
+          <VolumeX className="w-3.5 h-3.5" />
+        ) : (
+          <Volume2 className="w-3.5 h-3.5" />
+        ),
+      onClick: onToggleSound,
+      tone: "default",
+    });
+  }
+
+  if (onToggleMobileSiren) {
+    fabActions.push({
+      id: "mobile-siren",
+      label: isMobileSirenActive ? "Mobile Siren Active" : "Mobile Siren Standby",
+      icon: <BellRing className="w-3.5 h-3.5" />,
+      onClick: onToggleMobileSiren,
+      tone: isMobileSirenActive ? "danger" : "dark",
+      title: isMobileSirenActive ? "Siren Active on Citizen APKs" : "Arm Mobile Siren Dispatch",
+    });
+  }
+
+  if (onSimulateSOS) {
+    fabActions.push({
+      id: "simulate-sos",
+      label: "Test Alert Sound",
+      icon: <Zap className="w-3.5 h-3.5" />,
+      onClick: onSimulateSOS,
+      tone: "default",
+    });
+  }
+
+  customButtons.forEach((btn) => {
+    fabActions.push({
+      id: btn.id,
+      label: btn.label,
+      icon: getCustomIcon(btn.iconName),
+      onClick: () => handleExecuteCustomButton(btn),
+      tone: customColorToTone(btn.color),
+      title: `${btn.actionType}: ${btn.value}`,
+    });
+  });
+
+  fabActions.push({
+    id: "add-button",
+    label: "Add Button",
+    icon: <Plus className="w-3.5 h-3.5" />,
+    onClick: () => setIsAddButtonModalOpen(true),
+    tone: "default",
+    title: "Add any custom action button to the command menu",
+  });
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-300 bg-white shadow-xs">
       {/* Active Screen Alert Notification */}
@@ -174,19 +283,19 @@ export default function Header({
         </div>
       )}
 
-      {/* Top Telemetry Ticker (IST Time + Nationwide Alert Status) */}
+      {/* Top Telemetry Ticker (IST Time + Nationwide Alert Status + Active Basin) */}
       <div className="bg-[#faf9f5] border-b border-slate-200 px-4 py-1 text-[11px] text-slate-700 flex justify-between items-center font-mono">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-700 animate-pulse" />
-          <span className="font-semibold text-slate-900 tracking-wide">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-700 animate-pulse shrink-0" />
+          <span className="font-semibold text-slate-900 tracking-wide truncate">
             NEERNETRA CWC-NDMA EARLY WARNING NETWORK
           </span>
-          <span className="hidden md:inline text-slate-400">|</span>
-          <span className="hidden md:inline text-slate-700">
+          <span className="hidden md:inline text-slate-400 shrink-0">|</span>
+          <span className="hidden md:inline text-slate-700 truncate">
             Active Basin: <strong>{selectedZone.name}</strong> ({selectedZone.district})
           </span>
         </div>
-        <div className="flex items-center gap-3 font-semibold">
+        <div className="flex items-center gap-3 font-semibold shrink-0">
           <span className="text-slate-800">IST: {currentTime || "--:--:--"}</span>
           <span className="text-slate-400 hidden sm:inline">|</span>
           <span className="text-emerald-800 hidden sm:inline">SAT-TELEMETRY: OPTIMAL</span>
@@ -299,93 +408,23 @@ export default function Header({
           </Link>
         </nav>
 
-        {/* RIGHT: Operational Hotlines, Dynamic Custom Buttons, & Add Button */}
-        <div className="flex items-center gap-2 self-end lg:self-center flex-wrap">
-          {/* Indian Disaster Helpline */}
+        {/* RIGHT: Only the one action that must never be hidden behind a menu
+            on a disaster-alert government platform — the national helpline.
+            Every other action now lives in the floating command button. */}
+        <div className="flex items-center gap-2 self-end lg:self-center">
           <a
             href="tel:1078"
             aria-label="Call National Disaster Helpline 1078"
-            className="h-[38px] px-3.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+            className="h-[38px] px-3.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
             title="NDRF Emergency Helpline: 1078"
           >
             <span>📞 Helpline 1078</span>
           </a>
-
-          {/* Dynamic User-Added Custom Action Buttons */}
-          {customButtons.map((btn) => (
-            <button
-              key={btn.id}
-              onClick={() => handleExecuteCustomButton(btn)}
-              aria-label={btn.label}
-              className={`h-[38px] px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition ${getCustomColorClasses(
-                btn.color
-              )}`}
-              title={`${btn.actionType}: ${btn.value}`}
-            >
-              {getCustomIcon(btn.iconName)}
-              <span>{btn.label}</span>
-            </button>
-          ))}
-
-          {/* "+ Add Button" Control to add any custom button */}
-          <button
-            onClick={() => setIsAddButtonModalOpen(true)}
-            aria-label="Add custom action button"
-            className="h-[38px] px-3 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 border-dashed text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-            title="Add any custom action button to command bar"
-          >
-            <Plus className="w-3.5 h-3.5 text-slate-700" aria-hidden />
-            <span>+ Add Button</span>
-          </button>
-
-          {/* Safe Shelters Quick Button */}
-          {onOpenSafeRoutesGuidelines && (
-            <button
-              onClick={onOpenSafeRoutesGuidelines}
-              aria-label="View verified safe evacuation shelters and guidelines"
-              className="h-[38px] px-3.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-            >
-              <Compass className="w-3.5 h-3.5 text-slate-700" aria-hidden />
-              <span className="hidden sm:inline">Safe Shelters</span>
-            </button>
-          )}
-
-          {/* Mobile APK Broadcast Sync Button */}
-          <button
-            onClick={onOpenMobileModal}
-            aria-label="Citizen & Responder Mobile APK Sync"
-            className="h-[38px] px-3.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-            title="Mobile APK Push & Offline Mesh Network"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-slate-700" aria-hidden />
-            <span className="hidden md:inline">
-              {connectedMobileCount !== undefined
-                ? `${connectedMobileCount} Mobile APKs`
-                : "Mobile APKs"}
-            </span>
-            {connectedMobileCount !== undefined && connectedMobileCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            )}
-          </button>
-
-          {/* Mobile Siren Control Status Indicator */}
-          {onToggleMobileSiren && (
-            <button
-              onClick={onToggleMobileSiren}
-              aria-label={isMobileSirenActive ? "Halt siren on mobile devices" : "Transmit siren to mobile devices"}
-              className={`h-[38px] px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition ${
-                isMobileSirenActive
-                  ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                  : "bg-slate-900 hover:bg-black text-white"
-              }`}
-              title={isMobileSirenActive ? "Siren Active on Citizen APKs" : "Arm Mobile Siren Dispatch"}
-            >
-              <BellRing className="w-3.5 h-3.5" aria-hidden />
-              <span>{isMobileSirenActive ? "🚨 Mobile Siren Active" : "📡 Mobile Siren Standby"}</span>
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Floating Command Menu — replaces the old row of 6-7 separate buttons */}
+      <CommandFAB actions={fabActions} menuLabel="Command Actions" />
 
       {/* Add Custom Button Modal */}
       <AddButtonModal

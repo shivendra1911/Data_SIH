@@ -33,7 +33,6 @@ import {
   Zap,
   Activity,
   ChevronDown,
-  ChevronUp,
   BellRing,
   VolumeX,
   Smartphone,
@@ -365,6 +364,7 @@ export default function NationalSentinelPage() {
           onOpenMobileModal={() => setIsMobileModalOpen(true)}
           onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
           onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
+          onDetectLiveLocation={detectLiveLocation}
           floodRiskPercent={displayedRisk}
           isMobileSirenActive={sirenState.isDispatchedToMobile}
           connectedMobileCount={connectedMobileCount}
@@ -384,35 +384,10 @@ export default function NationalSentinelPage() {
           }}
         />
 
-        {/* GOVERNMENT OPERATIONAL COMMAND RIBBON */}
-        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 sm:px-6 lg:px-8 py-2.5 shadow-xs font-sans text-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-extrabold uppercase tracking-widest text-[11px] text-slate-900 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                GOVERNMENT TACTICAL FLOOD COMMAND
-              </span>
-              <span className="text-slate-400">•</span>
-              <span className="text-slate-600 font-medium">
-                National Disaster Management Authority (NDMA) &bull; Central Water Commission (CWC)
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
-              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
-                12 Basins Scanned
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
-                Cell Broadcast CH-4370 Armed
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-300">
-                Target: Danger Zone Mobile APKs
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE */}
+        {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE
+            Only takes up screen space when there's something the operator
+            actually needs to act on (active or halted) — no permanent
+            "standby" bar cluttering the page on every normal visit. */}
         {isSirenBroadcasting ? (
           <div className="bg-red-600 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shadow-md sticky top-[61px] z-40">
             <div className="flex items-center gap-3">
@@ -490,32 +465,7 @@ export default function NationalSentinelPage() {
               <span>Resume Mobile Siren</span>
             </button>
           </div>
-        ) : (
-          <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-900">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-slate-400" />
-              <span className="font-bold text-slate-700">Mobile Siren Broadcast:</span>
-              <span className="text-slate-500 font-medium">
-                Standby for {selectedZone.name.split("(")[0].trim()} ({sirenState.targetDevicesCount.toLocaleString()} citizen &amp; responder mobile APKs registered).
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                autonomousAlertEngine.dispatchMobileSiren(
-                  selectedZone.id,
-                  selectedZone.name,
-                  displayedRisk,
-                  selectedZone.center
-                );
-                showToast(`Emergency siren authorized and transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
-              }}
-              className="px-3 py-1 rounded-lg bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-xs flex items-center gap-1.5 transition shadow-2xs"
-            >
-              <BellRing className="w-3.5 h-3.5 text-slate-700" />
-              <span>Authorize &amp; Send Mobile Siren</span>
-            </button>
-          </div>
-        )}
+        ) : null}
 
         {/* Real-time 3-Card Telemetry Ribbon with LIVE Telemetry */}
         <TelemetryStrip
@@ -647,25 +597,6 @@ export default function NationalSentinelPage() {
           showToast("Safe guidelines broadcasted across regional edge network.");
         }}
       />
-
-      {/* Quick Jump Floating Pill in White Theme */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-slate-300 rounded-full p-2 shadow-xl text-slate-900 font-sans">
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          aria-label="Scroll to top"
-          title="Back to Top"
-          className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center transition"
-        >
-          <ChevronUp className="w-4 h-4" />
-        </button>
-        <Link
-          href="/radar"
-          className="px-4 py-2 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
-        >
-          <span>Tactical Radar</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
 
       {/* Footer in Frosted Glass Theme */}
       <footer className="border-t border-white/20 bg-white/85 backdrop-blur-xl px-6 py-5 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
