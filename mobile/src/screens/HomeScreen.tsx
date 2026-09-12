@@ -14,7 +14,6 @@ import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
 import { ActiveCallHUD } from '../components/ActiveCallHUD';
 import { TopPillNav, CitizenTab } from '../components/TopPillNav';
-import { SOSFAB } from '../components/SOSFAB';
 import {
   ZonePrediction,
   LocationSyncPayload,
@@ -362,8 +361,8 @@ export const HomeScreen: React.FC = () => {
                 paddingBottom: Math.max(insets.bottom, 8),
               },
             ],
-            tabBarActiveTintColor: '#2563eb',
-            tabBarInactiveTintColor: '#64748b',
+            tabBarActiveTintColor: '#1C1F24',
+            tabBarInactiveTintColor: '#8E959E',
             tabBarLabelStyle: styles.tabLabel,
           }}
         >
@@ -453,15 +452,6 @@ export const HomeScreen: React.FC = () => {
           setShowRedAlertOverlay(false);
         }}
       />
-    
-      {/* Floating Emergency SOS Button across all tabs */}
-      <SOSFAB
-        onSOSTrigger={handleSOSTrigger}
-        onConfirmSafe={() => handleConfirmSafe(false)}
-        currentStatus={sosStatus}
-        bottomOffset={60 + Math.max(insets.bottom, 12) + 16}
-      />
-
     </View>
   );
 };
@@ -469,20 +459,20 @@ export const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F8F9F5',
   },
   tabBar: {
-    backgroundColor: '#ffffff',
-    borderTopColor: '#e2e8f0',
+    backgroundColor: '#F8F9F5',
+    borderTopColor: '#E8EBE2',
     borderTopWidth: 1,
-    height: 72,
-    paddingBottom: 14,
+    height: 70,
+    paddingBottom: 12,
     paddingTop: 8,
-    elevation: 8,
+    elevation: 4,
   },
   tabLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   forcedSirenBanner: {
     backgroundColor: '#dc2626',

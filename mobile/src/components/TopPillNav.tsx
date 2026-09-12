@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import { ShieldCheck, Wifi, Radio, AlertTriangle } from 'lucide-react-native';
+import { ShieldCheck, Wifi, Radio, AlertTriangle, ChevronDown } from 'lucide-react-native';
 
 export type CitizenTab = 'status' | 'mesh' | 'map' | 'directives';
 
@@ -18,12 +18,6 @@ const MODE_COLOR: Record<string, string> = {
   OFFLINE_QUEUED: '#f59e0b',
 };
 
-const MODE_BG: Record<string, string> = {
-  ONLINE: 'rgba(16, 185, 129, 0.12)',
-  BLE_MESH: 'rgba(59, 130, 246, 0.12)',
-  OFFLINE_QUEUED: 'rgba(245, 158, 11, 0.12)',
-};
-
 const MODE_LABEL: Record<string, string> = {
   ONLINE: '4G Live',
   BLE_MESH: 'BLE Mesh',
@@ -36,39 +30,47 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
   phoneModel,
 }) => {
   const dotColor = MODE_COLOR[networkMode] || '#10b981';
-  const modeBg = MODE_BG[networkMode] || 'rgba(16, 185, 129, 0.12)';
   const modeLabel = MODE_LABEL[networkMode] || '4G Live';
 
   const ModeIcon =
     networkMode === 'ONLINE' ? Wifi : networkMode === 'BLE_MESH' ? Radio : AlertTriangle;
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(topInset, 12) + 6 }]}>
-      {/* Brand & Citizen Sector */}
-      <View style={styles.brandBlock}>
-        <View style={styles.logoIcon}>
+    <View style={[styles.container, { paddingTop: Math.max(topInset, 12) + 4 }]}>
+      {/* Left Circle Icon Action Buttons */}
+      <View style={styles.leftGroup}>
+        <View style={styles.circleBtn}>
           <Image
             source={require('../../assets/logo_emblem.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
         </View>
-        <View>
-          <View style={styles.titleRow}>
-            <Text style={styles.brandTitle}>NeerNetra</Text>
-            <ShieldCheck size={14} color="#059669" style={styles.shieldIcon} />
-          </View>
-          <Text style={styles.brandSubtitle} numberOfLines={1}>
-            {phoneModel ? `${phoneModel} • Civil Defense` : 'Disaster Management & Rescue'}
-          </Text>
+        <View style={styles.circleBtn}>
+          <Radio size={18} color="#475569" />
         </View>
       </View>
 
-      {/* Network Connectivity Pill */}
-      <View style={[styles.statusPill, { backgroundColor: modeBg, borderColor: dotColor + '40' }]}>
-        <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-        <ModeIcon size={12} color={dotColor} style={styles.statusIcon} />
-        <Text style={[styles.statusText, { color: dotColor }]}>{modeLabel}</Text>
+      {/* Center Branding & Sector Location */}
+      <View style={styles.centerBlock}>
+        <View style={styles.titleRow}>
+          <Text style={styles.brandTitle}>NeerNetra</Text>
+          <ShieldCheck size={15} color="#059669" style={styles.shieldIcon} />
+        </View>
+        <View style={styles.subtitleRow}>
+          <Text style={styles.brandSubtitle} numberOfLines={1}>
+            {phoneModel ? `${phoneModel}: Bharthia, UP` : 'Sector: Bharthia, UP'}
+          </Text>
+          <ChevronDown size={13} color="#5A6570" style={{ marginLeft: 2 }} />
+        </View>
+      </View>
+
+      {/* Right Circle Status Button */}
+      <View style={styles.rightGroup}>
+        <View style={styles.circleBtn}>
+          <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+          <ModeIcon size={16} color={dotColor} />
+        </View>
       </View>
     </View>
   );
@@ -80,31 +82,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: '#ffffff',
+    paddingBottom: 12,
+    backgroundColor: '#F8F9F5',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#EBEFE6',
   },
-  brandBlock: {
+  leftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
+    gap: 8,
   },
-  logoIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#f0f9ff',
+  circleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E6EAE0',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e0f2fe',
-    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   logoImage: {
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
+  },
+  centerBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleRow: {
     flexDirection: 'row',
@@ -112,40 +121,35 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   brandTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.4,
+    color: '#1C1F24',
+    letterSpacing: -0.3,
   },
   shieldIcon: {
-    marginLeft: 2,
+    marginLeft: 1,
   },
-  brandSubtitle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#64748b',
-    marginTop: 1,
-  },
-  statusPill: {
+  subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 5,
+    marginTop: 2,
+  },
+  brandSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5A6570',
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusDot: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  statusIcon: {
-    marginRight: 2,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
 });
+
