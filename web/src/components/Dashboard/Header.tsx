@@ -412,6 +412,20 @@ export default function Header({
             on a disaster-alert government platform — the national helpline.
             Every other action now lives in the floating command button. */}
         <div className="flex items-center gap-2 self-end lg:self-center">
+          {onToggleMobileSiren && (
+            <button
+              onClick={onToggleMobileSiren}
+              className={`h-[38px] px-3.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition cursor-pointer ${
+                isMobileSirenActive
+                  ? "bg-red-600 text-white animate-pulse border-2 border-red-400"
+                  : "bg-slate-900 text-white hover:bg-red-700 border border-slate-700"
+              }`}
+              title="Broadcast Civil Defense siren tone and vibration to all citizens"
+            >
+              <span>{isMobileSirenActive ? "🛑 HALT MOBILE SIREN" : "🚨 FORCE SIREN ON PHONES"}</span>
+            </button>
+          )}
+
           <a
             href="tel:1078"
             aria-label="Call National Disaster Helpline 1078"

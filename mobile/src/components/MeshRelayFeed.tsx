@@ -8,21 +8,13 @@ interface MeshRelayFeedProps {
 }
 
 export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
-  const defaultPeers = [
-    { id: '1', name: 'Ramesh Kumar Node', signal: '-48 dBm', packets: 42, hops: '1 Hop' },
-    { id: '2', name: 'NDRF Base Repeater', signal: '-54 dBm', packets: 189, hops: 'Direct Link' },
-    { id: '3', name: 'Priyanshu Edge Node', signal: '-62 dBm', packets: 19, hops: '2 Hops' },
-  ];
-
-  const list = peers && peers.length > 0
-    ? peers.map((p) => ({
-        id: p.id,
-        name: p.name,
-        signal: `${p.signalStrength} dBm`,
-        packets: p.relayedPacketsCount,
-        hops: `${p.distanceMeters ? Math.ceil(p.distanceMeters / 250) : 1} Hop(s)`,
-      }))
-    : defaultPeers;
+  const list = (peers || []).map((p) => ({
+    id: p.id,
+    name: p.name || `Node ${p.id.slice(0, 6)}`,
+    signal: `${p.signalStrength || -65} dBm`,
+    packets: p.relayedPacketsCount || 0,
+    hops: `${p.distanceMeters ? Math.ceil(p.distanceMeters / 250) : 1} Hop(s)`,
+  }));
 
   return (
     <View style={styles.card}>
@@ -32,33 +24,41 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
           <Text style={styles.title}>ACTIVE BLUETOOTH MESH RELAYS</Text>
         </View>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{list.length} RELAYS ACTIVE</Text>
+          <Text style={styles.badgeText}>{list.length} RELAYS CONNECTED</Text>
         </View>
       </View>
 
       <Text style={styles.desc}>
-        Nearby citizen & rescue phones automatically chaining signals across Himalayan valleys when 4G/5G towers collapse.
+        Nearby phones automatically chain distress signals peer-to-peer when cellular infrastructure fails.
       </Text>
 
       <View style={styles.listContainer}>
-        {list.map((item) => (
-          <View key={item.id} style={styles.relayRow}>
-            <View style={styles.leftCol}>
-              <View style={styles.iconCircle}>
-                <Smartphone size={16} color="#64748b" />
-              </View>
-              <View>
-                <Text style={styles.relayName}>{item.name}</Text>
-                <Text style={styles.relayMeta}>{item.hops} • {item.packets} Emergency Packets Forwarded</Text>
-              </View>
-            </View>
-
-            <View style={styles.rightCol}>
-              <Text style={styles.signalVal}>{item.signal}</Text>
-              <Text style={styles.statusText}>Chain Active</Text>
-            </View>
+        {list.length === 0 ? (
+          <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+            <Text style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
+              Scanning nearby BLE frequencies... Peer nodes appear here automatically when in proximity.
+            </Text>
           </View>
-        ))}
+        ) : (
+          list.map((item) => (
+            <View key={item.id} style={styles.relayRow}>
+              <View style={styles.leftCol}>
+                <View style={styles.iconCircle}>
+                  <Smartphone size={16} color="#64748b" />
+                </View>
+                <View>
+                  <Text style={styles.relayName}>{item.name}</Text>
+                  <Text style={styles.relayMeta}>{item.hops} • {item.packets} Packets Forwarded</Text>
+                </View>
+              </View>
+
+              <View style={styles.rightCol}>
+                <Text style={styles.signalVal}>{item.signal}</Text>
+                <Text style={styles.statusText}>Chain Active</Text>
+              </View>
+            </View>
+          ))
+        )}
       </View>
     </View>
   );

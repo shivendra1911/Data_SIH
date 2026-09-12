@@ -1,16 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  StyleSheet,
-  View,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  RefreshControl,
-  Text,
-  Animated,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, SafeAreaView, StatusBar, Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { ShieldAlert, Map, Radio, Landmark } from 'lucide-react-native';
+
 import { ZonePrediction, NetworkMode, LocationSyncPayload, SOSType, SOSPayload } from '../types';
 import { fetchCurrentPrediction, sendSOSPayload, flushOfflineSOSQueue } from '../services/api';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
@@ -20,39 +14,32 @@ import {
   getLastKnownLocation,
   syncCurrentLocationToBackend,
 } from '../services/locationTracker';
-import { triggerRedZoneEmergencyAlert, registerForPushNotificationsAsync } from '../services/pushNotification';
-import {
-  startRedZoneDangerTimer,
-  markUserAsSafeConfirmed,
-  stopDangerTimer,
-} from '../services/dangerEscalation';
-import { startBLEAdvertising, stopBLEAdvertising } from '../services/bleAdvertiser';
+import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
+import { startRedZoneDangerTimer, markUserAsSafeConfirmed, stopDangerTimer } from '../services/dangerEscalation';
+import { startBLEAdvertising } from '../services/bleAdvertiser';
+import { getCurrentDeviceLocation } from '../services/locationService';
+import { mobileSirenListener } from '../services/mobileSirenListener';
 
-import { TopPillNav, CitizenTab } from '../components/TopPillNav';
-import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
-import { NearbyVictimsHelpCard } from '../components/NearbyVictimsHelpCard';
-import { MeshRelayFeed } from '../components/MeshRelayFeed';
+// Components
 import { MeshStatusBadge } from '../components/MeshStatusBadge';
-import { BluetoothWalkieTalkie } from '../components/BluetoothWalkieTalkie';
 import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
-import { OfflineMapContainer } from '../components/OfflineMapContainer';
-import { SOSBigButton } from '../components/SOSBigButton';
-import { EmergencyGuide } from '../components/EmergencyGuide';
-import { Navigation, Languages } from 'lucide-react-native';
-import { TouchableOpacity } from 'react-native';
-import { EvacuationShelter, LanguageMode } from '../types';
-import { getNearestEvacuationShelter } from '../services/evacuationShelters';
-import { SafeShelterCompassCard } from '../components/SafeShelterCompassCard';
-import { t } from '../services/i18n';
+import { GuidelineBar } from '../components/GuidelineBar';
+import { SOSFAB } from '../components/SOSFAB';
+import { IncomingCallModal } from '../components/IncomingCallModal';
+import { ActiveCallHUD } from '../components/ActiveCallHUD';
 
+// Screens
+import { StatusScreen } from './StatusScreen';
+import { MeshScreen } from './MeshScreen';
+import { MapScreen } from './MapScreen';
+import { GuidelinesScreen } from './GuidelinesScreen';
+
+const Tab = createBottomTabNavigator();
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
 export const HomeScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<CitizenTab>('status');
   const [prediction, setPrediction] = useState<ZonePrediction | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [deviceUuid, setDeviceUuid] = useState<string>('uuid-device-node-1');
   const [networkMode, setNetworkMode] = useState<NetworkMode>('ONLINE');
   const [peerCount, setPeerCount] = useState<number>(3);
@@ -62,48 +49,65 @@ export const HomeScreen: React.FC = () => {
   const [showRedAlertOverlay, setShowRedAlertOverlay] = useState<boolean>(false);
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
   const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
-  const [userName] = useState<string>('Citizen');
-  const [language, setLanguage] = useState<LanguageMode>('en');
-  const [nearestShelter, setNearestShelter] = useState<EvacuationShelter | null>(null);
+  const [forcedSiren, setForcedSiren] = useState<{ active: boolean; message?: string; zoneName?: string } | null>(null);
+
+  // BLE Intercom / Calling States
+  const [incomingCaller, setIncomingCaller] = useState<{
+    id: string;
+    name: string;
+    distance?: number;
+    hopCount?: number;
+  } | null>(null);
+  const [activeCallPeer, setActiveCallPeer] = useState<{
+    id: string;
+    name: string;
+    distance?: number;
+    hopCount?: number;
+  } | null>(null);
+
+  const isRedZone =
+    Boolean(forcedSiren?.active) ||
+    prediction?.alert_color === 'RED' ||
+    (prediction?.flood_probability_percent !== undefined && prediction.flood_probability_percent > 60) ||
+    sosStatus === 'SOS';
 
   useEffect(() => {
-    const lat = lastLocation ? lastLocation.lat : 30.5573;
-    const lng = lastLocation ? lastLocation.lng : 79.5642;
-    const alt = lastLocation && lastLocation.altitude ? lastLocation.altitude : 1450.0;
-    const shelter = getNearestEvacuationShelter(lat, lng, alt);
-    setNearestShelter(shelter);
-  }, [lastLocation]);
+    initDeviceUuid();
+    loadPrediction();
+    checkOfflineQueue();
 
-  useEffect(() => {
-    let isMounted = true;
-
-    initDeviceUuid().then((uuid) => {
-      if (isMounted) {
-        loadPrediction(uuid);
-        checkOfflineQueue();
-      }
-    });
-
-    const unsubscribeNet = NetInfo.addEventListener(state => {
-      const isConnected = !!(state.isConnected && state.isInternetReachable !== false);
-      if (isConnected) {
-        setNetworkMode('ONLINE');
-        flushOfflineSOSQueue().then(() => {
-          if (isMounted) checkOfflineQueue();
-        }).catch(() => {});
+    // Start background listener for Forced Civil Defense Sirens from web admin
+    mobileSirenListener.start((event) => {
+      if (event.active) {
+        setForcedSiren(event);
+        setShowRedAlertOverlay(true);
+        setSosStatus('SOS');
+        startRedZoneDangerTimer(
+          deviceUuid,
+          300,
+          (remSeconds) => setRemainingCountdown(remSeconds),
+          () => {
+            setRemainingCountdown(0);
+            checkOfflineQueue();
+          },
+          () => {
+            console.log('[HomeScreen] Auto-confirming SAFE via Touch-Free Gyro/Motion Sensor!');
+            handleConfirmSafe(true);
+          },
+          true // force start countdown!
+        );
       } else {
-        setNetworkMode('BLE_MESH');
+        setForcedSiren(null);
+        setShowRedAlertOverlay(false);
       }
     });
 
     return () => {
-      isMounted = false;
-      unsubscribeNet();
-      stopDangerTimer();
+      mobileSirenListener.stop();
     };
   }, []);
 
-  const initDeviceUuid = async (): Promise<string> => {
+  const initDeviceUuid = async () => {
     try {
       let storedUuid = await AsyncStorage.getItem(DEVICE_UUID_KEY);
       if (!storedUuid) {
@@ -111,68 +115,69 @@ export const HomeScreen: React.FC = () => {
         await AsyncStorage.setItem(DEVICE_UUID_KEY, storedUuid);
       }
       setDeviceUuid(storedUuid);
-      start5MinPeriodicLocationTracker(storedUuid, 'chamoli_01');
-      registerForPushNotificationsAsync(storedUuid, 'chamoli_01');
+      start5MinPeriodicLocationTracker(storedUuid, 'local_sector');
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
 
-      // ── Real BLE Mesh Initialisation ──────────────────────────────────────
-      // Init real BLE engine (requests permissions, starts scanning)
       const bleOk = await bleEngine.init(storedUuid, 'Citizen');
       if (bleOk) {
-        // Start advertising so other phones can find us
         await startBLEAdvertising('NeerNetra_' + storedUuid.substring(4, 10));
-
-        // Live peer updates → refresh peer count
-        bleEngine.onPeersChanged = (peers) => {
-          setPeerCount(peers.length);
+        bleEngine.onPeersChanged = (peers) => setPeerCount(peers.length);
+        bleEngine.onIncomingCall = (caller) => {
+          setIncomingCaller(caller);
         };
-
-        // SOS received from another mesh peer
-        bleEngine.onSOSReceived = (senderId, lat, lng) => {
-          console.warn(`[HomeScreen] SOS received via mesh from ${senderId} at ${lat},${lng}`);
+        bleEngine.onCallAnswered = (peerId) => {
+          const peer = bleEngine.getConnectedPeers().find((p) => p.id === peerId);
+          setActiveCallPeer({
+            id: peerId,
+            name: peer?.name || 'Citizen Node',
+            distance: peer?.distanceMeters || 15,
+            hopCount: 1,
+          });
         };
-
-        // Network mode: if peers > 0 and no internet → BLE_MESH
+        bleEngine.onCallDeclined = () => {
+          setIncomingCaller(null);
+          setActiveCallPeer(null);
+        };
+        bleEngine.onCallEnded = () => {
+          setActiveCallPeer(null);
+        };
         bleEngine.onStateChange = (state) => {
           if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
         };
       }
-      return storedUuid;
     } catch (e) {
       console.warn('[HomeScreen] Device UUID / BLE init failed:', e);
-      return deviceUuid;
     }
   };
 
-  const loadPrediction = async (targetUuid?: string) => {
-    const activeUuid = targetUuid || deviceUuid;
-    setLoading(true);
+  const loadPrediction = async () => {
     try {
-      const data = await fetchCurrentPrediction('chamoli_01');
+      const loc = await getLastKnownLocation();
+      const data = await fetchCurrentPrediction('local_sector', loc?.lat, loc?.lng);
       setPrediction(data);
       setNetworkMode('ONLINE');
 
-      if (data.alert_color === 'RED' || data.flood_probability_percent > 75.0) {
+      if (data.alert_color === 'RED' && data.flood_probability_percent > 75.0) {
         triggerRedZoneEmergencyAlert(data.zone_id, data.flood_probability_percent, data.primary_trigger);
         setShowRedAlertOverlay(true);
 
         startRedZoneDangerTimer(
-          activeUuid,
+          deviceUuid,
           300,
           (remSeconds) => setRemainingCountdown(remSeconds),
           () => {
             setRemainingCountdown(0);
             checkOfflineQueue();
+          },
+          () => {
+            console.log('[HomeScreen] Auto-confirming SAFE via Touch-Free Gyro/Motion Sensor!');
+            handleConfirmSafe(true);
           }
         );
       }
     } catch (e) {
-      console.warn('[HomeScreen] Prediction offline — switching to BLE mesh mode:', e);
       setNetworkMode('BLE_MESH');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -180,116 +185,135 @@ export const HomeScreen: React.FC = () => {
     const queue = await getOfflineSOSQueue();
     setQueuedCount(queue.length);
     setPeerCount(meshEngine.getConnectedPeers().length);
-    const cachedLoc = await getLastKnownLocation();
-    setLastLocation(cachedLoc);
+    setLastLocation(await getLastKnownLocation());
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadPrediction();
-    await checkOfflineQueue();
-    if (deviceUuid) {
-      await syncCurrentLocationToBackend(deviceUuid, 'chamoli_01');
-    }
-  };
-
-  // Citizen taps "I AM SAFE"
-  const handleConfirmSafe = async () => {
+  const handleConfirmSafe = async (isTouchFree: boolean = false) => {
     await markUserAsSafeConfirmed(deviceUuid);
     setRemainingCountdown(null);
     stopDangerTimer();
     setSosStatus('SAFE');
-
-    const lat = lastLocation ? lastLocation.lat : 30.5573;
-    const lng = lastLocation ? lastLocation.lng : 79.5642;
+    let lat = lastLocation?.lat;
+    let lng = lastLocation?.lng;
+    try {
+      const liveGps = await getCurrentDeviceLocation();
+      if (liveGps && liveGps.lat && liveGps.lng) {
+        lat = liveGps.lat;
+        lng = liveGps.lng;
+      }
+    } catch {}
 
     await sendSOSPayload({
       device_uuid: deviceUuid,
-      lat,
-      lng,
+      lat: lat || 27.6015,
+      lng: lng || 77.5975,
       status: 'SAFE',
+      sos_type: isTouchFree ? 'TOUCH_FREE_MOTION_SAFE' : 'CHECKIN',
+      notes: isTouchFree
+        ? 'Confirmed SAFE via Internal Gyro/Motion Sensor (Touch-Free / Damaged Screen Lift Gesture)'
+        : 'Confirmed SAFE by citizen tap',
       is_mesh_relayed: networkMode === 'BLE_MESH',
       timestamp: new Date().toISOString(),
     });
-    await checkOfflineQueue();
   };
 
-  // Citizen taps "I AM HELPING" (Good Samaritan / Volunteer Mode)
-  const handleConfirmHelping = async () => {
-    setSosStatus('HELPING');
-    const lat = lastLocation ? lastLocation.lat : 30.5573;
-    const lng = lastLocation ? lastLocation.lng : 79.5642;
-
-    await sendSOSPayload({
-      device_uuid: deviceUuid,
-      lat,
-      lng,
-      status: 'HELPING',
-      is_mesh_relayed: networkMode === 'BLE_MESH',
-      timestamp: new Date().toISOString(),
-    });
-    await checkOfflineQueue();
-  };
-
-  // Citizen selects an SOS type
   const handleSOSTrigger = async (type: SOSType) => {
     setSosStatus('SOS');
-    const lat = lastLocation ? lastLocation.lat : 30.5573;
-    const lng = lastLocation ? lastLocation.lng : 79.5642;
+    let lat = lastLocation?.lat;
+    let lng = lastLocation?.lng;
+    try {
+      const liveGps = await getCurrentDeviceLocation();
+      if (liveGps && liveGps.lat && liveGps.lng) {
+        lat = liveGps.lat;
+        lng = liveGps.lng;
+      }
+    } catch {}
 
     const payload: SOSPayload = {
       device_uuid: deviceUuid,
-      lat,
-      lng,
+      lat: lat || 27.6015,
+      lng: lng || 77.5975,
       status: 'SOS',
       sos_type: type,
       is_mesh_relayed: networkMode === 'BLE_MESH',
       timestamp: new Date().toISOString(),
     };
-
-    // If online, post to backend; otherwise broadcast via BLE mesh
     if (networkMode !== 'BLE_MESH') {
       await sendSOSPayload(payload);
     } else {
       await meshEngine.broadcastMultiHopSOS(payload);
     }
-    await checkOfflineQueue();
   };
 
-  // SOS triggered from Red Zone overlay
-  const handleEmergencySOSFromOverlay = async () => {
-    setShowRedAlertOverlay(false);
-    await handleSOSTrigger('TRAPPED');
+  const handleAcceptCall = async () => {
+    if (!incomingCaller) return;
+    await bleEngine.acceptCall(incomingCaller.id);
+    setActiveCallPeer(incomingCaller);
+    setIncomingCaller(null);
   };
 
-  const handleSyncQueue = async () => {
-    setSyncing(true);
-    try {
-      await flushOfflineSOSQueue();
-      await checkOfflineQueue();
-    } finally {
-      setSyncing(false);
-    }
+  const handleDeclineCall = async () => {
+    if (!incomingCaller) return;
+    await bleEngine.declineCall(incomingCaller.id);
+    setIncomingCaller(null);
   };
 
-  const peers = meshEngine.getConnectedPeers();
-
-  const isRedZone =
-    prediction?.alert_color === 'RED' ||
-    (prediction?.flood_probability_percent ?? 0) > 75;
+  const handleEndActiveCall = async () => {
+    if (!activeCallPeer) return;
+    await bleEngine.endCall(activeCallPeer.id);
+    setActiveCallPeer(null);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#eaebe5" />
+      
+      <GuidelineBar />
 
-      {/* Top Nav with NeerNetra branding and tab pills */}
-      <TopPillNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        networkMode={networkMode}
+      {forcedSiren?.active && (
+        <View style={styles.forcedSirenBanner}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 16 }}>🚨</Text>
+            <Text style={styles.forcedSirenTitle}>CIVIL DEFENSE SIREN BROADCAST</Text>
+          </View>
+          <Text style={styles.forcedSirenMsg}>
+            {forcedSiren.message || 'National Disaster Force / SDMA has triggered an audible emergency siren for your sector.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.silenceBtn}
+            activeOpacity={0.8}
+            onPress={() => {
+              mobileSirenListener.silenceAlarm();
+              setForcedSiren(null);
+              setShowRedAlertOverlay(false);
+              handleConfirmSafe(false);
+            }}
+          >
+            <Text style={styles.silenceBtnText}>SILENCE ALARM & CONFIRM SAFE</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <MeshStatusBadge
+        mode={networkMode}
+        peerCount={peerCount}
+        queuedCount={queuedCount}
+        onSyncPress={async () => {
+          setSyncing(true);
+          await flushOfflineSOSQueue();
+          await checkOfflineQueue();
+          setSyncing(false);
+        }}
+        syncing={syncing}
       />
 
-      {/* 5-minute danger countdown — always rendered above all tabs */}
+      {activeCallPeer && (
+        <ActiveCallHUD
+          peer={activeCallPeer}
+          onEndCall={handleEndActiveCall}
+        />
+      )}
+
       {remainingCountdown !== null && remainingCountdown > 0 && (
         <SafeConfirmationCountdown
           remainingSeconds={remainingCountdown}
@@ -297,138 +321,76 @@ export const HomeScreen: React.FC = () => {
         />
       )}
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f59e0b" />
-        }
-      >
-        {/* Bilingual Hindi/English Emergency Language Switcher */}
-        <View style={styles.langBar}>
-          <View style={styles.langLeft}>
-            <Languages size={14} color="#0284c7" />
-            <Text style={styles.langLabel}>
-              {language === 'hi' ? 'भाषा / LANGUAGE:' : 'LANGUAGE / भाषा:'}
-            </Text>
-          </View>
-          <View style={styles.langBtnGroup}>
-            <TouchableOpacity
-              style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-              onPress={() => setLanguage('en')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>
-                English
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.langBtn, language === 'hi' && styles.langBtnActive]}
-              onPress={() => setLanguage('hi')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.langBtnText, language === 'hi' && styles.langBtnTextActive]}>
-                हिन्दी
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: '#0284c7',
+            tabBarInactiveTintColor: '#64748b',
+            tabBarStyle: styles.tabBar,
+          }}
+        >
+          <Tab.Screen 
+            name="Status" 
+            options={{ tabBarIcon: ({ color, size }) => <ShieldAlert color={color} size={size} /> }}
+          >
+            {() => <StatusScreen prediction={prediction} />}
+          </Tab.Screen>
+          
+          <Tab.Screen 
+            name="Map" 
+            options={{ tabBarIcon: ({ color, size }) => <Map color={color} size={size} /> }}
+          >
+            {() => (
+              <MapScreen
+                lastLocation={lastLocation}
+                peers={meshEngine.getConnectedPeers()}
+                isRedZone={isRedZone}
+                networkMode={networkMode}
+              />
+            )}
+          </Tab.Screen>
+          
+          <Tab.Screen 
+            name="Mesh" 
+            options={{ tabBarIcon: ({ color, size }) => <Radio color={color} size={size} /> }}
+          >
+            {() => <MeshScreen peers={meshEngine.getConnectedPeers()} isDisasterConfirmed={isRedZone} />}
+          </Tab.Screen>
 
-        {/* Network / Mesh status badge (always visible) */}
-        <MeshStatusBadge
-          mode={networkMode}
-          peerCount={peerCount}
-          queuedCount={queuedCount}
-          onSyncPress={handleSyncQueue}
-          syncing={syncing}
+          <Tab.Screen 
+            name="Guidelines" 
+            options={{
+              tabBarLabel: 'Directives',
+              tabBarIcon: ({ color, size }) => <Landmark color={color} size={size} />
+            }}
+          >
+            {() => <GuidelinesScreen />}
+          </Tab.Screen>
+        </Tab.Navigator>
+
+        <SOSFAB 
+          onSOSTrigger={handleSOSTrigger}
+          onConfirmSafe={handleConfirmSafe}
+          currentStatus={sosStatus}
         />
+      </NavigationContainer>
 
-        {/* Last known GPS location bar */}
-        {lastLocation && (
-          <View style={styles.locationSyncBar}>
-            <Navigation size={13} color="#0284c7" />
-            <Text style={styles.locSyncText}>
-              5-Min GPS Sync:{' '}
-              <Text style={styles.boldCoords}>
-                {lastLocation.lat.toFixed(4)}, {lastLocation.lng.toFixed(4)}
-              </Text>{' '}
-              • Battery {lastLocation.battery_level ?? '--'}%
-            </Text>
-          </View>
-        )}
+      <IncomingCallModal
+        visible={!!incomingCaller}
+        caller={incomingCaller}
+        onAccept={handleAcceptCall}
+        onDecline={handleDeclineCall}
+      />
 
-        {/* ========== TAB 1: STATUS ========== */}
-        {activeTab === 'status' && (
-          <>
-            {/* Flood risk gauge */}
-            <SecurityGaugeCard prediction={prediction} />
-
-            {/* Offline High-Ground Evacuation Shelter Guide */}
-            <SafeShelterCompassCard shelter={nearestShelter} language={language} />
-
-            {/* Primary SOS + I AM SAFE / HELPING buttons */}
-            <SOSBigButton
-              onSOSTrigger={handleSOSTrigger}
-              onConfirmSafe={handleConfirmSafe}
-              onConfirmHelping={handleConfirmHelping}
-              currentStatus={sosStatus}
-            />
-
-            {/* Nearby citizens needing / offering help */}
-            <NearbyVictimsHelpCard />
-
-            {/* Offline survival guidelines & protocol */}
-            <EmergencyGuide />
-          </>
-        )}
-
-        {/* ========== TAB 2: MESH ========== */}
-        {activeTab === 'mesh' && (
-          <>
-            {/* Walkie-talkie offline chat */}
-            <BluetoothWalkieTalkie />
-
-            {/* Nearby citizens reachable over BLE */}
-            <NearbyVictimsHelpCard />
-
-            {/* Active relay feed */}
-            <MeshRelayFeed peers={peers} />
-          </>
-        )}
-
-        {/* ========== TAB 3: MAP ========== */}
-        {activeTab === 'map' && (
-          <>
-            {/* Offline vector map with GPS pin and BLE peer markers */}
-            <OfflineMapContainer
-              lastLocation={lastLocation}
-              peers={peers}
-              isRedZone={isRedZone}
-            />
-
-            {/* Safe Evacuation Shelter Navigation Card */}
-            <SafeShelterCompassCard shelter={nearestShelter} language={language} />
-
-            {/* Still show SOS buttons so citizen can act from map tab */}
-            <SOSBigButton
-              onSOSTrigger={handleSOSTrigger}
-              onConfirmSafe={handleConfirmSafe}
-              onConfirmHelping={handleConfirmHelping}
-              currentStatus={sosStatus}
-            />
-
-            {/* Compact relay list */}
-            <MeshRelayFeed peers={peers} />
-          </>
-        )}
-      </ScrollView>
-
-      {/* Full-screen Red Zone warning modal */}
       <RedZoneAlertOverlay
         visible={showRedAlertOverlay}
         prediction={prediction}
         lastLocation={lastLocation}
-        onTriggerSOS={handleEmergencySOSFromOverlay}
+        onTriggerSOS={() => {
+          setShowRedAlertOverlay(false);
+          handleSOSTrigger('TRAPPED');
+        }}
         onDismiss={() => setShowRedAlertOverlay(false)}
       />
     </SafeAreaView>
@@ -440,78 +402,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eaebe5',
   },
-  scrollContent: {
-    paddingBottom: 48,
-  },
-  locationSyncBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#e0f2fe',
-    borderColor: '#bae6fd',
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginHorizontal: 16,
-    marginBottom: 4,
-  },
-  locSyncText: {
-    color: '#0369a1',
-    fontSize: 11,
-    fontWeight: '600',
-    flex: 1,
-  },
-  boldCoords: {
-    color: '#0f172a',
-    fontWeight: '800',
-  },
-  langBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  tabBar: {
+    height: 60,
+    paddingBottom: 5,
+    paddingTop: 5,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginHorizontal: 16,
-    marginBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
-  langLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  forcedSirenBanner: {
+    backgroundColor: '#b91c1c',
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: '#fca5a5',
+    elevation: 6,
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
-  langLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748b',
+  forcedSirenTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
-  langBtnGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    padding: 2,
-    gap: 2,
+  forcedSirenMsg: {
+    color: '#fee2e2',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    fontWeight: '500',
+    lineHeight: 16,
   },
-  langBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  silenceBtn: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 8,
+    alignItems: 'center',
   },
-  langBtnActive: {
-    backgroundColor: '#0284c7',
-  },
-  langBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  langBtnTextActive: {
-    color: '#ffffff',
+  silenceBtnText: {
+    color: '#b91c1c',
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
 });

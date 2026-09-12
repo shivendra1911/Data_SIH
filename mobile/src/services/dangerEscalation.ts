@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendSOSPayload } from './api';
 import { meshEngine } from './bluetoothMesh';
 import { getLastKnownLocation } from './locationTracker';
+import { triggerEmergencyVoiceAudio, stopEmergencyVoiceAudio } from './emergencyVoice';
+import { motionSafetyDetector } from './motionSafetyDetector';
 
 const SAFE_CONFIRMED_KEY = '@neernetra_safe_confirmed_v1';
 const DANGER_TIMER_KEY = '@neernetra_danger_timer_start_v1';
@@ -12,10 +14,7 @@ export const markUserAsSafeConfirmed = async (deviceUuid: string): Promise<void>
   try {
     await AsyncStorage.setItem(SAFE_CONFIRMED_KEY, new Date().toISOString());
     await AsyncStorage.removeItem(DANGER_TIMER_KEY);
-    if (countdownInterval) {
-      clearInterval(countdownInterval);
-      countdownInterval = null;
-    }
+    stopDangerTimer();
     console.log('[DangerEscalation] Citizen confirmed SAFE. Automatic danger escalation cancelled.');
   } catch (err) {
     console.error('[DangerEscalation] Error saving safe status:', err);
@@ -39,13 +38,34 @@ export const startRedZoneDangerTimer = async (
   deviceUuid: string,
   timeoutSeconds: number = 300, // 5-minute timeout
   onTick?: (remainingSeconds: number) => void,
-  onAutoEscalate?: () => void
+  onAutoEscalate?: () => void,
+  onMotionSafeConfirmed?: () => void,
+  force: boolean = false
 ) => {
-  const isSafe = await isUserSafeConfirmed();
-  if (isSafe) {
-    console.log('[DangerEscalation] User already confirmed SAFE. Skipping danger countdown.');
-    return;
+  if (!force) {
+    const isSafe = await isUserSafeConfirmed();
+    if (isSafe) {
+      console.log('[DangerEscalation] User already confirmed SAFE. Skipping danger countdown.');
+      return;
+    }
+  } else {
+    // Clear prior safe confirmation when force triggered by Command Siren
+    await AsyncStorage.removeItem(SAFE_CONFIRMED_KEY);
   }
+
+  // Trigger loud audio immediately when Red Zone is detected!
+  triggerEmergencyVoiceAudio();
+
+  // Start touch-free motion & gyroscope monitoring for damaged/submerged screens
+  motionSafetyDetector.startMonitoring({
+    onMotionConfirmed: async () => {
+      console.log('[DangerEscalation] Motion safety detector triggered touch-free safe confirmation!');
+      await markUserAsSafeConfirmed(deviceUuid);
+      if (onMotionSafeConfirmed) {
+        onMotionSafeConfirmed();
+      }
+    },
+  });
 
   let startTime = Date.now();
   await AsyncStorage.setItem(DANGER_TIMER_KEY, startTime.toString());
@@ -66,8 +86,8 @@ export const startRedZoneDangerTimer = async (
 
       // Get last known location
       const lastLoc = await getLastKnownLocation();
-      const lat = lastLoc ? lastLoc.lat : 30.5573;
-      const lng = lastLoc ? lastLoc.lng : 79.5642;
+      const lat = lastLoc ? lastLoc.lat : 27.6015;
+      const lng = lastLoc ? lastLoc.lng : 77.5975;
 
       const autoSosPayload = {
         device_uuid: deviceUuid,
@@ -94,4 +114,6 @@ export const stopDangerTimer = () => {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
+  stopEmergencyVoiceAudio();
+  motionSafetyDetector.stopMonitoring();
 };

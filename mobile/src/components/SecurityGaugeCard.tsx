@@ -9,10 +9,10 @@ interface SecurityGaugeCardProps {
 }
 
 export const SecurityGaugeCard: React.FC<SecurityGaugeCardProps> = ({ prediction }) => {
-  const prob = prediction ? prediction.flood_probability_percent : 85.5;
-  const alertColor = prediction ? prediction.alert_color : 'RED';
-  const trigger = prediction ? prediction.primary_trigger : 'GLOF & Torrential Rainfall';
-  const zoneId = prediction ? prediction.zone_id : 'chamoli_01';
+  const prob = prediction ? prediction.flood_probability_percent : 0.0;
+  const alertColor = prediction ? prediction.alert_color : 'SAFE';
+  const trigger = prediction ? prediction.primary_trigger : 'Acquiring Live Sector Telemetry...';
+  const zoneName = prediction?.zone_name || (prediction?.zone_id ? prediction.zone_id.replace('_', ' ').toUpperCase() : 'LIVE GPS SECTOR');
   const lastUpdated = prediction?.last_updated
     ? new Date(prediction.last_updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '--:--';
@@ -71,7 +71,7 @@ export const SecurityGaugeCard: React.FC<SecurityGaugeCardProps> = ({ prediction
         <View style={styles.zoneTag}>
           <Droplets size={13} color={getGaugeColor()} />
           <Text style={[styles.zoneText, { color: getGaugeColor() }]}>
-            {zoneId.toUpperCase().replace('_', ' ')}
+            {zoneName}
           </Text>
         </View>
         <Text style={styles.updatedText}>Updated {lastUpdated}</Text>

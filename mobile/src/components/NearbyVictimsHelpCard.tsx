@@ -13,6 +13,7 @@ import { meshEngine } from '../services/bluetoothMesh';
 interface NearbyVictimsHelpCardProps {
   onCallVictim?: (peer: MeshPeer) => void;
   onMessageVictim?: (peer: MeshPeer) => void;
+  isDisasterConfirmed?: boolean;
 }
 
 const statusColor = (status?: SOSStatus) => {
@@ -151,13 +152,23 @@ export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
                 <View style={styles.actionRow}>
                   <TouchableOpacity
                     style={styles.callBtn}
-                    onPress={() => {
-                      if (onCallVictim) onCallVictim(peer);
-                      else
+                    onPress={async () => {
+                      if (onCallVictim) {
+                        onCallVictim(peer);
+                      } else {
+                        await meshEngine.initiateCall(peer.id, peer.name);
                         Alert.alert(
-                          'BLE Walkie-Talkie',
-                          `Connecting to ${peer.name} over P2P Bluetooth intercom...`
+                          '📡 BLE Intercom Calling...',
+                          `Sending offline mesh call request to ${peer.name} (zero internet/cellular needed).\n\nWaiting for peer to accept on their device...`,
+                          [
+                            {
+                              text: 'Cancel',
+                              style: 'cancel',
+                              onPress: () => meshEngine.endCall(peer.id),
+                            },
+                          ]
                         );
+                      }
                     }}
                     activeOpacity={0.8}
                   >

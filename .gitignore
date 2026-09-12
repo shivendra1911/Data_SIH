@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache/
 .expo/
 *.log
+crash_log.txt
+*.db

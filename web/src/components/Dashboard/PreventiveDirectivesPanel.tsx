@@ -13,6 +13,7 @@ import {
   Plus,
   Edit3,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface DirectiveItem {
   id: string;
@@ -63,7 +64,7 @@ export default function PreventiveDirectivesPanel({
     );
   };
 
-  const handleAddDirective = (e: React.FormEvent) => {
+  const handleAddDirective = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newAction.trim()) return;
 
@@ -81,6 +82,52 @@ export default function PreventiveDirectivesPanel({
     setNewTitle("");
     setNewAction("");
     setIsAddingDirective(false);
+
+    // 1. Dispatch to local guidelines API
+    fetch("/api/guidelines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        zone_id: activeZone.id,
+        title: newDir.title,
+        immediate_actions: [newDir.action],
+        high_ground_directives: [newDir.action],
+        alert_level: newDir.priority === "IMMEDIATE" ? "RED" : "ORANGE",
+      }),
+    }).catch((err) => console.warn("[DirectivesPanel] Local API sync error:", err));
+
+    // 2. Dispatch directly to Supabase cloud table for instant mobile phone push
+    try {
+      const res = await supabase
+        .from("sos_alerts")
+        .insert([
+        {
+          device_id: "GOVT_DIRECTIVE",
+          lat: activeZone.center ? activeZone.center[0] : 27.6015,
+          lng: activeZone.center ? activeZone.center[1] : 77.5975,
+          sos_type: "GOVT_DIRECTIVE",
+          status: "ACTIVE",
+          battery_level: 100,
+          notes: JSON.stringify({
+            id: newDir.id,
+            title: newDir.title,
+            action: newDir.action,
+            priority: newDir.priority,
+            category: newDir.category,
+            zone_id: activeZone.id,
+            zone_name: activeZone.name,
+            created_at: new Date().toISOString(),
+          }),
+        },
+      ]);
+      if (res && (res as any).error) {
+        console.warn("[DirectivesPanel] Supabase cloud directive push error:", (res as any).error);
+      } else {
+        console.log("[DirectivesPanel] Government directive synced to cloud for mobile APKs!");
+      }
+    } catch (err) {
+      console.warn("[DirectivesPanel] Cloud sync error:", err);
+    }
   };
 
   const getCategoryIcon = (cat: DirectiveItem["category"]) => {

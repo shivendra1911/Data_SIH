@@ -23,6 +23,7 @@ import {
   EmergencyResponder,
 } from "@/lib/types";
 import { fetchActiveClusters } from "@/lib/api";
+import { subscribeToSOSEvents } from "@/lib/supabase";
 import {
   Compass,
   MapPin,
@@ -82,6 +83,27 @@ export default function TacticalRadarPage() {
     }
   }, []);
 
+  // Inspect URL query params (e.g. from Locate button) to focus map on specific citizen coordinates
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const latStr = params.get("lat");
+      const lngStr = params.get("lng");
+      const uuid = params.get("uuid");
+      if (latStr && lngStr) {
+        const pLat = parseFloat(latStr);
+        const pLng = parseFloat(lngStr);
+        if (!isNaN(pLat) && !isNaN(pLng)) {
+          setMapCenter([pLat, pLng]);
+          setMapZoom(16);
+          if (uuid) {
+            setSelectedEventId(uuid);
+          }
+        }
+      }
+    }
+  }, []);
+
   // Poll citizen distress locations and clusters from live API (tab-visibility aware)
   useEffect(() => {
     const fetchCit = async () => {
@@ -118,6 +140,40 @@ export default function TacticalRadarPage() {
     const interval = setInterval(fetchCit, 12000);
     return () => clearInterval(interval);
   }, [selectedZone.id]);
+
+  // Real-time WebSocket connection to Supabase sos_alerts (<100ms instant ping)
+  useEffect(() => {
+    const unsub = subscribeToSOSEvents((newEvent) => {
+      if (soundEnabled) playAlertSound();
+      setSOSEvents((prev) => [newEvent, ...prev.filter((e) => e.device_uuid !== newEvent.device_uuid)]);
+      setCitizens((prev) => {
+        const citIdx = prev.findIndex((c) => c.device_uuid === newEvent.device_uuid);
+        const newCit: CitizenLocation = {
+          id: `cit-${newEvent.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+          device_uuid: newEvent.device_uuid,
+          name: `Mobile Citizen [${newEvent.device_uuid.slice(0, 8)}]`,
+          lat: newEvent.lat,
+          lng: newEvent.lng,
+          is_live: true,
+          last_seen_minutes_ago: 0,
+          accuracy_radius_m: 10,
+          drift_radius_m: 0,
+          battery_pct: 85,
+          status: newEvent.status,
+          sos_type: newEvent.sos_type,
+          mesh_hops: newEvent.is_mesh_relayed ? 2 : 0,
+        };
+        if (citIdx >= 0) {
+          const updated = [...prev];
+          updated[citIdx] = { ...updated[citIdx], ...newCit };
+          return updated;
+        }
+        return [newCit, ...prev];
+      });
+      setMapCenter([newEvent.lat, newEvent.lng]);
+    });
+    return () => unsub();
+  }, [soundEnabled, playAlertSound]);
 
   const handleSelectZone = (zone: HazardZone) => {
     setSelectedZone(zone);

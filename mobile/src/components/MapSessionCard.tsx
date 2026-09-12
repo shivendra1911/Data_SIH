@@ -11,9 +11,9 @@ interface MapSessionCardProps {
 
 export const MapSessionCard: React.FC<MapSessionCardProps> = ({ onZoomIn, onZoomOut }) => {
   const markers: MapClusterMarker[] = [
-    { id: '1', number: 1, lat: 30.55, lng: 79.56, xPercent: 32, yPercent: 42, active: true, label: 'Chamoli Head' },
-    { id: '6', number: 6, lat: 30.58, lng: 79.52, xPercent: 28, yPercent: 65, active: false, label: 'Joshimath Node' },
-    { id: '4', number: 4, lat: 30.74, lng: 79.49, xPercent: 52, yPercent: 78, active: false, label: 'Badrinath Relay' },
+    { id: '1', number: 1, lat: 27.60, lng: 77.60, xPercent: 32, yPercent: 42, active: true, label: 'Sector Node Alpha' },
+    { id: '6', number: 6, lat: 27.61, lng: 77.59, xPercent: 28, yPercent: 65, active: false, label: 'Mesh Relay 02' },
+    { id: '4', number: 4, lat: 27.59, lng: 77.61, xPercent: 52, yPercent: 78, active: false, label: 'Gateway Station' },
   ];
 
   return (
@@ -45,7 +45,7 @@ export const MapSessionCard: React.FC<MapSessionCardProps> = ({ onZoomIn, onZoom
             />
           </G>
 
-          {/* Active Highlighted Location Pin (Chamoli France / India Pin) */}
+          {/* Active Highlighted Location Pin (Local Sector Pin) */}
           <G transform="translate(195, 62)">
             <Circle r="6" fill="#f59e0b" />
             <Circle r="12" fill="#f59e0b" opacity={0.3} />
@@ -98,7 +98,7 @@ export const MapSessionCard: React.FC<MapSessionCardProps> = ({ onZoomIn, onZoom
           <Text style={styles.deviceSubText}>Version GLOF-v2.4 • High Priority Node</Text>
 
           <View style={styles.locationMetaRow}>
-            <Text style={styles.flagText}>🇮🇳 Chamoli, India</Text>
+            <Text style={styles.flagText}>🇮🇳 Local Sector, India</Text>
             <Text style={styles.timeText}>Sep 12, 13:00</Text>
           </View>
         </View>

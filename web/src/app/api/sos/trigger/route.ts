@@ -106,14 +106,15 @@ export async function POST(req: NextRequest) {
 
     // Try inserting into Supabase if connected
     try {
-      await supabase.from("sos_events").insert([
+      await supabase.from("sos_alerts").insert([
         {
-          device_uuid: eventRecord.device_uuid,
+          device_id: eventRecord.device_uuid,
           lat: eventRecord.lat,
           lng: eventRecord.lng,
           status: eventRecord.status,
           sos_type: eventRecord.sos_type,
-          is_mesh_relayed: eventRecord.is_mesh_relayed,
+          battery_level: Number(battery_pct) || 85,
+          notes: name ? `${name} | ${phone || "+91 98765 43210"}` : null,
         },
       ]);
     } catch (dbErr) {

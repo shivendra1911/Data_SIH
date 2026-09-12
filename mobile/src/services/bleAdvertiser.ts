@@ -16,7 +16,8 @@ import { NEERNETRA_SERVICE_UUID } from './bluetoothMesh';
 // react-native-ble-advertiser exposes BLEAdvertiser
 let BLEAdvertiser: any = null;
 try {
-  BLEAdvertiser = require('react-native-ble-advertiser').default;
+  const mod = require('react-native-ble-advertiser');
+  BLEAdvertiser = mod?.default || mod || NativeModules.BLEAdvertiser;
 } catch (e) {
   console.warn('[BLEAdvertiser] react-native-ble-advertiser not available in this environment');
 }
@@ -49,7 +50,7 @@ export const startBLEAdvertising = async (deviceName: string): Promise<boolean> 
         advertiseMode: BLEAdvertiser.ADVERTISE_MODE_LOW_LATENCY,
         txPowerLevel: BLEAdvertiser.ADVERTISE_TX_POWER_HIGH,
         connectable: true,
-        includeDeviceName: true,
+        includeDeviceName: false,
         includeTxPowerLevel: false,
       }
     );

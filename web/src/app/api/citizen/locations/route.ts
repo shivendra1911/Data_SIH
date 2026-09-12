@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CitizenLocation } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 
 // Unified global in-memory store for citizen telemetry (0 demo data)
 declare global {
@@ -26,7 +27,93 @@ export async function GET(req: NextRequest) {
   const statusFilter = searchParams.get("status");
   const isLiveFilter = searchParams.get("is_live");
 
-  let result = global.__NEERNETRA_CITIZENS__ || [];
+  // Prune legacy simulated siren beacons from in-memory cache
+  if (global.__NEERNETRA_CITIZENS__) {
+    global.__NEERNETRA_CITIZENS__ = global.__NEERNETRA_CITIZENS__.filter(
+      (c) =>
+        !c.name?.includes("Cell Broadcast") &&
+        !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
+        !c.device_uuid?.includes("cell-broadcast")
+    );
+  }
+
+  let result = [...(global.__NEERNETRA_CITIZENS__ || [])];
+
+  // Retrieve any cloud-synced alerts from Supabase
+  try {
+    const { data: cloudAlerts } = await supabase
+      .from("sos_alerts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (cloudAlerts && Array.isArray(cloudAlerts)) {
+      for (const alert of cloudAlerts) {
+        // Skip broadcast control commands and sirens from showing as citizens
+        if (
+          alert.device_id === "ADMIN_SIREN_DISPATCH" ||
+          alert.device_id === "GOVT_DIRECTIVE" ||
+          alert.device_id === "COMMAND_DIRECTIVE" ||
+          alert.device_id === "BROADCAST_ALL" ||
+          alert.sos_type === "CIVIL_DEFENSE_SIREN" ||
+          alert.sos_type === "GOVT_DIRECTIVE" ||
+          alert.notes?.includes("EMERGENCY CELL SIREN")
+        ) {
+          continue;
+        }
+
+        const devId = alert.device_id || `mobile-${alert.id ? String(alert.id).slice(0, 6) : "node"}`;
+        const existingIdx = result.findIndex((c) => c.device_uuid === devId);
+
+        let parsedMedical = "NONE";
+        if (alert.sos_type === "HIGH_WATER_EVACUATION" || alert.notes?.includes("WATER_RISING")) {
+          parsedMedical = "WATER_RISING";
+        } else if (alert.notes?.includes("CRITICAL_INJURY")) {
+          parsedMedical = "CRITICAL_INJURY";
+        } else if (alert.notes?.includes("ELDERLY_IMMOBILE")) {
+          parsedMedical = "ELDERLY_IMMOBILE";
+        } else if (alert.notes?.includes("HYPOTHERMIA")) {
+          parsedMedical = "HYPOTHERMIA";
+        }
+
+        const parsedCitizen: CitizenLocation = {
+          id: `cit-${devId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+          device_uuid: devId,
+          name: alert.notes && alert.notes.includes("|") ? alert.notes.split("|")[0].trim() : `Mobile Citizen [${devId.slice(0, 8)}]`,
+          phone: alert.notes && alert.notes.includes("|") ? alert.notes.split("|")[1].trim() : "+91 98765 43210",
+          lat: Number(alert.lat) || 27.6014,
+          lng: Number(alert.lng) || 77.5971,
+          is_live: true,
+          last_seen_minutes_ago: Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000)),
+          accuracy_radius_m: 10,
+          drift_radius_m: 0,
+          battery_pct: Number(alert.battery_level) || 84,
+          status: alert.status === "SAFE" ? "SAFE" : "SOS",
+          sos_type: alert.sos_type || "MOBILE DISTRESS BEACON",
+          mesh_hops: 0,
+          zone_id: "chamoli_01",
+          medical_distress: parsedMedical as any,
+        };
+
+        if (existingIdx >= 0) {
+          // IMPORTANT: Fresh Supabase data overrides older cached data
+          result[existingIdx] = { ...result[existingIdx], ...parsedCitizen };
+        } else {
+          result.push(parsedCitizen);
+        }
+      }
+    }
+  } catch (err) {
+    // Cloud sync fallback gracefully to in-memory
+  }
+
+  // Ensure result contains NO Cell Broadcast dummy beacons
+  result = result.filter(
+    (c) =>
+      !c.name?.includes("Cell Broadcast") &&
+      !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
+      !c.device_uuid?.includes("cell-broadcast")
+  );
   if (zoneIdFilter) {
     result = result.filter((c) => !c.zone_id || c.zone_id === zoneIdFilter);
   }

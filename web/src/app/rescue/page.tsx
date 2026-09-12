@@ -20,6 +20,7 @@ import {
   EmergencyResponder,
   SafeEvacuationRoute,
 } from "@/lib/types";
+import { subscribeToSOSEvents } from "@/lib/supabase";
 import {
   Users,
   Truck,
@@ -88,8 +89,45 @@ export default function RescueCitizenGridPage() {
     };
 
     fetchCitizens();
-    const interval = setInterval(fetchCitizens, 12000);
+    const interval = setInterval(fetchCitizens, 3000);
     return () => clearInterval(interval);
+  }, [soundEnabled, playAlertSound]);
+
+  // Realtime Supabase listener
+  useEffect(() => {
+    const unsub = subscribeToSOSEvents((newEvent) => {
+      if (soundEnabled) playAlertSound();
+      setDispatchNotice(`🚨 Direct Cloud SOS Signal from ${newEvent.device_uuid}! Plotted to rescue queue.`);
+      setTimeout(() => setDispatchNotice(null), 5000);
+      setCitizens((prev) => {
+        const citIdx = prev.findIndex((c) => c.device_uuid === newEvent.device_uuid);
+        const newCit: CitizenLocation = {
+          id: `cit-${newEvent.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+          device_uuid: newEvent.device_uuid,
+          name: `Mobile Citizen [${newEvent.device_uuid.slice(0, 8)}]`,
+          phone: "+91 98765 43210",
+          lat: newEvent.lat,
+          lng: newEvent.lng,
+          is_live: true,
+          last_seen_minutes_ago: 0,
+          accuracy_radius_m: 10,
+          drift_radius_m: 0,
+          battery_pct: 85,
+          status: newEvent.status,
+          sos_type: newEvent.sos_type,
+          mesh_hops: newEvent.is_mesh_relayed ? 2 : 0,
+          zone_id: "chamoli_01",
+          medical_distress: "WATER_RISING",
+        };
+        if (citIdx >= 0) {
+          const updated = [...prev];
+          updated[citIdx] = { ...updated[citIdx], ...newCit };
+          return updated;
+        }
+        return [newCit, ...prev];
+      });
+    });
+    return () => unsub();
   }, [soundEnabled, playAlertSound]);
 
   const handleDispatchResponderUnit = async (responder: EmergencyResponder) => {
@@ -251,6 +289,11 @@ export default function RescueCitizenGridPage() {
             <div className="lg:col-span-7 flex flex-col space-y-4">
               <CitizenTrackingMatrix
                 citizens={citizens}
+                onFocusCoordinates={(coords) => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = `/radar?lat=${coords[0]}&lng=${coords[1]}`;
+                  }
+                }}
                 onDispatchToCitizen={(c) => {
                   setDispatchNotice(`✓ Assigned nearest patrol unit to rescue ${c.name} at (${c.lat.toFixed(3)}, ${c.lng.toFixed(3)}).`);
                   setTimeout(() => setDispatchNotice(null), 5000);

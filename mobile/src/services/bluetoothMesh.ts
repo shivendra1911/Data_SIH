@@ -13,12 +13,34 @@
  *  - Packet format: [type(1)][msgId(16)][senderId(16)][ttl(1)][payload(N)]
  */
 
-import { BleManager, Device, Characteristic, State } from 'react-native-ble-plx';
 import { Alert, Platform, PermissionsAndroid } from 'react-native';
 // Use global atob/btoa for base64 (available in RN)
 import { MeshPeer, MeshChatMessage, SOSPayload } from '../types';
 import { saveSOSToOfflineQueue } from './offlineStorage';
 import { startGattServer, notifyAllCentrals } from './gattServerBridge';
+import { startBLEAdvertising } from './bleAdvertiser';
+
+let BleManager: any;
+let State: any;
+if (Platform.OS !== 'web') {
+  const blePlx = require('react-native-ble-plx');
+  BleManager = blePlx.BleManager;
+  State = blePlx.State;
+} else {
+  // Web Mock
+  BleManager = class MockManager {
+    onStateChange() {}
+    startDeviceScan() {}
+    stopDeviceScan() {}
+    destroy() {}
+    async state() { return 'PoweredOff'; }
+  };
+  State = { PoweredOn: 'PoweredOn', PoweredOff: 'PoweredOff' };
+}
+
+type Device = any;
+type Characteristic = any;
+
 
 // ─── NeerNetra BLE Service UUIDs ────────────────────────────────────────────
 export const NEERNETRA_SERVICE_UUID = '4E656572-4E65-7472-6100-000000000001';
@@ -27,17 +49,22 @@ export const NOTIFY_CHAR_UUID       = '4E656572-4E65-7472-6100-000000000003'; //
 
 // ─── Message Types ───────────────────────────────────────────────────────────
 export enum BLEMsgType {
-  HELLO   = 0x01,  // peer announcement
-  CHAT    = 0x02,  // broadcast chat
-  SOS     = 0x03,  // emergency SOS
-  SAFE    = 0x04,  // "I am safe" confirmation
-  RELAY   = 0x05,  // multi-hop relay packet
-  ACK     = 0x06,  // acknowledgement
+  HELLO        = 0x01,  // peer announcement
+  CHAT         = 0x02,  // broadcast chat
+  SOS          = 0x03,  // emergency SOS
+  SAFE         = 0x04,  // "I am safe" confirmation
+  RELAY        = 0x05,  // multi-hop relay packet
+  ACK          = 0x06,  // acknowledgement
+  CALL_REQUEST = 0x07,  // incoming call / intercom invite
+  CALL_ACCEPT  = 0x08,  // call accepted by peer
+  CALL_DECLINE = 0x09,  // call rejected / busy
+  CALL_END     = 0x0A,  // call terminated / hung up
+  VOICE_BURST  = 0x0B,  // compressed PTT voice chunk
 }
 
 // ─── Packet Encoder/Decoder ──────────────────────────────────────────────────
-function encodePacket(type: BLEMsgType, senderId: string, payload: string, ttl: number = 7, existingMsgId?: string): string {
-  const msgId = existingMsgId || Math.random().toString(36).substring(2, 18).padEnd(16, '0');
+function encodePacket(type: BLEMsgType, senderId: string, payload: string, ttl: number = 7): string {
+  const msgId = Math.random().toString(36).substring(2, 18).padEnd(16, '0');
   const senderPad = senderId.substring(0, 16).padEnd(16, '0');
   const header = `${String.fromCharCode(type)}${msgId}${senderPad}${String.fromCharCode(ttl)}`;
   const raw = header + payload;
@@ -68,7 +95,7 @@ function decodePacket(base64: string): {
 
 // ─── Core BLE Mesh Manager ───────────────────────────────────────────────────
 class NeerNetraBLEMesh {
-  private manager: BleManager | null = null;
+  private manager: any = null;
   private connectedDevices: Map<string, Device> = new Map();
   private activePeers: Map<string, MeshPeer> = new Map();
   private chatMessages: MeshChatMessage[] = [];
@@ -76,6 +103,7 @@ class NeerNetraBLEMesh {
   private myDeviceId: string = '';
   private myName: string = '';
   private isScanning: boolean = false;
+  private isMeshStarted: boolean = false;
   private scanTimer: any = null;
 
   // Callbacks for UI updates
@@ -83,6 +111,11 @@ class NeerNetraBLEMesh {
   public onMessageReceived?: (msg: MeshChatMessage) => void;
   public onSOSReceived?: (senderId: string, lat: number, lng: number) => void;
   public onStateChange?: (state: string) => void;
+  public onIncomingCall?: (caller: { id: string; name: string; distance?: number; hopCount?: number }) => void;
+  public onCallAnswered?: (peerId: string) => void;
+  public onCallDeclined?: (peerId: string) => void;
+  public onCallEnded?: (peerId: string) => void;
+  public onVoiceBurstReceived?: (senderId: string, base64Audio: string) => void;
 
   constructor() {
     if (Platform.OS === 'android' || Platform.OS === 'ios') {
@@ -97,13 +130,13 @@ class NeerNetraBLEMesh {
 
   private setupStateListener() {
     if (!this.manager) return;
-    this.manager.onStateChange((state) => {
-      console.log('[BLE Mesh] Bluetooth state:', state);
+    this.manager.onStateChange((state: any) => {
+      console.log('[BLE Mesh] Bluetooth state changed:', state);
       if (this.onStateChange) this.onStateChange(state);
-      if (state === State.PoweredOn) {
+      if (state === State.PoweredOn && !this.isMeshStarted) {
         this.startMesh();
       }
-    }, true);
+    }, false);
   }
 
   // ── Permissions ────────────────────────────────────────────────────────────
@@ -154,9 +187,13 @@ class NeerNetraBLEMesh {
     }
 
     if (this.manager) {
-      const state = await this.manager.state();
-      if (state === State.PoweredOn) {
-        await this.startMesh();
+      try {
+        const state = await this.manager.state();
+        if (state === State.PoweredOn && !this.isMeshStarted) {
+          await this.startMesh();
+        }
+      } catch (err) {
+        console.warn('[BLE Mesh] Error checking manager state:', err);
       }
     } else {
       console.log('[BLE Mesh] Web preview mode — skipping native BLE manager state check.');
@@ -167,12 +204,16 @@ class NeerNetraBLEMesh {
 
   // ── Start Mesh (Scan + Advertise cycle) ────────────────────────────────────
   async startMesh() {
+    if (this.isMeshStarted) return;
+    this.isMeshStarted = true;
     console.log('[BLE Mesh] Starting NeerNetra mesh network...');
 
     // 1. Start native GATT Server + Advertising (Peripheral mode)
-    await startGattServer(this.myName, (fromDevice, data) => {
-      this.handleIncomingPacket(fromDevice, data);
-    });
+    try {
+      await startBLEAdvertising(this.myName || 'NeerNetra Node');
+    } catch (e) {
+      console.warn('[BLE Mesh] Advertising init warning:', e);
+    }
 
     // 2. Start GATT Client scanning (Central mode)
     await this.startScanning();
@@ -183,37 +224,56 @@ class NeerNetraBLEMesh {
     if (this.isScanning || !this.manager) return;
     this.isScanning = true;
 
-    console.log('[BLE Mesh] Scanning for NeerNetra peers...');
+    console.log('[BLE Mesh] Scanning for nearby NeerNetra emergency nodes...');
 
-    this.manager.startDeviceScan(
-      [NEERNETRA_SERVICE_UUID],
-      { allowDuplicates: false },
-      async (error, device) => {
-        if (error) {
-          console.warn('[BLE Mesh] Scan error:', error.message);
-          this.isScanning = false;
-          // Auto-restart scan after 3 seconds
-          setTimeout(() => this.startScanning(), 3000);
-          return;
+    try {
+      this.manager.stopDeviceScan();
+    } catch {}
+
+    try {
+      // Pass null to avoid Android 128-bit hardware filter rejects
+      this.manager.startDeviceScan(
+        null,
+        { allowDuplicates: false },
+        async (error: any, device: any) => {
+          if (error) {
+            console.warn('[BLE Mesh] Scan notice:', error.message);
+            this.isScanning = false;
+            // Cooldown to respect Android scan rate limits (prevent throttle)
+            setTimeout(() => this.startScanning(), 25000);
+            return;
+          }
+
+          if (!device || this.connectedDevices.has(device.id)) return;
+
+          // Filter for NeerNetra devices
+          const isNeerDevice =
+            (device.name && device.name.toLowerCase().includes('neernetra')) ||
+            (device.serviceUUIDs && device.serviceUUIDs.map((u: string) => u.toLowerCase()).includes(NEERNETRA_SERVICE_UUID.toLowerCase())) ||
+            (device.manufacturerData && device.manufacturerData.length > 0);
+
+          if (!isNeerDevice) return;
+
+          console.log(`[BLE Mesh] Discovered NeerNetra peer: ${device.name || device.id}`);
+          await this.connectToPeer(device);
         }
-
-        if (!device || this.connectedDevices.has(device.id)) return;
-
-        console.log(`[BLE Mesh] Discovered NeerNetra peer: ${device.name || device.id}`);
-        await this.connectToPeer(device);
-      }
-    );
-
-    // Restart scan every 30 seconds to find new peers (clearing prior interval to avoid leaks)
-    if (this.scanTimer) {
-      clearInterval(this.scanTimer);
-      this.scanTimer = null;
-    }
-    this.scanTimer = setInterval(() => {
-      this.manager?.stopDeviceScan();
+      );
+    } catch (scanErr: any) {
+      console.warn('[BLE Mesh] startDeviceScan call error:', scanErr?.message);
       this.isScanning = false;
-      setTimeout(() => this.startScanning(), 1000);
-    }, 30000);
+      setTimeout(() => this.startScanning(), 25000);
+      return;
+    }
+
+    // Gentle restart scan every 45 seconds to find newly arrived peers
+    if (this.scanTimer) clearInterval(this.scanTimer);
+    this.scanTimer = setInterval(() => {
+      try {
+        this.manager?.stopDeviceScan();
+      } catch {}
+      this.isScanning = false;
+      setTimeout(() => this.startScanning(), 2000);
+    }, 45000);
   }
 
   stopScanning() {
@@ -234,7 +294,7 @@ class NeerNetraBLEMesh {
       const discovered = await connected.discoverAllServicesAndCharacteristics();
 
       const services = await discovered.services();
-      const neerNetraService = services.find((s) => s.uuid === NEERNETRA_SERVICE_UUID.toLowerCase());
+      const neerNetraService = services.find((s: any) => s.uuid === NEERNETRA_SERVICE_UUID.toLowerCase());
 
       if (!neerNetraService) {
         console.warn(`[BLE Mesh] Device ${device.id} has no NeerNetra service — skipping.`);
@@ -286,7 +346,7 @@ class NeerNetraBLEMesh {
       device.monitorCharacteristicForService(
         NEERNETRA_SERVICE_UUID,
         NOTIFY_CHAR_UUID,
-        (error, characteristic) => {
+        (error: any, characteristic: any) => {
           if (error) {
             console.warn('[BLE Mesh] Monitor error:', error.message);
             return;
@@ -301,9 +361,9 @@ class NeerNetraBLEMesh {
   }
 
   // ── Send a packet to a single connected peer ───────────────────────────────
-  private async sendToPeer(device: Device, type: BLEMsgType, payload: string, ttl: number = 7, existingMsgId?: string) {
+  private async sendToPeer(device: Device, type: BLEMsgType, payload: string, ttl: number = 7) {
     try {
-      const packet = encodePacket(type, this.myDeviceId, payload, ttl, existingMsgId);
+      const packet = encodePacket(type, this.myDeviceId, payload, ttl);
       await device.writeCharacteristicWithoutResponseForService(
         NEERNETRA_SERVICE_UUID,
         WRITE_CHAR_UUID,
@@ -315,10 +375,10 @@ class NeerNetraBLEMesh {
   }
 
   // ── Broadcast a packet to ALL connected peers (mesh flood) ─────────────────
-  private async broadcastToAll(type: BLEMsgType, payload: string, ttl: number = 7, existingMsgId?: string) {
-    const packet = encodePacket(type, this.myDeviceId, payload, ttl, existingMsgId);
+  private async broadcastToAll(type: BLEMsgType, payload: string, ttl: number = 7) {
+    const packet = encodePacket(type, this.myDeviceId, payload, ttl);
     const promises = Array.from(this.connectedDevices.values()).map((d) =>
-      this.sendToPeer(d, type, payload, ttl, existingMsgId)
+      this.sendToPeer(d, type, payload, ttl)
     );
     notifyAllCentrals(packet).catch(() => {});
     await Promise.allSettled(promises);
@@ -359,16 +419,36 @@ class NeerNetraBLEMesh {
         break;
 
       case BLEMsgType.RELAY:
-        // Relay to others if TTL allows (preserving original msgId to prevent broadcast storms)
+        // Relay to others if TTL allows
         if (packet.ttl > 1) {
-          this.broadcastToAll(BLEMsgType.RELAY, packet.payload, packet.ttl - 1, packet.msgId);
+          this.broadcastToAll(BLEMsgType.RELAY, packet.payload, packet.ttl - 1);
         }
+        break;
+
+      case BLEMsgType.CALL_REQUEST:
+        this.handleCallRequest(packet.senderId, packet.payload, packet.ttl);
+        break;
+
+      case BLEMsgType.CALL_ACCEPT:
+        this.handleCallAccept(packet.senderId, packet.payload);
+        break;
+
+      case BLEMsgType.CALL_DECLINE:
+        this.handleCallDecline(packet.senderId, packet.payload);
+        break;
+
+      case BLEMsgType.CALL_END:
+        this.handleCallEnd(packet.senderId, packet.payload);
+        break;
+
+      case BLEMsgType.VOICE_BURST:
+        this.handleVoiceBurst(packet.senderId, packet.payload);
         break;
     }
 
-    // Multi-hop relay: re-broadcast with decremented TTL and preserved msgId
+    // Multi-hop relay: re-broadcast with decremented TTL
     if (packet.ttl > 1 && packet.type !== BLEMsgType.ACK) {
-      this.broadcastToAll(packet.type, packet.payload, packet.ttl - 1, packet.msgId).then(() => {
+      this.broadcastToAll(packet.type, packet.payload, packet.ttl - 1).then(() => {
         // Update relay count for the forwarding peer
         const peer = this.activePeers.get(fromDeviceId);
         if (peer) {
@@ -445,6 +525,69 @@ class NeerNetraBLEMesh {
     console.log(`[BLE Mesh] SAFE confirmation from ${senderId}`);
   }
 
+  private handleCallRequest(senderId: string, payload: string, ttl: number) {
+    try {
+      const data = JSON.parse(payload);
+      const isForMe =
+        !data.targetId ||
+        data.targetId === 'BROADCAST' ||
+        data.targetId === this.myDeviceId ||
+        this.myDeviceId.includes(data.targetId) ||
+        (data.targetId && this.myDeviceId.startsWith(data.targetId));
+
+      if (!isForMe) return;
+
+      const peer = this.activePeers.get(senderId);
+      const callerName = data.callerName || peer?.name || `Peer_${senderId.substring(0, 6)}`;
+      const distance = peer?.distanceMeters || this.rssiToDistance(peer?.signalStrength || -65);
+      const hopCount = Math.max(1, 8 - ttl);
+
+      console.log(`[BLE Mesh] INCOMING CALL from ${callerName} (${senderId})`);
+      if (this.onIncomingCall) {
+        this.onIncomingCall({
+          id: senderId,
+          name: callerName,
+          distance,
+          hopCount,
+        });
+      }
+    } catch (e) {
+      console.warn('[BLE Mesh] Error parsing CALL_REQUEST:', e);
+    }
+  }
+
+  private handleCallAccept(senderId: string, payload: string) {
+    try {
+      const data = JSON.parse(payload);
+      if (data.targetId && data.targetId !== this.myDeviceId && !this.myDeviceId.includes(data.targetId)) return;
+      console.log(`[BLE Mesh] CALL ACCEPTED by ${senderId}`);
+      if (this.onCallAnswered) this.onCallAnswered(senderId);
+    } catch (e) {}
+  }
+
+  private handleCallDecline(senderId: string, payload: string) {
+    try {
+      const data = JSON.parse(payload);
+      if (data.targetId && data.targetId !== this.myDeviceId && !this.myDeviceId.includes(data.targetId)) return;
+      console.log(`[BLE Mesh] CALL DECLINED by ${senderId}`);
+      if (this.onCallDeclined) this.onCallDeclined(senderId);
+    } catch (e) {}
+  }
+
+  private handleCallEnd(senderId: string, payload: string) {
+    try {
+      console.log(`[BLE Mesh] CALL ENDED by ${senderId}`);
+      if (this.onCallEnded) this.onCallEnded(senderId);
+    } catch (e) {}
+  }
+
+  private handleVoiceBurst(senderId: string, payload: string) {
+    try {
+      console.log(`[BLE Mesh] VOICE BURST received from ${senderId}`);
+      if (this.onVoiceBurstReceived) this.onVoiceBurstReceived(senderId, payload);
+    } catch (e) {}
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /** Send a text message to all nearby peers via mesh */
@@ -492,6 +635,80 @@ class NeerNetraBLEMesh {
     const data = JSON.stringify({ id: this.myDeviceId, timestamp: new Date().toISOString() });
     await this.broadcastToAll(BLEMsgType.SAFE, data, 5);
     console.log('[BLE Mesh] SAFE broadcast sent to all peers');
+  }
+
+  /** Initiate a BLE voice intercom call to a peer */
+  async initiateCall(targetPeerId: string, targetName?: string): Promise<boolean> {
+    console.log(`[BLE Mesh] Initiating call to peer: ${targetPeerId}`);
+    const payload = JSON.stringify({
+      callerId: this.myDeviceId,
+      callerName: this.myName || 'Citizen Node',
+      targetId: targetPeerId,
+      timestamp: Date.now(),
+    });
+
+    const targetDev = this.connectedDevices.get(targetPeerId);
+    if (targetDev) {
+      await this.sendToPeer(targetDev, BLEMsgType.CALL_REQUEST, payload);
+    }
+    await this.broadcastToAll(BLEMsgType.CALL_REQUEST, payload, 7);
+    return true;
+  }
+
+  /** Accept an incoming call */
+  async acceptCall(callerId: string): Promise<void> {
+    console.log(`[BLE Mesh] Accepting call from: ${callerId}`);
+    const payload = JSON.stringify({
+      responderId: this.myDeviceId,
+      responderName: this.myName || 'Citizen Node',
+      targetId: callerId,
+      status: 'ACCEPTED',
+      timestamp: Date.now(),
+    });
+    const targetDev = this.connectedDevices.get(callerId);
+    if (targetDev) {
+      await this.sendToPeer(targetDev, BLEMsgType.CALL_ACCEPT, payload);
+    }
+    await this.broadcastToAll(BLEMsgType.CALL_ACCEPT, payload, 7);
+  }
+
+  /** Decline an incoming call */
+  async declineCall(callerId: string): Promise<void> {
+    console.log(`[BLE Mesh] Declining call from: ${callerId}`);
+    const payload = JSON.stringify({
+      responderId: this.myDeviceId,
+      targetId: callerId,
+      status: 'DECLINED',
+      timestamp: Date.now(),
+    });
+    const targetDev = this.connectedDevices.get(callerId);
+    if (targetDev) {
+      await this.sendToPeer(targetDev, BLEMsgType.CALL_DECLINE, payload);
+    }
+    await this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 7);
+  }
+
+  /** Terminate an ongoing call */
+  async endCall(peerId: string): Promise<void> {
+    console.log(`[BLE Mesh] Ending call with: ${peerId}`);
+    const payload = JSON.stringify({
+      senderId: this.myDeviceId,
+      targetId: peerId,
+      status: 'ENDED',
+      timestamp: Date.now(),
+    });
+    await this.broadcastToAll(BLEMsgType.CALL_END, payload, 7);
+  }
+
+  /** Send a compressed voice burst chunk */
+  async sendVoiceBurst(targetPeerId: string, base64AudioChunk: string): Promise<void> {
+    const payload = JSON.stringify({
+      senderId: this.myDeviceId,
+      targetId: targetPeerId,
+      audio: base64AudioChunk,
+      timestamp: Date.now(),
+    });
+    await this.broadcastToAll(BLEMsgType.VOICE_BURST, payload, 5);
   }
 
   /** Get all currently discovered/connected peers */

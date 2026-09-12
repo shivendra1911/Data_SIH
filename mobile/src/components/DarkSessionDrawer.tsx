@@ -91,7 +91,7 @@ export const DarkSessionDrawer: React.FC<DarkSessionDrawerProps> = ({ peers }) =
 
             <View style={styles.rightCol}>
               <Text style={styles.flagIcon}>{item.flag || '🇮🇳'}</Text>
-              <Text style={styles.locationText}>{item.location || 'Chamoli'}</Text>
+              <Text style={styles.locationText}>{item.location || 'Local Area'}</Text>
             </View>
           </View>
         ))}

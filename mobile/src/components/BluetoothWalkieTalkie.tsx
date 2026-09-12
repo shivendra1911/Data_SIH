@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -19,15 +19,6 @@ export const BluetoothWalkieTalkie: React.FC = () => {
   const [isCalling, setIsCalling] = useState<boolean>(false);
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
 
-  useEffect(() => {
-    meshEngine.onMessageReceived = () => {
-      setMessages([...meshEngine.getMeshChatMessages()]);
-    };
-    return () => {
-      meshEngine.onMessageReceived = undefined;
-    };
-  }, []);
-
   const peers = meshEngine.getConnectedPeers();
 
   const handleSendMessage = async () => {
@@ -43,16 +34,18 @@ export const BluetoothWalkieTalkie: React.FC = () => {
     }
   };
 
-  const handleStartWalkieTalkie = (peer: MeshPeer) => {
+  const handleStartWalkieTalkie = async (peer: MeshPeer) => {
     if (isCalling && activePeerName === peer.name) {
+      await meshEngine.endCall(peer.id);
       setIsCalling(false);
       setActivePeerName(null);
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
+      await meshEngine.initiateCall(peer.id, peer.name);
       Alert.alert(
-        'Offline Walkie-Talkie Active',
-        `Connected to ${peer.name} over Bluetooth P2P Direct Mesh (Channel 1). Speak into microphone.`
+        '📡 Mesh Intercom Request Sent',
+        `Calling ${peer.name} over Bluetooth P2P Direct Mesh.\n\nWaiting for peer to accept on their device screen.`
       );
     }
   };

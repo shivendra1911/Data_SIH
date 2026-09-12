@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
 export interface MobileSirenRecord {
   zone_id: string;
@@ -85,6 +86,27 @@ export async function POST(req: NextRequest) {
         existing.is_active = false;
         dispatches.set(zoneId, existing);
       }
+
+      // Sync HALT to Supabase cloud
+      try {
+        await supabase.from("sos_alerts").insert([
+          {
+            device_id: "ADMIN_SIREN_DISPATCH",
+            lat: 27.6015,
+            lng: 77.5975,
+            sos_type: "CIVIL_DEFENSE_SIREN",
+            status: "HALTED_SIREN",
+            battery_level: 100,
+            notes: JSON.stringify({
+              zone_id: zoneId,
+              action: "HALT",
+              authorized_by: authorizedBy,
+              halted_at: new Date().toISOString(),
+            }),
+          },
+        ]);
+      } catch {}
+
       return NextResponse.json(
         {
           success: true,
@@ -136,6 +158,28 @@ export async function POST(req: NextRequest) {
 
     dispatches.set(zoneId, record);
     global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = dispatches;
+
+    // Sync ACTIVATE to Supabase cloud
+    try {
+      await supabase.from("sos_alerts").insert([
+        {
+          device_id: "ADMIN_SIREN_DISPATCH",
+          lat: 27.6015,
+          lng: 77.5975,
+          sos_type: "CIVIL_DEFENSE_SIREN",
+          status: "ACTIVE_SIREN",
+          battery_level: 100,
+          notes: JSON.stringify({
+            zone_id: zoneId,
+            zone_name: zoneName,
+            action: "ACTIVATE",
+            authorized_by: authorizedBy,
+            message: record.emergency_message,
+            dispatched_at: record.dispatched_at,
+          }),
+        },
+      ]);
+    } catch {}
 
     // Also mirror to alert broadcast history for unified logging
     if (global.__NEERNETRA_ALERTS_HISTORY__) {

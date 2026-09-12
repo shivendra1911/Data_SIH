@@ -183,6 +183,12 @@ export default function CitizenTrackingMatrix({
                     >
                       {citizen.is_live ? "LIVE GPS" : `${citizen.last_seen_minutes_ago || 15}m AGO`}
                     </span>
+
+                    {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE" && (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-300">
+                        🖐️ GYRO SAFE
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -190,7 +196,9 @@ export default function CitizenTrackingMatrix({
                 <div className="flex items-center justify-between gap-2 mt-2 text-xs text-slate-700">
                   <div className="flex items-center gap-2 truncate">
                     <span className="font-bold text-slate-950 truncate">
-                      {citizen.sos_type || "Water Rising"}
+                      {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE"
+                        ? "Touch-Free Gyro Safe (Alive & Moving)"
+                        : citizen.sos_type || "Water Rising"}
                     </span>
                     {citizen.medical_distress && citizen.medical_distress !== "NONE" && (
                       <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 shrink-0 uppercase tracking-wider">
@@ -220,11 +228,17 @@ export default function CitizenTrackingMatrix({
                 {/* Actions */}
                 <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-200">
                   <button
-                    onClick={() => onFocusCoordinates && onFocusCoordinates([citizen.lat, citizen.lng])}
+                    onClick={() => {
+                      if (onFocusCoordinates) {
+                        onFocusCoordinates([citizen.lat, citizen.lng]);
+                      } else if (typeof window !== "undefined") {
+                        window.location.href = `/radar?lat=${citizen.lat}&lng=${citizen.lng}&uuid=${encodeURIComponent(citizen.device_uuid)}`;
+                      }
+                    }}
                     className="flex-1 h-[32px] rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
                   >
                     <Crosshair className="w-3 h-3 text-slate-700" aria-hidden />
-                    <span>Locate</span>
+                    <span>Locate on Map</span>
                   </button>
 
                   <button

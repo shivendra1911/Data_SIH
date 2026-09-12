@@ -11,7 +11,7 @@ export const getCurrentDeviceLocation = async (): Promise<GeoLocation> => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       console.warn('[LocationService] Permission denied. Returning fallback zone coordinates.');
-      return { lat: 30.5573, lng: 79.5642 };
+      return { lat: 27.6015, lng: 77.5975 };
     }
 
     const location = await Location.getCurrentPositionAsync({
@@ -25,6 +25,6 @@ export const getCurrentDeviceLocation = async (): Promise<GeoLocation> => {
     };
   } catch (error) {
     console.warn('[LocationService] Failed to acquire GPS position:', error);
-    return { lat: 30.5573, lng: 79.5642 };
+    return { lat: 27.6015, lng: 77.5975 };
   }
 };

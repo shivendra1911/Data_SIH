@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { playEmergencyAlert } from './emergencyAudio';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -20,14 +21,23 @@ export const setupEmergencyNotificationChannels = async () => {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF0000',
       sound: 'default',
+      audioAttributes: {
+        usage: Notifications.AndroidAudioUsage.ALARM,
+      },
+      bypassDnd: true,
     });
   }
 };
 
-export const triggerRedZoneEmergencyAlert = async (zoneName: string, probability: number, triggerCause: string) => {
+export const triggerRedZoneEmergencyAlert = async (
+  zoneName: string,
+  probability: number,
+  triggerCause: string
+) => {
   try {
     await setupEmergencyNotificationChannels();
 
+    // 1. Show notification banner
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `🚨 RED ALERT: FLASH FLOOD IN ${zoneName.toUpperCase()}`,
@@ -38,60 +48,14 @@ export const triggerRedZoneEmergencyAlert = async (zoneName: string, probability
       },
       trigger: null, // trigger immediately
     });
-    console.log('[NotificationService] RED ZONE Critical Emergency Alert triggered!');
+
+    // 2. ALSO play emergency audio alarm — bypasses silent/DnD mode
+    // This is the KEY difference: notification alone won't wake people up,
+    // but STREAM_ALARM audio plays even when phone is completely silent.
+    await playEmergencyAlert();
+
+    console.log('[NotificationService] RED ZONE Critical Emergency Alert triggered with AUDIO!');
   } catch (error) {
     console.warn('[NotificationService] Failed to dispatch notification:', error);
-  }
-};
-
-/**
- * Request notification permissions and register the device FCM token with backend.
- */
-export const registerForPushNotificationsAsync = async (
-  deviceUuid: string,
-  zoneId: string = 'chamoli_01'
-): Promise<string | null> => {
-  try {
-    await setupEmergencyNotificationChannels();
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      console.warn('[NotificationService] Notification permission not granted by user.');
-      return null;
-    }
-
-    // Attempt to retrieve the native device push token (FCM token on Android)
-    let pushToken: string | null = null;
-    try {
-      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
-      pushToken = deviceTokenData.data;
-      console.log('[NotificationService] Acquired native device FCM push token:', pushToken);
-    } catch (deviceTokenErr) {
-      console.log('[NotificationService] Native token fallback, attempting Expo push token:', deviceTokenErr);
-      try {
-        const expoTokenData = await Notifications.getExpoPushTokenAsync();
-        pushToken = expoTokenData.data;
-        console.log('[NotificationService] Acquired Expo push token:', pushToken);
-      } catch (expoTokenErr) {
-        console.warn('[NotificationService] Could not acquire push token:', expoTokenErr);
-      }
-    }
-
-    if (pushToken) {
-      const { registerPushTokenApi } = require('./api');
-      await registerPushTokenApi(deviceUuid, pushToken, zoneId);
-    }
-
-    return pushToken;
-  } catch (err) {
-    console.warn('[NotificationService] Error initializing push notifications:', err);
-    return null;
   }
 };

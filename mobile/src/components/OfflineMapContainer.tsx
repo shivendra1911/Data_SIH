@@ -18,8 +18,8 @@ export const OfflineMapContainer: React.FC<OfflineMapContainerProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(14);
   const [showTerrain, setShowTerrain] = useState<boolean>(true);
 
-  const myLat = lastLocation ? lastLocation.lat : 30.5573;
-  const myLng = lastLocation ? lastLocation.lng : 79.5642;
+  const myLat = lastLocation ? lastLocation.lat : 27.6015;
+  const myLng = lastLocation ? lastLocation.lng : 77.5975;
 
   return (
     <View style={styles.card}>
@@ -97,15 +97,6 @@ export const OfflineMapContainer: React.FC<OfflineMapContainerProps> = ({
               </G>
             );
           })}
-
-          {/* High Ground Safe Assembly Point */}
-          <G transform="translate(250, 45)">
-            <Circle r="14" fill="#10b981" opacity={0.25} />
-            <Circle r="7" fill="#059669" />
-            <SvgText x="0" y="-12" fill="#065f46" fontSize="10" fontWeight="bold" textAnchor="middle">
-              SAFE HIGH GROUND (+50m)
-            </SvgText>
-          </G>
 
           {/* YOU ARE HERE Marker (Pulsing Amber Pin) */}
           <G transform="translate(170, 110)">

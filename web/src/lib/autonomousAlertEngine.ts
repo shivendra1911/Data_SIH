@@ -12,6 +12,8 @@
  * 3. Offline Mesh Alert Beacons (/api/citizen/locations)
  */
 
+import { supabase } from "@/lib/supabase";
+
 export interface MobileSirenState {
   isDispatchedToMobile: boolean;
   targetZoneId: string;
@@ -125,26 +127,32 @@ class AutonomousAlertEngine {
           authorized_by: "NDRF / SDMA National Command Authority",
           message: `🚨 CRITICAL FLOOD WARNING (${floodProbabilityPct.toFixed(0)}%): Civic evacuation siren sounding on all mobile devices. Evacuate immediately uphill away from riverbeds.`,
         }),
-      });
+      }).catch((err) => console.warn("[AutonomousAlertEngine] Local dispatch warning:", err));
 
-      // 2. Post to Citizen locations queue
-      if (coords) {
-        await fetch("/api/citizen/locations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: `Cell Broadcast Siren Beacon (${zoneName.split("(")[0].trim()})`,
-            phone: "1078 (National Disaster Emergency Line)",
-            lat: coords[0],
-            lng: coords[1],
-            zone_id: zoneId,
-            status: "SOS",
-            medical_distress: "HIGH_WATER_EVACUATION",
-            sos_type: `EMERGENCY CELL SIREN TRANSMITTED (${this.targetDevicesCount.toLocaleString()} APKs)`,
-            battery_pct: 100,
-            is_live: true,
-          }),
-        });
+      // 2. Direct broadcast to Supabase cloud table for all mobile phones
+      try {
+        await supabase.from("sos_alerts").insert([
+          {
+            device_id: "ADMIN_SIREN_DISPATCH",
+            lat: coords ? coords[0] : 27.6015,
+            lng: coords ? coords[1] : 77.5975,
+            sos_type: "CIVIL_DEFENSE_SIREN",
+            status: "ACTIVE_SIREN",
+            battery_level: 100,
+            notes: JSON.stringify({
+              zone_id: zoneId,
+              zone_name: zoneName,
+              action: "ACTIVATE",
+              flood_pct: floodProbabilityPct,
+              authorized_by: "NDRF / SDMA National Command Authority",
+              message: `🚨 CRITICAL FLOOD WARNING (${floodProbabilityPct.toFixed(0)}%): Civic evacuation siren sounding on all mobile devices. Evacuate immediately uphill away from riverbeds.`,
+              dispatched_at: this.dispatchedAt,
+            }),
+          },
+        ]);
+        console.log("[AutonomousAlertEngine] Emergency siren broadcast synced to Supabase Cloud for mobile devices!");
+      } catch (cloudErr) {
+        console.warn("[AutonomousAlertEngine] Cloud siren broadcast fallback:", cloudErr);
       }
 
       console.log(
@@ -174,7 +182,29 @@ class AutonomousAlertEngine {
           action: "HALT",
           authorized_by: "NDRF / SDMA Incident Commander",
         }),
-      });
+      }).catch(() => {});
+
+      // Broadcast HALT to Supabase cloud
+      try {
+        await supabase.from("sos_alerts").insert([
+          {
+            device_id: "ADMIN_SIREN_DISPATCH",
+            lat: 27.6015,
+            lng: 77.5975,
+            sos_type: "CIVIL_DEFENSE_SIREN",
+            status: "HALTED_SIREN",
+            battery_level: 100,
+            notes: JSON.stringify({
+              zone_id: zoneId,
+              action: "HALT",
+              authorized_by: "NDRF / SDMA Incident Commander",
+              halted_at: new Date().toISOString(),
+            }),
+          },
+        ]);
+        console.log("[AutonomousAlertEngine] Siren HALT command synced to Supabase Cloud!");
+      } catch {}
+
       console.log(`[AutonomousAlertEngine] Mobile siren broadcast halted for zone ${zoneId}`);
       return true;
     } catch (err) {
