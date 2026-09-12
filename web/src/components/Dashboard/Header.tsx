@@ -248,7 +248,7 @@ export default function Header({
   });
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-300 bg-white shadow-xs">
+    <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-md shadow-[0_4px_6px_-1px_rgba(0,0,0,0.08)]">
       {/* Active Screen Alert Notification */}
       {activeScreenAlert && (
         <div className="bg-red-600 text-white px-4 py-2 text-xs font-extrabold flex items-center justify-between border-b border-red-700 animate-pulse">
@@ -265,9 +265,8 @@ export default function Header({
         </div>
       )}
 
-
       {/* Main Command Bar */}
-      <div className="px-3 sm:px-6 py-2.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white">
+      <div className="px-3 sm:px-6 py-2.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-transparent">
         {/* LEFT: Branding + Basin Selector */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Logo & National Command Title */}
@@ -359,28 +358,12 @@ export default function Header({
           </div>
         </div>
 
-        {/* RIGHT: Only the one action that must never be hidden behind a menu
-            on a disaster-alert government platform — the national helpline.
-            Every other action now lives in the floating command button. */}
+        {/* RIGHT: National emergency helpline */}
         <div className="flex items-center gap-2 self-end lg:self-center">
-          {onToggleMobileSiren && (
-            <button
-              onClick={onToggleMobileSiren}
-              className={`h-[38px] px-3.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition cursor-pointer ${
-                isMobileSirenActive
-                  ? "bg-red-600 text-white animate-pulse border-2 border-red-400"
-                  : "bg-slate-900 text-white hover:bg-red-700 border border-slate-700"
-              }`}
-              title="Broadcast Civil Defense siren tone and vibration to all citizens"
-            >
-              <span>{isMobileSirenActive ? "🛑 HALT MOBILE SIREN" : "🚨 FORCE SIREN ON PHONES"}</span>
-            </button>
-          )}
-
           <a
             href="tel:1078"
             aria-label="Call National Disaster Helpline 1078"
-            className="h-[38px] px-3.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+            className="h-[38px] px-3.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
             title="NDRF Emergency Helpline: 1078"
           >
             <span>📞 Helpline 1078</span>

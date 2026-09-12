@@ -29,9 +29,9 @@ export default function PredictionPanel({
 }: PredictionPanelProps) {
   if (!prediction) {
     return (
-      <div className="p-8 rounded-3xl bg-white border border-slate-200 animate-pulse flex flex-col gap-4 text-slate-900 shadow-xs">
-        <div className="h-6 w-1/3 bg-slate-100 rounded-lg"></div>
-        <div className="h-28 bg-slate-100 rounded-2xl"></div>
+      <div className="p-8 rounded-3xl glass-card animate-pulse flex flex-col gap-4 text-slate-900">
+        <div className="h-6 w-1/3 bg-slate-200/60 rounded-lg"></div>
+        <div className="h-28 bg-slate-200/60 rounded-2xl"></div>
       </div>
     );
   }
@@ -66,8 +66,14 @@ export default function PredictionPanel({
     ? `Rainfall in the upper hills is causing river water to rise. Stay alert and keep emergency supplies ready.`
     : `River water levels and mountain slopes are currently stable. No flood or landslide warnings in this basin.`;
 
+  const currentDepth = prediction.telemetry?.river_level_m ?? 0;
+  const dangerMark = prediction.danger_mark_m || 5.0;
+  const warningMark = prediction.warning_mark_m || (dangerMark * 0.7);
+  const depthPercentage = Math.min(100, Math.max(0, (currentDepth / dangerMark) * 100));
+  const isDepthExceeded = currentDepth >= warningMark || isDanger;
+
   return (
-    <div className="p-6 sm:p-7 rounded-3xl bg-white border border-slate-200 text-slate-900 font-sans shadow-md space-y-6">
+    <div className="p-6 sm:p-7 rounded-3xl glass-card text-slate-900 font-sans space-y-6">
       
       {/* Card Header */}
       <div className="flex items-center justify-between">
@@ -99,11 +105,11 @@ export default function PredictionPanel({
         </div>
       </div>
 
-      {/* Main Big Number and Risk Level */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100">
-        <div className="space-y-2">
+      {/* Main Big Number and Risk Level with enhanced Alert Hierarchy */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200/70">
+        <div className="space-y-2.5">
           <div className="flex items-baseline gap-3">
-            <span className={`text-6xl sm:text-7xl font-black font-display tracking-tight ${riskColor}`}>
+            <span className={`text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight ${riskColor}`}>
               {prob.toFixed(0)}%
             </span>
             <div className="space-y-0.5">
@@ -116,7 +122,7 @@ export default function PredictionPanel({
             </div>
           </div>
 
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-950 font-display">
+          <h2 className="text-2xl sm:text-3xl font-[900] tracking-tight text-slate-950 font-sans leading-tight">
             {statusTitle}
           </h2>
 
@@ -131,7 +137,7 @@ export default function PredictionPanel({
             <button
               onClick={onTriggerSOS}
               aria-label="Trigger instant Emergency SOS alert"
-              className="px-6 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-sm transition"
+              className="px-6 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition"
             >
               <Radio className="w-4 h-4" aria-hidden />
               <span>🚨 Send Emergency SOS</span>
@@ -148,43 +154,73 @@ export default function PredictionPanel({
         </div>
       </div>
 
-      {/* 3 Simple Supporting Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-200">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+      {/* Merged 3-Column Supporting Metrics Container with Vertical Dividers */}
+      <div className="rounded-2xl bg-[#faf9f5]/85 backdrop-blur-xs p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200/90 gap-4 md:gap-0 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
+        
+        {/* Column 1: Water Depth with Visual Progress Bar */}
+        <div className="md:px-4 first:md:pl-1 space-y-2">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
             Water Depth
           </span>
-          <div className="text-lg font-black text-slate-950 mt-1">
-            {prediction.telemetry?.river_level_m.toFixed(1)} meters
+          <div className="text-xl font-black font-mono text-slate-950 flex items-baseline gap-1.5">
+            <span>{currentDepth.toFixed(1)}</span>
+            <span className="text-xs font-semibold text-slate-500 font-sans">meters</span>
           </div>
-          <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-            Danger Mark: {prediction.danger_mark_m}m
+
+          {/* Thin Horizontal Visual Progress Bar */}
+          <div className="space-y-1 pt-0.5">
+            <div className="w-full bg-slate-200/90 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isDepthExceeded ? "bg-red-600" : "bg-emerald-500"
+                }`}
+                style={{ width: `${depthPercentage}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <span>{depthPercentage.toFixed(0)}% to danger mark</span>
+              <span className={isDepthExceeded ? "text-red-600 font-bold" : "text-slate-600 font-medium"}>
+                Limit: {dangerMark}m
+              </span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-600 font-medium">
+            Danger Mark: <span className="font-mono font-bold text-slate-800">{dangerMark}m</span>
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-200">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+        {/* Column 2: Catchment Rain */}
+        <div className="md:px-5 pt-3 md:pt-0 space-y-2">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
             Catchment Rain
           </span>
-          <div className="text-lg font-black text-slate-950 mt-1">
-            {prediction.telemetry?.rainfall_mm.toFixed(1)} mm/hr
+          <div className="text-xl font-black font-mono text-slate-950 flex items-baseline gap-1.5">
+            <span>{prediction.telemetry?.rainfall_mm.toFixed(1)}</span>
+            <span className="text-xs font-semibold text-slate-500 font-sans">mm/hr</span>
           </div>
-          <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-            Soil Saturation: {prediction.telemetry?.soil_moisture_pct.toFixed(0)}%
+          <p className="text-[11px] text-slate-600 font-medium pt-3">
+            Soil Saturation:{" "}
+            <span className="font-mono font-bold text-slate-800">
+              {prediction.telemetry?.soil_moisture_pct.toFixed(0)}%
+            </span>
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-200">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+        {/* Column 3: Response Time */}
+        <div className="md:px-5 pt-3 md:pt-0 space-y-2">
+          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
             Response Time
           </span>
-          <div className="text-lg font-black text-slate-950 mt-1">
-            ~{Math.round(prediction.lead_time_minutes / 60)} hours lead time
+          <div className="text-xl font-black font-mono text-slate-950 flex items-baseline gap-1.5">
+            <span>~{Math.round(prediction.lead_time_minutes / 60)}</span>
+            <span className="text-xs font-semibold text-slate-500 font-sans">hours lead time</span>
           </div>
-          <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-            Before peak surge arrival
+          <p className="text-[11px] text-slate-600 font-medium pt-3">
+            Before peak hydrological surge arrival
           </p>
         </div>
+
       </div>
 
     </div>

@@ -119,24 +119,24 @@ export default function NationalSentinelRadar({
 
   // Full Expanded View
   return (
-    <div className="p-6 rounded-3xl bg-white border border-slate-200 text-slate-900 font-sans shadow-sm space-y-6">
+    <div className="p-6 rounded-3xl glass-card text-slate-900 font-sans space-y-5">
       
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/70">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
             <h3 className="text-base font-extrabold text-slate-950 uppercase tracking-wider font-display">
               All-India 12 River Basins
             </h3>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300">
+            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-mono">
               {criticalCount} HIGH ALERT
             </span>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-mono">
               {warningCount} WARNING
             </span>
           </div>
           <p className="text-xs text-slate-600 font-medium">
-            Click any river basin card to instantly switch radar monitoring and live telemetry.
+            Swipe or scroll horizontally to monitor all 12 basins and toggle live telemetry.
           </p>
         </div>
 
@@ -175,7 +175,7 @@ export default function NationalSentinelRadar({
 
       {/* Active Live Location Spotlight (when user location is active) */}
       {selectedZone.id === "live_user_location" && (
-        <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Navigation className="w-5 h-5 animate-pulse" />
@@ -203,20 +203,30 @@ export default function NationalSentinelRadar({
         </div>
       )}
 
-      {/* 12-Basin Responsive Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+      {/* 12-Basin Horizontal Scrolling Carousel (Space-Saving & Sleek) */}
+      <div
+        className="flex overflow-x-auto scroll-snap-x mandatory gap-4 pb-2 pt-1 no-scrollbar select-none"
+        style={{
+          display: "flex",
+          overflowX: "auto",
+          scrollSnapType: "x mandatory",
+          gap: "16px",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
         {scanData?.zones.map((zone) => {
           const isSelected = selectedZone.id === zone.zone_id;
-          const isDanger = zone.flood_probability_percent >= 70;
 
           return (
             <button
               key={zone.zone_id}
               onClick={() => onSelectZoneById(zone.zone_id)}
-              className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between shadow-2xs ${
+              style={{ scrollSnapAlign: "start" }}
+              className={`min-w-[210px] sm:min-w-[230px] max-w-[250px] flex-shrink-0 p-3.5 rounded-2xl text-left transition-all flex flex-col justify-between cursor-pointer ${
                 isSelected
-                  ? "bg-white border-slate-950 ring-2 ring-slate-950/20 text-slate-950 shadow-sm"
-                  : "bg-[#faf9f5] border-slate-200 hover:border-slate-300 hover:bg-[#f6f4ee] text-slate-900"
+                  ? "bg-white ring-2 ring-slate-900 text-slate-950 shadow-md scale-[1.01]"
+                  : "bg-[#faf9f5]/90 hover:bg-white text-slate-900 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] hover:shadow-md"
               }`}
             >
               <div>
@@ -225,7 +235,7 @@ export default function NationalSentinelRadar({
                     {zone.state}
                   </span>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full ${getRiskBadgeClasses(
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${getRiskBadgeClasses(
                       zone.flood_probability_percent
                     )}`}
                   >

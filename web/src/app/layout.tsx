@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import { Montserrat, Syne } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import SmoothScrollProvider from "@/components/Providers/SmoothScrollProvider";
 import RabtoFXProvider from "@/components/Providers/RabtoFXProvider";
 
-const montserrat = Montserrat({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-montserrat",
-  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
   display: "swap",
 });
 
-const syne = Syne({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["500", "600", "700", "800"],
+  variable: "--font-jetbrains-mono",
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -34,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${montserrat.variable} ${syne.variable} font-sans min-h-screen bg-[#161a20] text-white antialiased selection:bg-white selection:text-[#161a20]`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans min-h-screen bg-[#161a20] text-white antialiased selection:bg-white selection:text-[#161a20]`}>
         <SmoothScrollProvider>
           <RabtoFXProvider>{children}</RabtoFXProvider>
         </SmoothScrollProvider>
