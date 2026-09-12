@@ -418,7 +418,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       attribution: 'Dark Mode'
     });
 
-    // 6. Autonomous Offline Tactical Canvas Layer (Guaranteed 100% Offline Without Cellular/Internet)
+    // 6. Autonomous Offline Tactical Navigation Layer (100% Offline HUD)
     var AutonomousOfflineCanvasLayer = L.GridLayer.extend({
       createTile: function(coords) {
         var tile = document.createElement('canvas');
@@ -427,11 +427,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         tile.height = tileSize.y;
         var ctx = tile.getContext('2d');
 
-        // Dark tactical topographic background
-        ctx.fillStyle = '#090d16';
+        // Dark tactical navigation background
+        ctx.fillStyle = '#0b1120';
         ctx.fillRect(0, 0, tile.width, tile.height);
 
-        // Tactical DEM coordinate grid lines
+        // Subtle tactical grid lines
         ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -443,28 +443,17 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         }
         ctx.stroke();
 
-        // Procedural topographic contour rings
-        var hash = Math.abs((coords.x * 374761393 + coords.y * 668265263) ^ coords.z);
+        // Coordinate crosshair ticks
         ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        for (var c = 1; c <= 3; c++) {
-          var r = (tile.width / 4) * c;
-          var cx = (hash % 60) + (tile.width / 2 - 30);
-          var cy = ((hash >> 4) % 60) + (tile.height / 2 - 30);
-          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        for (var cx = 64; cx < tile.width; cx += 64) {
+          for (var cy = 64; cy < tile.height; cy += 64) {
+            ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy);
+            ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4);
+          }
         }
         ctx.stroke();
-
-        // Tile coordinates in corner
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText('DEM Z' + coords.z + ' [' + coords.x + ',' + coords.y + ']', 8, 16);
-
-        // Offline status indicator
-        ctx.fillStyle = '#22c55e';
-        ctx.font = 'bold 8px monospace';
-        ctx.fillText('⚡ AUTONOMOUS OFFLINE MAP ACTIVE', 8, tile.height - 8);
 
         return tile;
       }
@@ -472,7 +461,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     var offlineTileLayer = new AutonomousOfflineCanvasLayer({
       maxZoom: 21,
-      attribution: 'NeerNetra Autonomous Offline Tactical DEM'
+      attribution: 'NeerNetra Tactical Offline Navigation'
     });
 
     var currentTileLayer = googleStreetLayer;

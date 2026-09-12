@@ -1,63 +1,79 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, Text, TouchableOpacity } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ShieldAlert, Map, Radio, Landmark } from 'lucide-react-native';
-
-import { ZonePrediction, NetworkMode, LocationSyncPayload, SOSType, SOSPayload } from '../types';
-import { fetchCurrentPrediction, sendSOSPayload, flushOfflineSOSQueue } from '../services/api';
-import { getOfflineSOSQueue } from '../services/offlineStorage';
-import { meshManager, meshEngine, bleEngine } from '../services/bluetoothMesh';
-import {
-  start5MinPeriodicLocationTracker,
-  getLastKnownLocation,
-  syncCurrentLocationToBackend,
-} from '../services/locationTracker';
-import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
-import { startRedZoneDangerTimer, markUserAsSafeConfirmed, stopDangerTimer } from '../services/dangerEscalation';
-import { startBLEAdvertising } from '../services/bleAdvertiser';
-import { getCurrentDeviceLocation } from '../services/locationService';
-import { mobileSirenListener } from '../services/mobileSirenListener';
-
-// Components
-import { MeshStatusBadge } from '../components/MeshStatusBadge';
-import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
-import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
-import { GuidelineBar } from '../components/GuidelineBar';
-import { SOSFAB } from '../components/SOSFAB';
-import { IncomingCallModal } from '../components/IncomingCallModal';
-import { ActiveCallHUD } from '../components/ActiveCallHUD';
-
-// Screens
+import { Activity, Radio, Map as MapIcon, ShieldAlert } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusScreen } from './StatusScreen';
 import { MeshScreen } from './MeshScreen';
 import { MapScreen } from './MapScreen';
 import { GuidelinesScreen } from './GuidelinesScreen';
+import { MeshStatusBadge } from '../components/MeshStatusBadge';
+import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
+import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
+import { ActiveCallHUD } from '../components/ActiveCallHUD';
+import { TopPillNav, CitizenTab } from '../components/TopPillNav';
+import {
+  ZonePrediction,
+  LocationSyncPayload,
+  MeshPeer,
+  SOSType,
+  NetworkMode,
+} from '../types';
+import {
+  fetchCurrentPrediction,
+  flushOfflineSOSQueue,
+  sendSOSPayload,
+  getNearestSafeRoute,
+} from '../services/api';
+import {
+  getLastKnownLocation,
+  start5MinPeriodicLocationTracker,
+} from '../services/locationTracker';
+import { getOfflineSOSQueue } from '../services/offlineStorage';
+import {
+  startRedZoneDangerTimer,
+  stopDangerTimer,
+  markUserAsSafeConfirmed,
+} from '../services/dangerEscalation';
+import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
+import { getCurrentDeviceLocation } from '../services/locationService';
+import { bleEngine, meshEngine } from '../services/bluetoothMesh';
+import { mobileSirenListener, MobileSirenEvent } from '../services/mobileSirenListener';
 
 const Tab = createBottomTabNavigator();
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
 
+const isUserInsideHazardZone = (userLat?: number, userLng?: number, zoneLat?: number, zoneLng?: number, maxRadiusKm = 25): boolean => {
+  if (!userLat || !userLng) return false;
+  if (!zoneLat || !zoneLng) return true;
+  const R = 6371;
+  const dLat = (zoneLat - userLat) * (Math.PI / 180);
+  const dLng = (zoneLng - userLng) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(userLat * (Math.PI / 180)) * Math.cos(zoneLat * (Math.PI / 180)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c <= maxRadiusKm;
+};
+
 export const HomeScreen: React.FC = () => {
+  const [deviceUuid, setDeviceUuid] = useState<string>('local_device');
   const [prediction, setPrediction] = useState<ZonePrediction | null>(null);
-  const [deviceUuid, setDeviceUuid] = useState<string>('uuid-device-node-1');
   const [networkMode, setNetworkMode] = useState<NetworkMode>('ONLINE');
-  const [peerCount, setPeerCount] = useState<number>(3);
-  const [queuedCount, setQueuedCount] = useState<number>(0);
-  const [syncing, setSyncing] = useState<boolean>(false);
   const [lastLocation, setLastLocation] = useState<LocationSyncPayload | null>(null);
+  const [queuedCount, setQueuedCount] = useState<number>(0);
+  const [peerCount, setPeerCount] = useState<number>(0);
+  const [syncing, setSyncing] = useState<boolean>(false);
   const [showRedAlertOverlay, setShowRedAlertOverlay] = useState<boolean>(false);
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
   const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
-  const [forcedSiren, setForcedSiren] = useState<{ active: boolean; message?: string; zoneName?: string } | null>(null);
+  const [forcedSiren, setForcedSiren] = useState<MobileSirenEvent | null>(null);
+
+  // Active top navigation tab state
+  const [currentTab, setCurrentTab] = useState<CitizenTab>('status');
 
   // BLE Intercom / Calling States
-  const [incomingCaller, setIncomingCaller] = useState<{
-    id: string;
-    name: string;
-    distance?: number;
-    hopCount?: number;
-  } | null>(null);
   const [activeCallPeer, setActiveCallPeer] = useState<{
     id: string;
     name: string;
@@ -65,10 +81,16 @@ export const HomeScreen: React.FC = () => {
     hopCount?: number;
   } | null>(null);
 
+  const isUserInDangerZone = Boolean(
+    prediction?.alert_color === 'RED' &&
+    (prediction?.flood_probability_percent ?? 0) > 60 &&
+    (prediction.zone_id === 'live_user_location' ||
+      isUserInsideHazardZone(lastLocation?.lat, lastLocation?.lng, 30.5573, 79.5642, 25))
+  );
+
   const isRedZone =
     Boolean(forcedSiren?.active) ||
-    prediction?.alert_color === 'RED' ||
-    (prediction?.flood_probability_percent !== undefined && prediction.flood_probability_percent > 60) ||
+    isUserInDangerZone ||
     sosStatus === 'SOS';
 
   useEffect(() => {
@@ -119,29 +141,19 @@ export const HomeScreen: React.FC = () => {
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
 
-      const bleOk = await bleEngine.init(storedUuid, 'Citizen');
-      if (bleOk) {
-        try {
-          await startBLEAdvertising('NeerNetra_' + storedUuid.substring(4, 10));
-        } catch (bleErr) {
-          console.warn('[HomeScreen] startBLEAdvertising safely caught:', bleErr);
-        }
-        bleEngine.onPeersChanged = (peers) => setPeerCount(peers.length);
-        bleEngine.onIncomingCall = (caller) => {
-          setIncomingCaller(caller);
-        };
-        bleEngine.onCallAnswered = (peerId) => {
-          const peer = bleEngine.getConnectedPeers().find((p) => p.id === peerId);
-          setActiveCallPeer({
-            id: peerId,
-            name: peer?.name || 'Citizen Node',
-            distance: peer?.distanceMeters || 15,
-            hopCount: 1,
-          });
-        };
-        bleEngine.onCallDeclined = () => {
-          setIncomingCaller(null);
-          setActiveCallPeer(null);
+      // Initialize mesh engine listeners
+      meshEngine.onPeerDiscovered = (peer: MeshPeer) => {
+        setPeerCount(meshEngine.getConnectedPeers().length);
+      };
+      meshEngine.onSOSRelayed = async () => {
+        checkOfflineQueue();
+      };
+
+      // Lazy-init Bluetooth on native Android/iOS
+      if (Platform.OS !== 'web') {
+        await bleEngine.init();
+        bleEngine.onCallReceived = (callerId, callerName) => {
+          setActiveCallPeer({ id: callerId, name: callerName, hopCount: 1 });
         };
         bleEngine.onCallEnded = () => {
           setActiveCallPeer(null);
@@ -162,7 +174,13 @@ export const HomeScreen: React.FC = () => {
       setPrediction(data);
       setNetworkMode('ONLINE');
 
-      if (data.alert_color === 'RED' && data.flood_probability_percent > 75.0) {
+      const insideDangerZone =
+        data.alert_color === 'RED' &&
+        data.flood_probability_percent > 60 &&
+        (data.zone_id === 'live_user_location' ||
+          isUserInsideHazardZone(loc?.lat, loc?.lng, 30.5573, 79.5642, 25));
+
+      if (insideDangerZone) {
         triggerRedZoneEmergencyAlert(data.zone_id, data.flood_probability_percent, data.primary_trigger);
         setShowRedAlertOverlay(true);
 
@@ -233,61 +251,58 @@ export const HomeScreen: React.FC = () => {
       }
     } catch {}
 
-    const payload: SOSPayload = {
+    const payload = {
       device_uuid: deviceUuid,
       lat: lat || 27.6015,
       lng: lng || 77.5975,
-      status: 'SOS',
+      status: 'SOS' as const,
       sos_type: type,
+      notes: `Immediate assistance required: ${type}`,
       is_mesh_relayed: networkMode === 'BLE_MESH',
       timestamp: new Date().toISOString(),
     };
-    if (networkMode !== 'BLE_MESH') {
-      await sendSOSPayload(payload);
-    } else {
-      await meshEngine.broadcastMultiHopSOS(payload);
+
+    if (networkMode === 'BLE_MESH') {
+      meshEngine.broadcastSOS(payload);
+    }
+    await sendSOSPayload(payload);
+    await checkOfflineQueue();
+  };
+
+  const handleEndActiveCall = () => {
+    if (activeCallPeer) {
+      bleEngine.endCall(activeCallPeer.id);
+      setActiveCallPeer(null);
     }
   };
 
-  const handleAcceptCall = async () => {
-    if (!incomingCaller) return;
-    await bleEngine.acceptCall(incomingCaller.id);
-    setActiveCallPeer(incomingCaller);
-    setIncomingCaller(null);
-  };
-
-  const handleDeclineCall = async () => {
-    if (!incomingCaller) return;
-    await bleEngine.declineCall(incomingCaller.id);
-    setIncomingCaller(null);
-  };
-
-  const handleEndActiveCall = async () => {
-    if (!activeCallPeer) return;
-    await bleEngine.endCall(activeCallPeer.id);
-    setActiveCallPeer(null);
-  };
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#eaebe5" />
-      
-      <GuidelineBar />
+    <View style={styles.container}>
+      {/* Top Header with App Logo, Tab Selectors, and Network Status */}
+      <TopPillNav
+        activeTab={currentTab}
+        onTabChange={(tab) => setCurrentTab(tab)}
+        networkMode={networkMode}
+      />
 
+      {/* Acoustic Forced Siren Banner */}
       {forcedSiren?.active && (
         <View style={styles.forcedSirenBanner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontSize: 16 }}>🚨</Text>
-            <Text style={styles.forcedSirenTitle}>CIVIL DEFENSE SIREN BROADCAST</Text>
-          </View>
-          <Text style={styles.forcedSirenMsg}>
-            {forcedSiren.message || 'National Disaster Force / SDMA has triggered an audible emergency siren for your sector.'}
+          <Text style={styles.forcedSirenTitle}>
+            🚨 EMERGENCY CIVIL DEFENSE ALARM ACTIVATED
+          </Text>
+          <Text style={styles.forcedSirenSubtitle}>
+            {forcedSiren.message || 'Immediate high-ground evacuation ordered by NDRF / SDMA! Move to safe haven now.'}
           </Text>
           <TouchableOpacity
             style={styles.silenceBtn}
             activeOpacity={0.8}
             onPress={() => {
-              mobileSirenListener.silenceAlarm();
+              if (forcedSiren?.dispatchedAt) {
+                mobileSirenListener.markSirenSilenced(forcedSiren.dispatchedAt);
+              } else {
+                mobileSirenListener.silenceAlarm(true);
+              }
               setForcedSiren(null);
               setShowRedAlertOverlay(false);
               handleConfirmSafe(false);
@@ -329,21 +344,34 @@ export const HomeScreen: React.FC = () => {
         <Tab.Navigator
           screenOptions={{
             headerShown: false,
-            tabBarActiveTintColor: '#0284c7',
-            tabBarInactiveTintColor: '#64748b',
             tabBarStyle: styles.tabBar,
+            tabBarActiveTintColor: '#2563eb',
+            tabBarInactiveTintColor: '#64748b',
+            tabBarLabelStyle: styles.tabLabel,
           }}
         >
-          <Tab.Screen 
-            name="Status" 
-            options={{ tabBarIcon: ({ color, size }) => <ShieldAlert color={color} size={size} /> }}
+          <Tab.Screen
+            name="Status"
+            options={{
+              tabBarIcon: ({ color, size }) => <Activity color={color} size={size} />,
+            }}
           >
-            {() => <StatusScreen prediction={prediction} />}
+            {() => (
+              <StatusScreen
+                prediction={prediction}
+                isRedZone={isRedZone}
+                onSOSTrigger={handleSOSTrigger}
+                networkMode={networkMode}
+                onRefresh={loadPrediction}
+              />
+            )}
           </Tab.Screen>
-          
-          <Tab.Screen 
-            name="Map" 
-            options={{ tabBarIcon: ({ color, size }) => <Map color={color} size={size} /> }}
+
+          <Tab.Screen
+            name="Map"
+            options={{
+              tabBarIcon: ({ color, size }) => <MapIcon color={color} size={size} />,
+            }}
           >
             {() => (
               <MapScreen
@@ -354,105 +382,121 @@ export const HomeScreen: React.FC = () => {
               />
             )}
           </Tab.Screen>
-          
-          <Tab.Screen 
-            name="Mesh" 
-            options={{ tabBarIcon: ({ color, size }) => <Radio color={color} size={size} /> }}
-          >
-            {() => <MeshScreen peers={meshEngine.getConnectedPeers()} isDisasterConfirmed={isRedZone} />}
-          </Tab.Screen>
 
-          <Tab.Screen 
-            name="Guidelines" 
+          <Tab.Screen
+            name="Mesh"
             options={{
-              tabBarLabel: 'Directives',
-              tabBarIcon: ({ color, size }) => <Landmark color={color} size={size} />
+              tabBarIcon: ({ color, size }) => <Radio color={color} size={size} />,
             }}
           >
-            {() => <GuidelinesScreen />}
+            {() => (
+              <MeshScreen
+                peers={meshEngine.getConnectedPeers()}
+                networkMode={networkMode}
+                onInitiateCall={(peer) => {
+                  bleEngine.initiateCall(peer.id);
+                  setActiveCallPeer(peer);
+                }}
+              />
+            )}
           </Tab.Screen>
+
+          <Tab.Screen
+            name="Directives"
+            options={{
+              tabBarIcon: ({ color, size }) => <ShieldAlert color={color} size={size} />,
+            }}
+            component={GuidelinesScreen}
+          />
         </Tab.Navigator>
-
-        <SOSFAB 
-          onSOSTrigger={handleSOSTrigger}
-          onConfirmSafe={handleConfirmSafe}
-          currentStatus={sosStatus}
-        />
       </NavigationContainer>
-
-      <IncomingCallModal
-        visible={!!incomingCaller}
-        caller={incomingCaller}
-        onAccept={handleAcceptCall}
-        onDecline={handleDeclineCall}
-      />
 
       <RedZoneAlertOverlay
         visible={showRedAlertOverlay}
-        prediction={prediction}
-        lastLocation={lastLocation}
-        onTriggerSOS={() => {
+        zoneName={forcedSiren?.zoneName || prediction?.zone_name || 'Civil Emergency Hazard Zone'}
+        floodProbability={forcedSiren ? 88.5 : prediction?.flood_probability_percent || 80.0}
+        triggerReason={forcedSiren?.message || prediction?.primary_trigger || 'Civil Defense Emergency Siren Dispatched by NDRF / SDMA'}
+        onConfirmSafe={() => {
+          if (forcedSiren?.dispatchedAt) {
+            mobileSirenListener.markSirenSilenced(forcedSiren.dispatchedAt);
+          } else {
+            mobileSirenListener.silenceAlarm(true);
+          }
+          setForcedSiren(null);
           setShowRedAlertOverlay(false);
-          handleSOSTrigger('TRAPPED');
+          handleConfirmSafe(false);
         }}
-        onDismiss={() => setShowRedAlertOverlay(false)}
+        onDismiss={() => {
+          if (forcedSiren?.dispatchedAt) {
+            mobileSirenListener.markSirenSilenced(forcedSiren.dispatchedAt);
+          } else {
+            mobileSirenListener.silenceAlarm(true);
+          }
+          setForcedSiren(null);
+          setShowRedAlertOverlay(false);
+        }}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: '#eaebe5',
+    backgroundColor: '#ffffff',
   },
   tabBar: {
-    height: 60,
-    paddingBottom: 5,
-    paddingTop: 5,
     backgroundColor: '#ffffff',
-    borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
+    borderTopWidth: 1,
+    height: 72,
+    paddingBottom: 14,
+    paddingTop: 8,
+    elevation: 8,
+  },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   forcedSirenBanner: {
-    backgroundColor: '#b91c1c',
-    marginHorizontal: 12,
-    marginTop: 8,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 2,
-    borderColor: '#fca5a5',
-    elevation: 6,
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: '#fca5a5',
   },
   forcedSirenTitle: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
-  forcedSirenMsg: {
+  forcedSirenSubtitle: {
     color: '#fee2e2',
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 8,
-    fontWeight: '500',
-    lineHeight: 16,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 15,
   },
   silenceBtn: {
+    marginTop: 8,
     backgroundColor: '#ffffff',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   silenceBtnText: {
-    color: '#b91c1c',
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 0.5,
+    color: '#dc2626',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegionalAlert } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 
 declare global {
   var __NEERNETRA_ALERTS_HISTORY__: RegionalAlert[] | undefined;
@@ -59,10 +60,60 @@ export async function POST(req: NextRequest) {
 
     global.__NEERNETRA_ALERTS_HISTORY__ = [newAlert, ...(global.__NEERNETRA_ALERTS_HISTORY__ || [])];
 
+    // 1. Sync Directive to Supabase Cloud for real-time mobile reception across cellular 4G/5G
+    try {
+      await supabase.from("sos_alerts").insert({
+        device_id: "GOVT_DIRECTIVE",
+        lat: 30.557,
+        lng: 79.564,
+        sos_type: "GOVT_DIRECTIVE",
+        status: "ACTIVE",
+        battery_level: 100,
+        notes: JSON.stringify({
+          id: newAlert.alert_id,
+          title: newAlert.title,
+          action: newAlert.message,
+          priority: newAlert.severity.includes("RED") ? "HIGH" : "MEDIUM",
+          category: "ZONE_BROADCAST",
+          zone_id: newAlert.zone_id,
+          safe_havens: newAlert.safe_havens,
+          created_at: newAlert.dispatched_at,
+        }),
+      });
+      console.log("[Broadcast API] Directive synced to Supabase Cloud!");
+    } catch (cloudErr) {
+      console.warn("[Broadcast API] Supabase directive insert fallback:", cloudErr);
+    }
+
+    // 2. If acoustic siren was enabled in the broadcast, dispatch to phones via Supabase
+    if (newAlert.trigger_acoustic_siren) {
+      try {
+        await supabase.from("sos_alerts").insert({
+          device_id: "ADMIN_SIREN_DISPATCH",
+          lat: 30.5573,
+          lng: 79.5642,
+          sos_type: "CIVIL_DEFENSE_SIREN",
+          status: "ACTIVE_SIREN",
+          battery_level: 100,
+          notes: JSON.stringify({
+            zone_id: newAlert.zone_id,
+            zone_name: newAlert.title,
+            action: "ACTIVATE",
+            authorized_by: "Zone Broadcast Command",
+            message: newAlert.message,
+            dispatched_at: newAlert.dispatched_at,
+          }),
+        });
+        console.log("[Broadcast API] Emergency acoustic siren dispatched to Supabase Cloud!");
+      } catch (sirenErr) {
+        console.warn("[Broadcast API] Supabase siren insert fallback:", sirenErr);
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: "Regional Alert dispatched to citizen mobile edge nodes",
+        message: "Regional Alert dispatched to citizen mobile edge nodes & Supabase Cloud",
         alert: newAlert,
       },
       { headers: corsHeaders }

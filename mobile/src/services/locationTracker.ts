@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { LocationSyncPayload } from '../types';
+import { getDeviceModelName } from './api';
 
 const LAST_KNOWN_LOCATION_KEY = '@neernetra_last_known_location_v1';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
@@ -45,6 +46,8 @@ export const syncCurrentLocationToBackend = async (deviceUuid: string, zoneId: s
       accuracy = currentPos.coords.accuracy;
     }
 
+    const phoneModel = getDeviceModelName();
+
     const payload: LocationSyncPayload = {
       device_uuid: deviceUuid,
       lat,
@@ -59,35 +62,37 @@ export const syncCurrentLocationToBackend = async (deviceUuid: string, zoneId: s
     // Save locally as last known location
     await saveLastKnownLocation(payload);
 
-    // Direct parallel push to Supabase Cloud Realtime (<100ms)
+    // Direct push to Supabase Cloud Realtime (<100ms)
     const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
     const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       await fetch(`${SUPABASE_REST_URL}/sos_alerts`, {
         method: 'POST',
         headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
+          Prefer: 'return=minimal',
         },
         signal: controller.signal,
-        body: JSON.stringify([{
-          device_id: deviceUuid,
-          lat,
-          lng,
-          sos_type: 'CHECKIN',
-          status: 'SAFE',
-          battery_level: payload.battery_level || 88,
-          notes: 'Periodic live GPS location check-in',
-        }]),
+        body: JSON.stringify([
+          {
+            device_id: deviceUuid,
+            lat,
+            lng,
+            sos_type: 'CHECKIN',
+            status: 'LOCATION_TRACKING',
+            battery_level: payload.battery_level || 88,
+            notes: `${phoneModel} | Periodic live GPS location check-in`,
+          },
+        ]),
       });
       clearTimeout(timeoutId);
     } catch {}
 
-    // Post to local web dashboard and NDRF gateway
+    // Post to local web dashboard and NDRF gateway (if on local network/USB)
     const syncEndpoints = [
       'http://127.0.0.1:3000/api/location/sync',
       'http://localhost:3000/api/location/sync',
@@ -98,7 +103,10 @@ export const syncCurrentLocationToBackend = async (deviceUuid: string, zoneId: s
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            notes: `${phoneModel} | Periodic live GPS location check-in`,
+          }),
         });
         if (response.ok) {
           console.log('[LocationTracker] Location sync reached gateway:', url);

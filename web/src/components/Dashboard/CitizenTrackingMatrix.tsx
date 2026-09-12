@@ -184,9 +184,29 @@ export default function CitizenTrackingMatrix({
                       {citizen.is_live ? "LIVE GPS" : `${citizen.last_seen_minutes_ago || 15}m AGO`}
                     </span>
 
-                    {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE" && (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-300">
+                    {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE" ? (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
                         🖐️ GYRO SAFE
+                      </span>
+                    ) : citizen.sos_type === "TRAPPED" ? (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-50 text-red-800 border border-red-300">
+                        🚨 TRAPPED
+                      </span>
+                    ) : citizen.sos_type === "MEDICAL" ? (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-300">
+                        🩸 MEDICAL
+                      </span>
+                    ) : citizen.sos_type === "WATER_RISING" ? (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-300">
+                        🌊 WATER RISING
+                      </span>
+                    ) : citizen.sos_type === "FOOD_WATER" ? (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                        🍞 FOOD / WATER
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-300">
+                        📍 TRACKING
                       </span>
                     )}
                   </div>
@@ -197,8 +217,16 @@ export default function CitizenTrackingMatrix({
                   <div className="flex items-center gap-2 truncate">
                     <span className="font-bold text-slate-950 truncate">
                       {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE"
-                        ? "Touch-Free Gyro Safe (Alive & Moving)"
-                        : citizen.sos_type || "Water Rising"}
+                        ? "🖐️ Confirmed Safe via Gyro / Motion Sensor"
+                        : citizen.sos_type === "TRAPPED"
+                        ? "🚨 Citizen Trapped in Structure"
+                        : citizen.sos_type === "MEDICAL"
+                        ? "🩸 Immediate Medical Emergency"
+                        : citizen.sos_type === "WATER_RISING"
+                        ? "🌊 Rising Water Level Threat"
+                        : citizen.sos_type === "FOOD_WATER"
+                        ? "🍞 Essential Rations & Clean Water Needed"
+                        : "📍 Live GPS Tracking Active"}
                     </span>
                     {citizen.medical_distress && citizen.medical_distress !== "NONE" && (
                       <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 shrink-0 uppercase tracking-wider">
@@ -207,8 +235,8 @@ export default function CitizenTrackingMatrix({
                     )}
                   </div>
 
-                  <span className="text-[10px] font-mono text-slate-500 shrink-0 font-bold">
-                    {citizen.lat.toFixed(3)}°, {citizen.lng.toFixed(3)}°
+                  <span className="text-[10px] font-mono text-slate-600 shrink-0 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                    {citizen.lat.toFixed(4)}°, {citizen.lng.toFixed(4)}°
                   </span>
                 </div>
 

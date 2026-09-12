@@ -1,9 +1,11 @@
 import { Vibration, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
 const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
+const SILENCED_SIRENS_KEY = '@neernetra_silenced_sirens_v1';
 
 // Only treat sirens issued within the last 10 minutes as "active"
 const SIREN_RECENCY_MS = 10 * 60 * 1000;
@@ -27,7 +29,6 @@ function unlockWebAudio() {
     }
     if (webAudioCtx.state === 'suspended') {
       webAudioCtx.resume().then(() => {
-        console.log('[MobileSirenListener] Web AudioContext unlocked via user gesture.');
         webAudioUnlocked = true;
       });
     } else {
@@ -41,7 +42,6 @@ function unlockWebAudio() {
   document.addEventListener('click', handler, { once: true });
   document.addEventListener('touchstart', handler, { once: true });
   document.addEventListener('keydown', handler, { once: true });
-  console.log('[MobileSirenListener] Web: Waiting for user gesture to unlock audio...');
 }
 
 function startWebSiren() {
@@ -55,7 +55,6 @@ function startWebSiren() {
     if (webAudioCtx.state === 'suspended') {
       webAudioCtx.resume();
     }
-    // Stop any existing oscillator
     if (webOscillator) {
       try { webOscillator.stop(); webOscillator.disconnect(); } catch {}
       webOscillator = null;
@@ -81,7 +80,6 @@ function startWebSiren() {
     webOscillator.connect(gainNode);
     gainNode.connect(webAudioCtx.destination);
     webOscillator.start();
-    console.log('[MobileSirenListener] Web Audio oscillator siren started.');
   } catch (e) {
     console.warn('[MobileSirenListener] Web Audio oscillator error:', e);
   }
@@ -128,10 +126,6 @@ function postWebNotification(zoneName: string, message: string) {
 async function setupSirenNotificationChannel() {
   if (Platform.OS !== 'android') return;
   try {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
-      console.warn('[MobileSirenListener] Notification permission not granted');
-    }
     await Notifications.setNotificationChannelAsync('civil_defense_siren_channel', {
       name: '🚨 CIVIL DEFENSE EMERGENCY SIREN',
       importance: Notifications.AndroidImportance.MAX,
@@ -148,29 +142,8 @@ async function setupSirenNotificationChannel() {
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
-    console.log('[MobileSirenListener] Android siren notification channel created.');
   } catch (err) {
     console.warn('[MobileSirenListener] Notification channel setup error:', err);
-  }
-}
-
-// ─── Audio Playback ───────────────────────────────────────────────────────────
-
-async function startSirenSound() {
-  if (Platform.OS === 'web') {
-    startWebSiren();
-    return;
-  }
-  // On native Android/iOS:
-  // The emergency sound is blasted through the system ALARM stream via the Notification Channel
-  // (AndroidAudioUsage.ALARM bypasses DnD and silent switches) and Speech TTS synthesis.
-  console.log('[MobileSirenListener] Native alarm audio active via ALARM channel + Speech!');
-}
-
-async function stopSirenSound() {
-  if (Platform.OS === 'web') {
-    stopWebSiren();
-    return;
   }
 }
 
@@ -193,7 +166,6 @@ async function postSirenNotification(zoneName: string, message: string) {
       },
       trigger: null,
     });
-    console.log('[MobileSirenListener] Push notification posted, id:', sirenNotificationId);
   } catch (err) {
     console.warn('[MobileSirenListener] Notification post error:', err);
   }
@@ -212,13 +184,12 @@ async function dismissSirenNotification() {
   }
 }
 
-// ─── Main Class ───────────────────────────────────────────────────────────────
-
 export interface MobileSirenEvent {
   active: boolean;
   message?: string;
   zoneName?: string;
   authorizedBy?: string;
+  dispatchedAt?: string;
 }
 
 type SirenCallback = (event: MobileSirenEvent) => void;
@@ -227,27 +198,43 @@ class MobileSirenListener {
   private timer: any = null;
   private isAlarmActive: boolean = false;
   private lastProcessedTimestamp: string = '';
+  private processedSirenTimestamps: Set<string> = new Set();
+  private silencedSirenTimestamps: Set<string> = new Set();
   private callback: SirenCallback | null = null;
   private speechInterval: any = null;
+
+  constructor() {
+    this.loadSilencedState();
+  }
+
+  private async loadSilencedState() {
+    try {
+      const stored = await AsyncStorage.getItem(SILENCED_SIRENS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          this.silencedSirenTimestamps = new Set(parsed);
+        }
+      }
+    } catch {}
+  }
 
   public start(callback: SirenCallback) {
     this.callback = callback;
     if (this.timer) clearInterval(this.timer);
 
-    // On web, register gesture listener for audio unlock
     if (Platform.OS === 'web') {
       unlockWebAudio();
     }
 
-    // Initial check immediately on start
     this.checkSirenStatus();
 
-    // Poll every 4 seconds for immediate responsive alarm forcing
+    // Poll every 4 seconds
     this.timer = setInterval(() => {
       this.checkSirenStatus();
     }, 4000);
 
-    console.log('[MobileSirenListener] ✅ Background emergency siren listener started. Polling Supabase every 4s.');
+    console.log('[MobileSirenListener] ✅ Emergency siren listener active.');
   }
 
   public stop() {
@@ -255,8 +242,7 @@ class MobileSirenListener {
       clearInterval(this.timer);
       this.timer = null;
     }
-    this.silenceAlarm();
-    console.log('[MobileSirenListener] Background emergency siren listener stopped.');
+    this.silenceAlarm(false);
   }
 
   private async checkSirenStatus() {
@@ -276,28 +262,27 @@ class MobileSirenListener {
       );
       clearTimeout(timeoutId);
 
-      if (!res.ok) {
-        console.warn('[MobileSirenListener] Supabase poll failed, status:', res.status);
-        return;
-      }
+      if (!res.ok) return;
 
       const data = await res.json();
-      console.log('[MobileSirenListener] Poll result:', JSON.stringify(data).substring(0, 120));
-
       if (Array.isArray(data) && data.length > 0) {
         const latest = data[0];
         const createdAt = latest.created_at || '';
+        const sirenId = latest.id || createdAt;
 
-        // ── RECENCY GUARD: Ignore siren records older than SIREN_RECENCY_MS ──
+        // 1. If this siren was already silenced by the citizen, DO NOT re-trigger!
+        if (this.silencedSirenTimestamps.has(createdAt) || this.silencedSirenTimestamps.has(sirenId)) {
+          return;
+        }
+
+        // 2. Recency guard: Ignore sirens older than 10 minutes
         const sirenAge = Date.now() - new Date(createdAt).getTime();
         const isFresh = sirenAge < SIREN_RECENCY_MS;
 
         if (latest.status === 'ACTIVE_SIREN') {
           if (!isFresh) {
-            // Stale siren — if alarm is running from stale record, silence it
             if (this.isAlarmActive && this.lastProcessedTimestamp === createdAt) {
-              console.log(`[MobileSirenListener] Stale ACTIVE_SIREN (${Math.round(sirenAge / 60000)}min old) — auto-silencing.`);
-              this.silenceAlarm();
+              this.silenceAlarm(false);
             }
             return;
           }
@@ -309,62 +294,52 @@ class MobileSirenListener {
             noteObj = { message: latest.notes };
           }
 
-          if (!this.isAlarmActive || this.lastProcessedTimestamp !== createdAt) {
-            console.log('[MobileSirenListener] 🚨 Fresh ACTIVE_SIREN detected! Triggering alarm...');
+          // 3. ONLY trigger once for this specific siren dispatch!
+          if (!this.processedSirenTimestamps.has(createdAt) && !this.processedSirenTimestamps.has(sirenId)) {
+            this.processedSirenTimestamps.add(createdAt);
+            this.processedSirenTimestamps.add(sirenId);
             this.lastProcessedTimestamp = createdAt;
+
+            console.log('[MobileSirenListener] 🚨 Fresh ACTIVE_SIREN broadcast detected from Web!');
             this.triggerAlarm(
               noteObj.message || '🚨 EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!',
               noteObj.zone_name || 'Danger Zone',
-              noteObj.authorized_by || 'NDRF / SDMA Command'
+              noteObj.authorized_by || 'NDRF / SDMA Command',
+              createdAt
             );
           }
           return;
         } else if (latest.status === 'HALTED_SIREN') {
           if (this.isAlarmActive) {
             console.log('[MobileSirenListener] HALTED_SIREN received — silencing alarm.');
-            this.lastProcessedTimestamp = createdAt;
-            this.silenceAlarm();
+            this.silenceAlarm(false);
           }
           return;
         }
-      } else {
-        console.log('[MobileSirenListener] No siren records in Supabase yet.');
       }
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
-        console.warn('[MobileSirenListener] Poll error:', err?.message);
-      }
-    }
+    } catch {}
   }
 
-  private triggerAlarm(message: string, zoneName: string, authorizedBy: string) {
+  private triggerAlarm(message: string, zoneName: string, authorizedBy: string, dispatchedAt: string) {
     this.isAlarmActive = true;
-    console.log('[MobileSirenListener] 🚨 CIVIL DEFENSE SIREN FORCED ON DEVICE!', zoneName);
+    console.log('[MobileSirenListener] 🚨 CIVIL DEFENSE SIREN SOUNDING ON DEVICE!', zoneName);
 
-    // 1. Post High-Priority Heads-up System Notification
     postSirenNotification(zoneName, message);
+    if (Platform.OS === 'web') {
+      startWebSiren();
+    }
 
-    // 2. Play Real Siren Sound via expo-av
-    startSirenSound();
-
-    // 3. High-decibel continuous vibration pattern (repeating)
     try {
-      Vibration.cancel();
-      Vibration.vibrate([0, 800, 400, 800, 400, 1200], true);
+      Vibration.vibrate([0, 1000, 400, 1000, 400, 1500], true);
     } catch {}
 
-    // 4. Clear loud emergency spoken voice alert (repeats every 9 seconds)
     const speakAlert = () => {
       try {
-        Speech.stop();
         Speech.speak(
           'Emergency Alert! Civil defense siren activated for ' +
             zoneName +
             '. Move uphill to high ground immediately!',
-          {
-            rate: 1.0,
-            pitch: 1.15,
-          }
+          { rate: 1.0, pitch: 1.15 }
         );
       } catch {}
     };
@@ -373,23 +348,38 @@ class MobileSirenListener {
     if (this.speechInterval) clearInterval(this.speechInterval);
     this.speechInterval = setInterval(speakAlert, 9000);
 
-    // 5. Notify App UI to force open the Emergency Red Zone Modal
     if (this.callback) {
       this.callback({
         active: true,
         message,
         zoneName,
         authorizedBy,
+        dispatchedAt,
       });
     }
   }
 
-  public silenceAlarm() {
-    if (!this.isAlarmActive) return;
-    this.isAlarmActive = false;
-    console.log('[MobileSirenListener] Siren silenced/halted by operator.');
+  public async markSirenSilenced(dispatchedAt?: string) {
+    if (dispatchedAt) {
+      this.silencedSirenTimestamps.add(dispatchedAt);
+    }
+    if (this.lastProcessedTimestamp) {
+      this.silencedSirenTimestamps.add(this.lastProcessedTimestamp);
+    }
+    try {
+      await AsyncStorage.setItem(
+        SILENCED_SIRENS_KEY,
+        JSON.stringify(Array.from(this.silencedSirenTimestamps))
+      );
+    } catch {}
+    this.silenceAlarm(false);
+  }
 
-    stopSirenSound();
+  public silenceAlarm(markAsAcknowledged: boolean = true) {
+    this.isAlarmActive = false;
+    console.log('[MobileSirenListener] Siren silenced by citizen.');
+
+    stopWebSiren();
     dismissSirenNotification();
 
     try {
@@ -403,7 +393,6 @@ class MobileSirenListener {
 
     try {
       Speech.stop();
-      Speech.speak('Emergency siren has been halted.', { rate: 1.0 });
     } catch {}
 
     if (this.callback) {

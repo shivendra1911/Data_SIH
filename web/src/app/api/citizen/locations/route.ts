@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
       .limit(50);
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
+      const processedCloudDevIds = new Set<string>();
       for (const alert of cloudAlerts) {
         // Skip broadcast control commands and sirens from showing as citizens
         if (
@@ -63,6 +64,10 @@ export async function GET(req: NextRequest) {
         }
 
         const devId = alert.device_id || `mobile-${alert.id ? String(alert.id).slice(0, 6) : "node"}`;
+        if (processedCloudDevIds.has(devId)) {
+          continue;
+        }
+        processedCloudDevIds.add(devId);
         const existingIdx = result.findIndex((c) => c.device_uuid === devId);
 
         let parsedMedical = "NONE";
@@ -76,11 +81,51 @@ export async function GET(req: NextRequest) {
           parsedMedical = "HYPOTHERMIA";
         }
 
+        let parsedName = `Citizen [${devId.replace(/^dev_/, "").slice(0, 6)}]`;
+        let parsedPhone = "+91 98765 43210";
+
+        if (alert.notes) {
+          const parts = alert.notes.split("|").map((p: string) => p.trim());
+          if (parts.length > 0 && parts[0].length > 0) {
+            const rawCandidate = parts[0];
+            if (
+              !rawCandidate.includes("Periodic live") &&
+              !rawCandidate.includes("Confirmed SAFE") &&
+              !rawCandidate.includes("Immediate assistance")
+            ) {
+              parsedName = rawCandidate;
+            }
+          }
+          if (parts.length > 1 && parts[1].length > 0) {
+            if (parts[1].startsWith("+") || /^\d+$/.test(parts[1])) {
+              parsedPhone = parts[1];
+            } else if (
+              !parts[1].includes("Periodic live") &&
+              !parts[1].includes("Confirmed SAFE") &&
+              !parts[1].includes("Immediate assistance")
+            ) {
+              if (parsedName !== parts[1]) {
+                parsedName = `${parsedName} (${parts[1]})`;
+              }
+            }
+          }
+        }
+
+        let parsedSosType = alert.sos_type || "LOCATION_TRACKING";
+        if (
+          alert.notes?.includes("TOUCH_FREE_MOTION_SAFE") ||
+          alert.notes?.includes("Gyro/Motion Sensor")
+        ) {
+          parsedSosType = "TOUCH_FREE_MOTION_SAFE";
+        } else if (parsedSosType === "CHECKIN") {
+          parsedSosType = "LOCATION_TRACKING";
+        }
+
         const parsedCitizen: CitizenLocation = {
           id: `cit-${devId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: devId,
-          name: alert.notes && alert.notes.includes("|") ? alert.notes.split("|")[0].trim() : `Mobile Citizen [${devId.slice(0, 8)}]`,
-          phone: alert.notes && alert.notes.includes("|") ? alert.notes.split("|")[1].trim() : "+91 98765 43210",
+          name: parsedName,
+          phone: parsedPhone,
           lat: Number(alert.lat) || 27.6014,
           lng: Number(alert.lng) || 77.5971,
           is_live: true,
@@ -88,8 +133,8 @@ export async function GET(req: NextRequest) {
           accuracy_radius_m: 10,
           drift_radius_m: 0,
           battery_pct: Number(alert.battery_level) || 84,
-          status: alert.status === "SAFE" ? "SAFE" : "SOS",
-          sos_type: alert.sos_type || "MOBILE DISTRESS BEACON",
+          status: alert.status === "SAFE" || parsedSosType === "TOUCH_FREE_MOTION_SAFE" ? "SAFE" : "SOS",
+          sos_type: parsedSosType,
           mesh_hops: 0,
           zone_id: "chamoli_01",
           medical_distress: parsedMedical as any,

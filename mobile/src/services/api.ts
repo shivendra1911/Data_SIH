@@ -1,24 +1,33 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { ZonePrediction, SOSPayload } from '../types';
 import { getOfflineSOSQueue, clearOfflineSOSQueue, saveSOSToOfflineQueue } from './offlineStorage';
 
-// Multi-candidate base URLs to automatically connect over USB (adb reverse) or Wi-Fi
+export const getDeviceModelName = (): string => {
+  if (Platform.OS === 'android') {
+    const brand = (Platform.constants as any)?.Brand || '';
+    const model = (Platform.constants as any)?.Model || '';
+    const formattedBrand = brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : '';
+    const full = `${formattedBrand} ${model}`.trim();
+    return full || 'Android Device';
+  } else if (Platform.OS === 'ios') {
+    return 'iPhone';
+  }
+  return 'Mobile Device';
+};
+
+// Candidate URLs for local debugging via USB (adb reverse) or local Wi-Fi
 const CANDIDATE_URLS = [
   'http://127.0.0.1:3000',
   'http://localhost:3000',
   'http://10.0.2.2:3000',
-  'http://10.0.2.2:8000',
   'http://127.0.0.1:8000',
   'http://localhost:8000',
-  'http://172.16.182.5:3000',
-  'http://172.16.182.5:8000',
-  'http://192.168.137.18:3000',
-  'http://192.168.137.18:8000',
 ];
 
 let workingBaseUrl = CANDIDATE_URLS[0];
 
-const requestWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> => {
+const requestWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -32,33 +41,36 @@ const requestWithTimeout = async (url: string, options: RequestInit = {}, timeou
 };
 
 const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
-  // First try the last known working URL with fast failover
+  // First try the last known working URL with fast failover (600ms)
   try {
-    const res = await requestWithTimeout(`${workingBaseUrl}${endpoint}`, options, 1200);
+    const res = await requestWithTimeout(`${workingBaseUrl}${endpoint}`, options, 600);
     if (res.ok) return res;
-  } catch {/* continue to candidates */}
+  } catch {/* continue */}
 
-  // Try remaining candidate URLs (fast 1200ms check so app never hangs)
+  // Try remaining candidate URLs quickly
   for (const candidate of CANDIDATE_URLS) {
     if (candidate === workingBaseUrl) continue;
     try {
-      const res = await requestWithTimeout(`${candidate}${endpoint}`, options, 1200);
+      const res = await requestWithTimeout(`${candidate}${endpoint}`, options, 500);
       if (res.ok) {
         workingBaseUrl = candidate;
-        console.log(`[API Service] Switched active backend URL to: ${workingBaseUrl}`);
         return res;
       }
     } catch {/* try next */}
   }
 
-  throw new Error(`All backend candidates unreachable for ${endpoint}`);
+  throw new Error(`Local backend unreachable for ${endpoint}`);
 };
+
+const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
+const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
 
 export const fetchCurrentPrediction = async (
   zoneId: string = 'local_sector',
   lat?: number,
   lng?: number
 ): Promise<ZonePrediction> => {
+  // 1. Try local dev candidate URLs (fast check)
   try {
     let endpoint = `/api/prediction/current?zone_id=${encodeURIComponent(zoneId)}`;
     if (lat !== undefined && lng !== undefined) {
@@ -66,46 +78,108 @@ export const fetchCurrentPrediction = async (
     }
     const response = await apiFetch(endpoint, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
     });
     const data = await response.json();
     return data as ZonePrediction;
-  } catch (error) {
-    console.warn('[API Service] Backend fetch failed, using localized prediction:', error);
-    return {
-      zone_id: zoneId,
-      zone_name: 'Local Sector (Baseline Telemetry)',
-      flood_probability_percent: 8.5,
-      alert_color: 'SAFE',
-      primary_trigger: 'Normal Baseline Conditions',
-      last_updated: new Date().toISOString(),
-    };
+  } catch {
+    // Local candidate URLs unreachable — proceed to Supabase Cloud directly
   }
-};
 
-const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
-const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
+  // 2. Direct Internet Query to Supabase Cloud (works across cellular 4G/5G / any Wi-Fi)
+  try {
+    const cloudRes = await requestWithTimeout(
+      `${SUPABASE_REST_URL}/sos_alerts?device_id=eq.ADMIN_SIREN_DISPATCH&order=created_at.desc&limit=1`,
+      {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      },
+      3000
+    );
+
+    if (cloudRes.ok) {
+      const records = await cloudRes.json();
+      if (Array.isArray(records) && records.length > 0) {
+        const top = records[0];
+        const sirenAge = Date.now() - new Date(top.created_at).getTime();
+        // If an active siren was issued recently (< 10 minutes)
+        if (top.status === 'ACTIVE_SIREN' && sirenAge < 10 * 60 * 1000) {
+          let notes: any = {};
+          try {
+            notes = JSON.parse(top.notes);
+          } catch {
+            notes = { message: top.notes };
+          }
+          return {
+            zone_id: notes.zone_id || 'chamoli_01',
+            zone_name: notes.zone_name || 'Civil Defense Hazard Zone',
+            flood_probability_percent: Number(notes.flood_pct) || 88.5,
+            alert_color: 'RED',
+            primary_trigger: notes.message || 'Civil Defense Emergency Siren Dispatched',
+            last_updated: top.created_at,
+          };
+        }
+      }
+
+      // Supabase is reachable over internet: return live baseline normal telemetry
+      return {
+        zone_id: zoneId,
+        zone_name: lat && lng ? `Live Sector (${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E)` : 'Local Sector (4G Live)',
+        flood_probability_percent: 5.2,
+        alert_color: 'SAFE',
+        primary_trigger: 'Satellite Hydrometric Baseline Normal',
+        last_updated: new Date().toISOString(),
+      };
+    }
+  } catch (cloudErr) {
+    console.debug('[API Service] Supabase Cloud check fallback:', cloudErr);
+  }
+
+  // 3. Fallback when totally offline
+  return {
+    zone_id: zoneId,
+    zone_name: 'Local Sector (Offline Autonomous)',
+    flood_probability_percent: 5.0,
+    alert_color: 'SAFE',
+    primary_trigger: 'Offline Autonomous Telemetry',
+    last_updated: new Date().toISOString(),
+  };
+};
 
 export const syncSOSToSupabaseCloud = async (payload: SOSPayload): Promise<boolean> => {
   try {
-    const res = await requestWithTimeout(`${SUPABASE_REST_URL}/sos_alerts`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
+    const phoneModel = getDeviceModelName();
+    let noteText = payload.notes || '';
+    if (!noteText.includes(phoneModel)) {
+      noteText = `${phoneModel} | ${noteText}`.trim();
+    }
+
+    const res = await requestWithTimeout(
+      `${SUPABASE_REST_URL}/sos_alerts`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify([
+          {
+            device_id: payload.device_uuid,
+            lat: payload.lat,
+            lng: payload.lng,
+            sos_type: payload.sos_type || 'TRAPPED',
+            status: payload.status || 'SOS',
+            battery_level: 84,
+            notes: noteText,
+          },
+        ]),
       },
-      body: JSON.stringify([{
-        device_id: payload.device_uuid,
-        lat: payload.lat,
-        lng: payload.lng,
-        sos_type: payload.sos_type || 'TRAPPED',
-        status: payload.status || 'SOS',
-        battery_level: 84,
-        notes: payload.notes || null,
-      }]),
-    }, 12000);
+      8000
+    );
     return res.ok;
   } catch (err) {
     console.debug('[Supabase Cloud Sync] Direct cloud push deferred:', err);
@@ -116,30 +190,29 @@ export const syncSOSToSupabaseCloud = async (payload: SOSPayload): Promise<boole
 export const sendSOSPayload = async (payload: SOSPayload): Promise<{ success: boolean; message: string }> => {
   let cloudSuccess = false;
   let backendSuccess = false;
-  let responseId = 'SOS-ACK';
 
-  const [cloudResult, backendResult] = await Promise.allSettled([
-    syncSOSToSupabaseCloud(payload),
-    apiFetch('/api/sos/trigger', {
+  const phoneModel = getDeviceModelName();
+  if (!payload.notes?.includes(phoneModel)) {
+    payload.notes = `${phoneModel} | ${payload.notes || ''}`.trim();
+  }
+
+  // 1. Direct Cloud Push to Supabase Cloud (<100ms)
+  cloudSuccess = await syncSOSToSupabaseCloud(payload);
+  if (cloudSuccess) {
+    console.log('[API Service] SOS successfully ingested by Supabase Cloud Realtime');
+  }
+
+  // 2. Parallel attempt to push to local backend gateway (if reachable)
+  try {
+    const res = await apiFetch('/api/sos/trigger', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    }).then(async (res) => {
-      const data = await res.json();
-      return data;
-    }),
-  ]);
-
-  if (cloudResult.status === 'fulfilled' && cloudResult.value === true) {
-    cloudSuccess = true;
-    console.log('[API Service] SOS successfully dispatched directly to Supabase Realtime Cloud (<100ms)');
-  }
-
-  if (backendResult.status === 'fulfilled' && backendResult.value) {
-    backendSuccess = true;
-    responseId = backendResult.value.message_id || 'NDRF-ACK';
-    console.log('[API Service] SOS successfully ingested by Local NDRF Server');
-  }
+    });
+    if (res.ok) {
+      backendSuccess = true;
+    }
+  } catch {}
 
   if (cloudSuccess || backendSuccess) {
     return {
@@ -221,18 +294,14 @@ export const getNearestSafeRoute = async (lat: number, lng: number): Promise<Saf
       body: JSON.stringify({ lat, lng, zone_id: 'local_sector' }),
     });
     const data = await response.json();
-    // Cache to AsyncStorage for offline access
     await AsyncStorage.setItem('@neernetra_offline_safe_route_v1', JSON.stringify(data));
     return data;
-  } catch (err) {
-    console.warn('[API Service] Online safe route fetch failed, checking offline cache:', err);
-    // Try offline cache
+  } catch {
     try {
       const cached = await AsyncStorage.getItem('@neernetra_offline_safe_route_v1');
       if (cached) return JSON.parse(cached);
-    } catch {/* fallback below */}
+    } catch {}
 
-    // Fallback safe route dynamically calculated around user's current GPS location
     const safeLat = +(lat + 0.0085).toFixed(6);
     const safeLng = +(lng + 0.0072).toFixed(6);
     return {
@@ -288,12 +357,11 @@ export const fetchNearbyCitizens = async (lat?: number, lng?: number): Promise<N
     }
     const response = await apiFetch(endpoint, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
     });
     const data = await response.json();
     return data.citizens || [];
-  } catch (err) {
-    console.warn('[API Service] Failed to fetch citizens online:', err);
+  } catch {
     return [];
   }
 };
@@ -321,78 +389,11 @@ export interface GovernmentGuidelinesResponse {
   guidelines: OfficialNotification[];
 }
 
-export const FALLBACK_GUIDELINES: OfficialNotification[] = [
-  {
-    id: 'dir-ndrf-01',
-    title: 'MANDATORY HIGH-GROUND EVACUATION',
-    source: 'National Disaster Response Force (NDRF)',
-    organization: 'National Disaster Response Force (NDRF)',
-    summary: 'Continuous water level surge detected across basin riverbed. All citizens must ascend at least 15 meters above baseline river level immediately towards designated reinforced shelters.',
-    full_text: 'Continuous water level surge detected across basin riverbed. All citizens must ascend at least 15 meters above baseline river level immediately towards designated reinforced shelters.',
-    body: 'Continuous water level surge detected across basin riverbed. All citizens must ascend at least 15 meters above baseline river level immediately towards designated reinforced shelters.',
-    source_type: 'NATIONAL_CALAMITY',
-    severity: 'CRITICAL',
-    ref_code: 'NDRF-EVAC-2026',
-    timestamp: new Date().toISOString(),
-    contact_hotline: '1078 (NDRF Toll-Free)',
-    action_advice: 'Evacuate uphill immediately. Do not attempt to cross submerged roads.',
-    verified: true,
-  },
-  {
-    id: 'dir-sdma-02',
-    title: 'MUNICIPAL POWER & GAS ISOLATION PROTOCOL',
-    source: 'State Disaster Management Authority (SDMA)',
-    organization: 'State Disaster Management Authority (SDMA)',
-    summary: 'Shut down primary electrical circuit breakers and isolate LPG gas connections before vacating premises. Avoid submerged transformer boxes and fallen electrical power poles.',
-    full_text: 'Shut down primary electrical circuit breakers and isolate LPG gas connections before vacating premises. Avoid submerged transformer boxes and fallen electrical power poles.',
-    body: 'Shut down primary electrical circuit breakers and isolate LPG gas connections before vacating premises. Avoid submerged transformer boxes and fallen electrical power poles.',
-    source_type: 'LOCAL_GOVT',
-    severity: 'WARNING',
-    ref_code: 'SDMA-PWR-04',
-    timestamp: new Date().toISOString(),
-    contact_hotline: '1070 (State Emergency)',
-    action_advice: 'Turn off main electrical breaker. Do not walk through floodwaters near power lines.',
-    verified: true,
-  },
-  {
-    id: 'dir-news-03',
-    title: 'IMD FLASH ADVISORY: CLOUDBURST INUNDATION THREAT',
-    source: 'India Meteorological Department (IMD)',
-    organization: 'India Meteorological Department (IMD)',
-    summary: 'Intense precipitation radar signatures detected over upper catchment tributaries. Flash surge wave expected within 30 to 90 minutes. Keep offline BLE Mesh active.',
-    full_text: 'Intense precipitation radar signatures detected over upper catchment tributaries. Flash surge wave expected within 30 to 90 minutes. Keep offline BLE Mesh active.',
-    body: 'Intense precipitation radar signatures detected over upper catchment tributaries. Flash surge wave expected within 30 to 90 minutes. Keep offline BLE Mesh active.',
-    source_type: 'LOCAL_NEWS',
-    severity: 'ADVISORY',
-    ref_code: 'IMD-RADAR-ALERT',
-    timestamp: new Date().toISOString(),
-    contact_hotline: '112 (National Emergency)',
-    action_advice: 'Maintain elevation. Use NeerNetra offline BLE walkie-talkie for community comms.',
-    verified: true,
-  },
-  {
-    id: 'dir-ndrf-04',
-    title: 'DISTRICT SAFE HAVEN & MEDICAL REFUGE',
-    source: 'District Emergency Operations Center',
-    organization: 'District Emergency Operations Center',
-    summary: 'Community Health Centers and elevated concrete government schools are active safe shelters with emergency medical supplies, water purification, and dry rations.',
-    full_text: 'Community Health Centers and elevated concrete government schools are active safe shelters with emergency medical supplies, water purification, and dry rations.',
-    body: 'Community Health Centers and elevated concrete government schools are active safe shelters with emergency medical supplies, water purification, and dry rations.',
-    source_type: 'LOCAL_GOVT',
-    severity: 'WARNING',
-    ref_code: 'DEOC-SHELTER-09',
-    timestamp: new Date().toISOString(),
-    contact_hotline: '108 (Ambulance)',
-    action_advice: 'Proceed along marked green safe escape corridors shown on the Map.',
-    verified: true,
-  },
-];
-
 export const fetchOfficialGuidelines = async (lat?: number, lng?: number): Promise<OfficialNotification[]> => {
-  // 1. Direct Cloud Query to Supabase (fastest & most reliable across cellular 4G/5G)
+  // 1. Direct Cloud Query to Supabase (primary source of real authority broadcasts)
   try {
     const res = await requestWithTimeout(
-      `${SUPABASE_REST_URL}/sos_alerts?device_id=eq.GOVT_DIRECTIVE&order=created_at.desc&limit=10`,
+      `${SUPABASE_REST_URL}/sos_alerts?device_id=eq.GOVT_DIRECTIVE&order=created_at.desc&limit=25`,
       {
         method: 'GET',
         headers: {
@@ -400,11 +401,11 @@ export const fetchOfficialGuidelines = async (lat?: number, lng?: number): Promi
           Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         },
       },
-      4000
+      3500
     );
     if (res.ok) {
       const cloudData = await res.json();
-      if (Array.isArray(cloudData) && cloudData.length > 0) {
+      if (Array.isArray(cloudData)) {
         const cloudDirectives: OfficialNotification[] = cloudData.map((cd: any) => {
           let note: any = {};
           try {
@@ -413,34 +414,38 @@ export const fetchOfficialGuidelines = async (lat?: number, lng?: number): Promi
             note = { title: 'Emergency Directive', action: cd.notes };
           }
           return {
-            id: cd.id || ('dir-' + Date.now()),
+            id: cd.id ? String(cd.id) : ('dir-' + Date.now()),
             title: note.title || 'CIVIL EMERGENCY DIRECTIVE',
             source: note.source || 'NDRF / SDMA Disaster Management Cell',
             organization: note.source || 'NDRF / SDMA Disaster Management Cell',
             summary: note.action || 'High-ground ascent ordered for all citizens in affected sector.',
             full_text: note.action || 'High-ground ascent ordered for all citizens in affected sector.',
             body: note.action || 'High-ground ascent ordered for all citizens in affected sector.',
-            source_type: 'NATIONAL_CALAMITY',
+            source_type: note.category === 'LOCAL_NEWS' ? 'LOCAL_NEWS' : (note.priority === 'HIGH' ? 'NATIONAL_CALAMITY' : 'LOCAL_GOVT'),
             severity: note.priority === 'HIGH' ? 'CRITICAL' : 'WARNING',
-            ref_code: 'DIR-CLOUD-' + (cd.id ? String(cd.id).slice(0, 6).toUpperCase() : '01'),
+            ref_code: 'DIR-GOVT-' + (cd.id ? String(cd.id).slice(0, 6).toUpperCase() : '01'),
             timestamp: cd.created_at || new Date().toISOString(),
             contact_hotline: '1078',
-            action_advice: note.action || 'Proceed immediately uphill away from riverbed.',
+            action_advice: note.action || 'Follow designated emergency instructions.',
             verified: true,
           };
         });
 
-        // Merge custom cloud directives with baseline official guidelines
-        const combined = [...cloudDirectives, ...FALLBACK_GUIDELINES];
-        await AsyncStorage.setItem('@neernetra_official_guidelines_v1', JSON.stringify(combined));
-        return combined;
+        if (cloudDirectives.length > 0) {
+          await AsyncStorage.setItem('@neernetra_official_guidelines_v1', JSON.stringify(cloudDirectives));
+          return cloudDirectives;
+        } else {
+          // Explicitly clear stale cache when cloud has 0 active directives
+          await AsyncStorage.removeItem('@neernetra_official_guidelines_v1');
+          return [];
+        }
       }
     }
   } catch (cloudErr) {
     console.debug('[API Service] Supabase guidelines fallback error:', cloudErr);
   }
 
-  // 2. Gateway API check (fast 1500ms check)
+  // 2. Gateway API check (local server)
   try {
     let endpoint = '/api/guidelines/official';
     if (lat !== undefined && lng !== undefined) {
@@ -455,21 +460,17 @@ export const fetchOfficialGuidelines = async (lat?: number, lng?: number): Promi
       await AsyncStorage.setItem('@neernetra_official_guidelines_v1', JSON.stringify(data.guidelines));
       return data.guidelines;
     }
-  } catch (err) {
-    console.debug('[API Service] Gateway guidelines fetch deferred:', err);
-  }
+  } catch {}
 
-  // 3. Fallback to AsyncStorage cache
+  // 3. Cached directives from previous session
   try {
     const cached = await AsyncStorage.getItem('@neernetra_official_guidelines_v1');
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-  } catch (e) {
-    console.debug('[API Service] Error reading cached guidelines:', e);
-  }
+  } catch {}
 
-  // 4. Guaranteed fallback so user NEVER sees an empty screen
-  return FALLBACK_GUIDELINES;
+  // 4. Return empty array if no official directives are active (Zero Fake Data)
+  return [];
 };

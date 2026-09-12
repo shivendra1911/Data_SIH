@@ -7,6 +7,7 @@ import {
 } from "@/lib/constants";
 import { computeAlgorithmicSafeSpace } from "@/lib/safeSpaceAlgorithm";
 import { EvacuationGuidelines, HazardZone } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 
 // Unified global in-memory store for manual guidelines and custom directives
 declare global {
@@ -165,6 +166,30 @@ export async function POST(req: NextRequest) {
         target_nodes_count: 1420,
         delivery_rate_pct: 99.1,
       });
+    }
+
+    // Sync to Supabase Cloud for mobile devices
+    try {
+      await supabase.from("sos_alerts").insert({
+        device_id: "GOVT_DIRECTIVE",
+        lat: zone.center[0],
+        lng: zone.center[1],
+        sos_type: "GOVT_DIRECTIVE",
+        status: "ACTIVE",
+        battery_level: 100,
+        notes: JSON.stringify({
+          id: `manual-guide-${Date.now().toString(36)}`,
+          title: body.title || `MANUAL DIRECTIVE: ${zone.name}`,
+          action: newGuidelines.immediate_actions.join(" • ") || "Custom evacuation instructions broadcasted by command center.",
+          priority: "HIGH",
+          category: "MANUAL_DIRECTIVE",
+          zone_id: zoneId,
+          created_at: new Date().toISOString(),
+        }),
+      });
+      console.log("[Guidelines API] Manual directive synced to Supabase Cloud!");
+    } catch (sbErr) {
+      console.warn("[Guidelines API] Supabase insert fallback:", sbErr);
     }
 
     return NextResponse.json(
