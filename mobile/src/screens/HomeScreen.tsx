@@ -285,8 +285,10 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top Header with App Logo, Phone Model, and Network Status */}
+      {/* Top Header with App Logo, Phone Model, Network Status, and Tab Switcher */}
       <TopPillNav
+        activeTab={currentTab}
+        onTabChange={(tab) => setCurrentTab(tab)}
         networkMode={networkMode}
         topInset={insets.top}
         phoneModel={getDeviceModelName()}
@@ -350,82 +352,47 @@ export const HomeScreen: React.FC = () => {
         />
       )}
 
-      <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={{
-            headerShown: false,
-            tabBarStyle: [
-              styles.tabBar,
-              {
-                height: 56 + Math.max(insets.bottom, 12),
-                paddingBottom: Math.max(insets.bottom, 8),
-              },
-            ],
-            tabBarActiveTintColor: '#1C1F24',
-            tabBarInactiveTintColor: '#8E959E',
-            tabBarLabelStyle: styles.tabLabel,
-          }}
-        >
-          <Tab.Screen
-            name="Status"
-            options={{
-              tabBarIcon: ({ color, size }) => <Activity color={color} size={size} />,
-            }}
-          >
-            {() => (
-              <StatusScreen
-                prediction={prediction}
-                isRedZone={isRedZone}
-                onSOSTrigger={handleSOSTrigger}
-                networkMode={networkMode}
-                onRefresh={loadPrediction}
-              />
-            )}
-          </Tab.Screen>
-
-          <Tab.Screen
-            name="Map"
-            options={{
-              tabBarIcon: ({ color, size }) => <MapIcon color={color} size={size} />,
-            }}
-          >
-            {() => (
-              <MapScreen
-                lastLocation={lastLocation}
-                peers={meshEngine.getConnectedPeers()}
-                isRedZone={isRedZone}
-                networkMode={networkMode}
-              />
-            )}
-          </Tab.Screen>
-
-          <Tab.Screen
-            name="Mesh"
-            options={{
-              tabBarIcon: ({ color, size }) => <Radio color={color} size={size} />,
-            }}
-          >
-            {() => (
-              <MeshScreen
-                peers={meshEngine.getConnectedPeers()}
-                networkMode={networkMode}
-                onInitiateCall={(peer: any) => {
-                  (bleEngine as any).initiateCall(peer.id);
-                  setActiveCallPeer(peer);
-                }}
-              />
-            )}
-          </Tab.Screen>
-
-          <Tab.Screen
-            name="Directives"
-            options={{
-              tabBarIcon: ({ color, size }) => <ShieldAlert color={color} size={size} />,
-            }}
-            component={GuidelinesScreen}
+      {/* Screen Container without Bottom Navigation Bar */}
+      <View style={styles.screenBody}>
+        {currentTab === 'status' && (
+          <StatusScreen
+            prediction={prediction}
+            isRedZone={isRedZone}
+            onSOSTrigger={handleSOSTrigger}
+            networkMode={networkMode}
+            onRefresh={loadPrediction}
+            onNavigate={(tab) => setCurrentTab(tab)}
           />
-        </Tab.Navigator>
-      </NavigationContainer>
+        )}
+
+        {currentTab === 'map' && (
+          <MapScreen
+            lastLocation={lastLocation}
+            peers={meshEngine.getConnectedPeers()}
+            isRedZone={isRedZone}
+            networkMode={networkMode}
+            onBack={() => setCurrentTab('status')}
+          />
+        )}
+
+        {currentTab === 'mesh' && (
+          <MeshScreen
+            peers={meshEngine.getConnectedPeers()}
+            networkMode={networkMode}
+            onInitiateCall={(peer: any) => {
+              (bleEngine as any).initiateCall(peer.id);
+              setActiveCallPeer(peer);
+            }}
+            onBack={() => setCurrentTab('status')}
+          />
+        )}
+
+        {currentTab === 'directives' && (
+          <GuidelinesScreen
+            onBack={() => setCurrentTab('status')}
+          />
+        )}
+      </View>
 
       <RedZoneAlertOverlay
         visible={showRedAlertOverlay}
@@ -461,18 +428,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9F5',
   },
-  tabBar: {
-    backgroundColor: '#F8F9F5',
-    borderTopColor: '#E8EBE2',
-    borderTopWidth: 1,
-    height: 70,
-    paddingBottom: 12,
-    paddingTop: 8,
-    elevation: 4,
-  },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+  screenBody: {
+    flex: 1,
   },
   forcedSirenBanner: {
     backgroundColor: '#dc2626',

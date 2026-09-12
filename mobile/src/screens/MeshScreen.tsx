@@ -35,6 +35,7 @@ interface MeshScreenProps {
   isDisasterConfirmed?: boolean;
   networkMode?: any;
   onInitiateCall?: (peer: any) => void;
+  onBack?: () => void;
 }
 
 const maskPhone = (phone?: string) => {
@@ -482,25 +483,31 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers, isDisasterConfirm
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Action Row */}
+        {/* Pastel Action Row (Inspiration Bento Styling) */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setShowCallModal(true)}>
-            <PhoneCall size={20} color="#fff" />
-            <Text style={styles.actionText}>BLE Call</Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.btnCall]}
+            onPress={() => setShowCallModal(true)}
+            activeOpacity={0.84}
+          >
+            <PhoneCall size={18} color="#2A402D" />
+            <Text style={[styles.actionText, { color: '#2A402D' }]}>BLE Call</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0ea5e9' }]}
+            style={[styles.actionBtn, styles.btnMsg]}
             onPress={() => setShowMessageModal(true)}
+            activeOpacity={0.84}
           >
-            <MessageCircle size={20} color="#fff" />
-            <Text style={styles.actionText}>Message</Text>
+            <MessageCircle size={18} color="#253545" />
+            <Text style={[styles.actionText, { color: '#253545' }]}>Message</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#8b5cf6' }]}
+            style={[styles.actionBtn, styles.btnChain]}
             onPress={handleChainReport}
+            activeOpacity={0.84}
           >
-            <Activity size={20} color="#fff" />
-            <Text style={styles.actionText}>Chain Info</Text>
+            <Activity size={18} color="#3B2D64" />
+            <Text style={[styles.actionText, { color: '#3B2D64' }]}>Chain Info</Text>
           </TouchableOpacity>
         </View>
 
@@ -531,13 +538,15 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers, isDisasterConfirm
 // ─────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 100,
+    paddingBottom: 40,
+    backgroundColor: '#F8F9F5',
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginHorizontal: 16,
-    marginVertical: 12,
+    marginTop: 14,
+    marginBottom: 6,
     gap: 10,
   },
   actionBtn: {
@@ -545,35 +554,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10b981',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 18,
     gap: 6,
-    elevation: 3,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  btnCall: {
+    backgroundColor: '#D8E6D5',
+    borderColor: '#C4DAC0',
+  },
+  btnMsg: {
+    backgroundColor: '#CFDEEA',
+    borderColor: '#BED0DE',
+  },
+  btnChain: {
+    backgroundColor: '#EAE6F7',
+    borderColor: '#DCD6F0',
   },
   actionText: {
-    color: '#fff',
-    fontWeight: '700',
+    fontWeight: '800',
     fontSize: 12,
   },
   bottomPadding: {
-    height: 60,
+    height: 40,
   },
 });
 
 const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(28, 31, 36, 0.55)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#0f172a',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#F8F9F5',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 36,
     maxHeight: '85%',
   },
   header: {
@@ -584,15 +608,22 @@ const modalStyles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: '#f8fafc',
-    fontSize: 16,
+    color: '#1C1F24',
+    fontSize: 17,
     fontWeight: '800',
   },
   closeBtn: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EBE2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionLabel: {
-    color: '#94a3b8',
+    color: '#5A6570',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -600,29 +631,34 @@ const modalStyles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   peerList: {
-    maxHeight: 200,
+    maxHeight: 220,
     marginBottom: 8,
   },
   peerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 12,
     marginBottom: 8,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E8EBE2',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   peerRowSelected: {
-    borderColor: '#0ea5e9',
-    backgroundColor: '#0c2d4a',
+    borderColor: '#0284c7',
+    backgroundColor: '#F0F9FF',
   },
   peerAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1d4ed8',
+    backgroundColor: '#059669',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -632,17 +668,17 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
   },
   peerName: {
-    color: '#f8fafc',
-    fontWeight: '700',
+    color: '#1C1F24',
+    fontWeight: '800',
     fontSize: 13,
   },
   peerMeta: {
-    color: '#64748b',
+    color: '#707A84',
     fontSize: 11,
     marginTop: 2,
   },
   selectedBadge: {
-    backgroundColor: '#0ea5e9',
+    backgroundColor: '#1E2124',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -656,31 +692,33 @@ const modalStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#064e3b',
+    backgroundColor: '#D8E6D5',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   callBadgeText: {
-    color: '#34d399',
+    color: '#2A402D',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   emptyBox: {
     alignItems: 'center',
     paddingVertical: 24,
     gap: 8,
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E8EBE2',
   },
   emptyText: {
-    color: '#94a3b8',
+    color: '#1C1F24',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   emptySubText: {
-    color: '#475569',
+    color: '#707A84',
     fontSize: 11,
     textAlign: 'center',
     paddingHorizontal: 16,
@@ -693,18 +731,18 @@ const modalStyles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: '#1e293b',
-    color: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    color: '#1C1F24',
+    borderRadius: 14,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E8EBE2',
   },
   sendBtn: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
+    backgroundColor: '#1E2124',
+    borderRadius: 14,
     padding: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -721,43 +759,43 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#1e293b',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E8EBE2',
   },
   modeBtnActive: {
-    backgroundColor: '#10b981',
-    borderColor: '#10b981',
+    backgroundColor: '#1E2124',
+    borderColor: '#1E2124',
   },
   modeBtnActivePhone: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: '#1E2124',
+    borderColor: '#1E2124',
   },
   modeBtnText: {
-    color: '#64748b',
+    color: '#5A6570',
     fontSize: 11,
     fontWeight: '700',
   },
   quickDialRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E8EBE2',
     gap: 8,
   },
   quickDialLabel: {
     flex: 1,
-    color: '#f8fafc',
+    color: '#1C1F24',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   quickDialNumber: {
-    color: '#10b981',
+    color: '#059669',
     fontWeight: '800',
     fontSize: 14,
     marginRight: 8,

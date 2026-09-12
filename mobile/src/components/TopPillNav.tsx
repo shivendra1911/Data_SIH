@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { ShieldCheck, Wifi, Radio, AlertTriangle, ChevronDown } from 'lucide-react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { ShieldCheck, Wifi, Radio, AlertTriangle, ChevronDown, ChevronLeft } from 'lucide-react-native';
 
 export type CitizenTab = 'status' | 'mesh' | 'map' | 'directives';
 
@@ -25,6 +25,8 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 export const TopPillNav: React.FC<TopPillNavProps> = ({
+  activeTab = 'status',
+  onTabChange,
   networkMode,
   topInset = 0,
   phoneModel,
@@ -35,34 +37,73 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
   const ModeIcon =
     networkMode === 'ONLINE' ? Wifi : networkMode === 'BLE_MESH' ? Radio : AlertTriangle;
 
+  const isHome = activeTab === 'status';
+
+  // Dynamic header title & subtitle depending on active tab
+  let screenTitle = 'NeerNetra';
+  let screenSubtitle = phoneModel ? `${phoneModel}: Bharthia, UP` : 'Sector: Bharthia, UP';
+
+  if (activeTab === 'map') {
+    screenTitle = 'Offline GIS Map';
+    screenSubtitle = 'Yamuna Basin • Mathura Sector';
+  } else if (activeTab === 'mesh') {
+    screenTitle = 'Decentralized Mesh';
+    screenSubtitle = 'Off-Grid Walkie & Peer Relay';
+  } else if (activeTab === 'directives') {
+    screenTitle = 'Directives & Alerts';
+    screenSubtitle = 'NDRF & Civil Defense Orders';
+  }
+
   return (
     <View style={[styles.container, { paddingTop: Math.max(topInset, 12) + 4 }]}>
       {/* Left Circle Icon Action Buttons */}
       <View style={styles.leftGroup}>
-        <View style={styles.circleBtn}>
-          <Image
-            source={require('../../assets/logo_emblem.png')}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </View>
-        <View style={styles.circleBtn}>
-          <Radio size={18} color="#475569" />
-        </View>
+        {!isHome ? (
+          <TouchableOpacity
+            style={styles.circleBtn}
+            onPress={() => onTabChange?.('status')}
+            activeOpacity={0.7}
+          >
+            <ChevronLeft size={22} color="#1C1F24" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.circleBtn}
+            activeOpacity={0.9}
+          >
+            <Image
+              source={require('../../assets/logo_emblem.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={styles.circleBtn}
+          onPress={() => onTabChange?.(activeTab === 'mesh' ? 'status' : 'mesh')}
+          activeOpacity={0.7}
+        >
+          <Radio size={18} color={activeTab === 'mesh' ? '#059669' : '#475569'} />
+        </TouchableOpacity>
       </View>
 
       {/* Center Branding & Sector Location */}
       <View style={styles.centerBlock}>
         <View style={styles.titleRow}>
-          <Text style={styles.brandTitle}>NeerNetra</Text>
-          <ShieldCheck size={15} color="#059669" style={styles.shieldIcon} />
+          <Text style={styles.brandTitle}>{screenTitle}</Text>
+          {isHome && <ShieldCheck size={15} color="#059669" style={styles.shieldIcon} />}
         </View>
-        <View style={styles.subtitleRow}>
+        <TouchableOpacity
+          style={styles.subtitleRow}
+          onPress={() => !isHome && onTabChange?.('status')}
+          activeOpacity={0.8}
+        >
           <Text style={styles.brandSubtitle} numberOfLines={1}>
-            {phoneModel ? `${phoneModel}: Bharthia, UP` : 'Sector: Bharthia, UP'}
+            {screenSubtitle}
           </Text>
           <ChevronDown size={13} color="#5A6570" style={{ marginLeft: 2 }} />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Right Circle Status Button */}
