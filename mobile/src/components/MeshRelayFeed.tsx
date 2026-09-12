@@ -20,7 +20,7 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Radio size={18} color="#38bdf8" />
+          <Radio size={18} color="#1C1F24" />
           <Text style={styles.title}>ACTIVE BLUETOOTH MESH RELAYS</Text>
         </View>
         <View style={styles.badge}>
@@ -35,7 +35,7 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
       <View style={styles.listContainer}>
         {list.length === 0 ? (
           <View style={{ paddingVertical: 14, alignItems: 'center' }}>
-            <Text style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
+            <Text style={{ color: '#707A84', fontSize: 12, textAlign: 'center' }}>
               Scanning nearby BLE frequencies... Peer nodes appear here automatically when in proximity.
             </Text>
           </View>
@@ -44,7 +44,7 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
             <View key={item.id} style={styles.relayRow}>
               <View style={styles.leftCol}>
                 <View style={styles.iconCircle}>
-                  <Smartphone size={16} color="#64748b" />
+                  <Smartphone size={16} color="#5A6570" />
                 </View>
                 <View>
                   <Text style={styles.relayName}>{item.name}</Text>
@@ -66,18 +66,18 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 18,
     marginHorizontal: 16,
     marginVertical: 10,
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: '#E8EBE2',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -93,23 +93,25 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: 0.8,
+    color: '#1C1F24',
+    letterSpacing: 0.6,
   },
   badge: {
-    backgroundColor: '#1e3a8a',
+    backgroundColor: '#F1F3EE',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E4D8',
   },
   badgeText: {
-    color: '#60a5fa',
+    color: '#1C1F24',
     fontSize: 10,
     fontWeight: '800',
   },
   desc: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#5A6570',
     marginBottom: 14,
     lineHeight: 16,
   },
@@ -120,11 +122,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#F8F9F5',
     borderRadius: 14,
-    padding: 10,
+    padding: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E8EBE2',
   },
   leftCol: {
     flexDirection: 'row',
@@ -135,17 +137,19 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E8EBE2',
   },
   relayName: {
-    color: '#f8fafc',
+    color: '#1C1F24',
     fontSize: 13,
     fontWeight: '700',
   },
   relayMeta: {
-    color: '#94a3b8',
+    color: '#707A84',
     fontSize: 10,
     marginTop: 2,
   },
@@ -153,12 +157,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   signalVal: {
-    color: '#34d399',
+    color: '#059669',
     fontSize: 11,
     fontWeight: '800',
   },
   statusText: {
-    color: '#64748b',
+    color: '#5A6570',
     fontSize: 9,
     marginTop: 2,
   },

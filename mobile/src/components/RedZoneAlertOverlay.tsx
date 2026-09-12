@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Vibration, Alert } from 'react-native';
+import * as Speech from 'expo-speech';
 import { ZonePrediction, LocationSyncPayload } from '../types';
-import { AlertOctagon, ShieldAlert, Navigation, Phone } from 'lucide-react-native';
+import { AlertOctagon, ShieldAlert, Navigation, ShieldCheck } from 'lucide-react-native';
 
 interface RedZoneAlertOverlayProps {
   visible: boolean;
@@ -36,6 +37,34 @@ export const RedZoneAlertOverlay: React.FC<RedZoneAlertOverlayProps> = ({
     : '94.5';
   const displayTrigger = triggerReason || prediction?.primary_trigger || 'Civil Defense Emergency Siren Dispatched by NDRF / SDMA Web Command';
 
+  const handlePressSOS = () => {
+    try {
+      Vibration.vibrate([0, 500, 200, 500]);
+      Speech.speak('Emergency distress beacon dispatched. Rescue teams notified.');
+    } catch {}
+    onTriggerSOS();
+    Alert.alert(
+      '🚨 Distress Beacon Dispatched',
+      'Immediate SOS transmitted to NDRF Command Center and nearby BLE mesh relays. Continuous 5-second GPS tracking activated.'
+    );
+  };
+
+  const handlePressSafe = () => {
+    try {
+      Vibration.vibrate([0, 80, 50, 80]);
+      Speech.speak('Safety verified. You are marked as safe.');
+    } catch {}
+    if (onConfirmSafe) {
+      onConfirmSafe();
+    } else {
+      onDismiss();
+    }
+    Alert.alert(
+      '✔ Safety Confirmed',
+      'You are marked as SAFE on the Civil Defense Command Center.'
+    );
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
@@ -65,9 +94,16 @@ export const RedZoneAlertOverlay: React.FC<RedZoneAlertOverlayProps> = ({
             </View>
           )}
 
-          <TouchableOpacity style={styles.sosButton} onPress={onTriggerSOS} activeOpacity={0.8}>
-            <ShieldAlert size={28} color="#ffffff" />
+          {/* Primary SOS Trigger Button */}
+          <TouchableOpacity style={styles.sosButton} onPress={handlePressSOS} activeOpacity={0.82}>
+            <ShieldAlert size={24} color="#ffffff" />
             <Text style={styles.sosButtonText}>SEND IMMEDIATE SOS BEACON</Text>
+          </TouchableOpacity>
+
+          {/* Secondary Safe Confirmation Button */}
+          <TouchableOpacity style={styles.safeButton} onPress={handlePressSafe} activeOpacity={0.82}>
+            <ShieldCheck size={22} color="#ffffff" />
+            <Text style={styles.safeButtonText}>✔ I AM SAFE — VERIFY SAFE STATUS</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.7}>
@@ -162,7 +198,7 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#dc2626',
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -174,6 +210,24 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '900',
+  },
+  safeButton: {
+    width: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: '#6ee7b7',
+    marginTop: 10,
+  },
+  safeButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   dismissBtn: {
     marginTop: 14,

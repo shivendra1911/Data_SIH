@@ -483,31 +483,31 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers, isDisasterConfirm
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Pastel Action Row (Inspiration Bento Styling) */}
+        {/* Clean Neutral Action Row (Inspiration Styling) */}
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnCall]}
+            style={[styles.actionBtn, styles.actionBtnPrimary]}
             onPress={() => setShowCallModal(true)}
             activeOpacity={0.84}
           >
-            <PhoneCall size={18} color="#2A402D" />
-            <Text style={[styles.actionText, { color: '#2A402D' }]}>BLE Call</Text>
+            <PhoneCall size={16} color="#ffffff" strokeWidth={2.2} />
+            <Text style={[styles.actionText, { color: '#ffffff' }]}>BLE Call</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnMsg]}
+            style={styles.actionBtn}
             onPress={() => setShowMessageModal(true)}
             activeOpacity={0.84}
           >
-            <MessageCircle size={18} color="#253545" />
-            <Text style={[styles.actionText, { color: '#253545' }]}>Message</Text>
+            <MessageCircle size={16} color="#1C1F24" strokeWidth={2} />
+            <Text style={styles.actionText}>Message</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnChain]}
+            style={styles.actionBtn}
             onPress={handleChainReport}
             activeOpacity={0.84}
           >
-            <Activity size={18} color="#3B2D64" />
-            <Text style={[styles.actionText, { color: '#3B2D64' }]}>Chain Info</Text>
+            <Activity size={16} color="#1C1F24" strokeWidth={2} />
+            <Text style={styles.actionText}>Chain Info</Text>
           </TouchableOpacity>
         </View>
 
@@ -555,30 +555,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 18,
+    borderRadius: 16,
     gap: 6,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
+    borderColor: '#E8EBE2',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 2,
     elevation: 1,
   },
-  btnCall: {
-    backgroundColor: '#D8E6D5',
-    borderColor: '#C4DAC0',
-  },
-  btnMsg: {
-    backgroundColor: '#CFDEEA',
-    borderColor: '#BED0DE',
-  },
-  btnChain: {
-    backgroundColor: '#EAE6F7',
-    borderColor: '#DCD6F0',
+  actionBtnPrimary: {
+    backgroundColor: '#1E2124',
+    borderColor: '#1E2124',
   },
   actionText: {
     fontWeight: '800',
     fontSize: 12,
+    color: '#1C1F24',
   },
   bottomPadding: {
     height: 40,

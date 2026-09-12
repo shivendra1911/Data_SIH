@@ -36,6 +36,7 @@ interface MapScreenProps {
   isRedZone: boolean;
   networkMode?: 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
   onBack?: () => void;
+  targetHavenCoords?: { lat: number; lng: number } | null;
 }
 
 const RNCWebView: any = WebView;
@@ -45,6 +46,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   peers,
   isRedZone,
   networkMode = 'ONLINE',
+  onBack,
+  targetHavenCoords,
 }) => {
   const webViewRef = useRef<any>(null);
 
@@ -80,14 +83,19 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   }, [isOffline]);
 
   useEffect(() => {
-    setShowEvacCard(isRedZone);
-    if (isRedZone) {
+    if (targetHavenCoords) {
+      setShowEvacCard(true);
+      sendGpsToMap(targetHavenCoords.lat, targetHavenCoords.lng, 10, true);
+      loadSafeRoute(currentLat, currentLng);
+    } else if (isRedZone) {
+      setShowEvacCard(true);
       loadSafeRoute(currentLat, currentLng);
     } else {
+      setShowEvacCard(false);
       setSafeRouteData(null);
       sendMessageToWebView({ type: 'CLEAR_ROUTE' });
     }
-  }, [isRedZone]);
+  }, [isRedZone, targetHavenCoords]);
 
   // Live GPS tracking state
   const [liveCoords, setLiveCoords] = useState<{

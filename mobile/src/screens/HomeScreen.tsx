@@ -77,6 +77,7 @@ export const HomeScreen: React.FC = () => {
 
   // Active top navigation tab state
   const [currentTab, setCurrentTab] = useState<CitizenTab>('status');
+  const [targetHavenCoords, setTargetHavenCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // BLE Intercom / Calling States
   const [activeCallPeer, setActiveCallPeer] = useState<{
@@ -361,7 +362,11 @@ export const HomeScreen: React.FC = () => {
             onSOSTrigger={handleSOSTrigger}
             networkMode={networkMode}
             onRefresh={loadPrediction}
-            onNavigate={(tab) => setCurrentTab(tab)}
+            onNavigate={(tab, coords) => {
+              if (coords) setTargetHavenCoords(coords);
+              setCurrentTab(tab);
+            }}
+            onConfirmSafe={() => handleConfirmSafe(false)}
           />
         )}
 
@@ -371,6 +376,7 @@ export const HomeScreen: React.FC = () => {
             peers={meshEngine.getConnectedPeers()}
             isRedZone={isRedZone}
             networkMode={networkMode}
+            targetHavenCoords={targetHavenCoords}
             onBack={() => setCurrentTab('status')}
           />
         )}
@@ -399,6 +405,10 @@ export const HomeScreen: React.FC = () => {
         zoneName={forcedSiren?.zoneName || prediction?.zone_name || 'Civil Emergency Hazard Zone'}
         floodProbability={forcedSiren ? 88.5 : prediction?.flood_probability_percent || 80.0}
         triggerReason={forcedSiren?.message || prediction?.primary_trigger || 'Civil Defense Emergency Siren Dispatched by NDRF / SDMA'}
+        onTriggerSOS={() => {
+          handleSOSTrigger('TRAPPED');
+          setShowRedAlertOverlay(false);
+        }}
         onConfirmSafe={() => {
           if (forcedSiren?.dispatchedAt) {
             mobileSirenListener.markSirenSilenced(forcedSiren.dispatchedAt);

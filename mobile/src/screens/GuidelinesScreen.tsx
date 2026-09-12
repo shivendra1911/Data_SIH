@@ -82,26 +82,26 @@ export const GuidelinesScreen: React.FC<GuidelinesScreenProps> = ({ onBack }) =>
   const getSeverityBadgeStyle = (severity: string) => {
     switch (severity) {
       case 'CRITICAL':
-        return { bg: '#fee2e2', text: '#dc2626', border: '#f87171' };
+        return { bg: '#FCECE9', text: '#8A2C24', border: '#F5C7C0' };
       case 'WARNING':
-        return { bg: '#ffedd5', text: '#ea580c', border: '#fb923c' };
+        return { bg: '#F8F2E8', text: '#7A5210', border: '#EDE2D0' };
       case 'ADVISORY':
-        return { bg: '#e0f2fe', text: '#0284c7', border: '#38bdf8' };
+        return { bg: '#F1F3EE', text: '#2D3338', border: '#E0E4D8' };
       default:
-        return { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' };
+        return { bg: '#F1F3EE', text: '#2D3338', border: '#E0E4D8' };
     }
   };
 
   const getSourceIcon = (sourceType: string) => {
     switch (sourceType) {
       case 'NATIONAL_CALAMITY':
-        return <ShieldAlert size={14} color="#dc2626" />;
+        return <ShieldAlert size={14} color="#8A2C24" />;
       case 'LOCAL_GOVT':
-        return <Landmark size={14} color="#0284c7" />;
+        return <Landmark size={14} color="#1C1F24" />;
       case 'LOCAL_NEWS':
-        return <Newspaper size={14} color="#8b5cf6" />;
+        return <Newspaper size={14} color="#1C1F24" />;
       default:
-        return <AlertTriangle size={14} color="#f59e0b" />;
+        return <AlertTriangle size={14} color="#7A5210" />;
     }
   };
 
@@ -118,7 +118,7 @@ export const GuidelinesScreen: React.FC<GuidelinesScreenProps> = ({ onBack }) =>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <View style={styles.govtEmblemContainer}>
-            <Landmark size={20} color="#0284c7" />
+            <Landmark size={20} color="#1C1F24" />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <View style={styles.verifiedRow}>
@@ -207,7 +207,7 @@ export const GuidelinesScreen: React.FC<GuidelinesScreenProps> = ({ onBack }) =>
             onPress={() => setActiveTab('LOCAL_GOVT')}
             activeOpacity={0.8}
           >
-            <Landmark size={13} color={activeTab === 'LOCAL_GOVT' ? '#fff' : '#0284c7'} style={{ marginRight: 4 }} />
+            <Landmark size={13} color={activeTab === 'LOCAL_GOVT' ? '#fff' : '#1C1F24'} style={{ marginRight: 4 }} />
             <Text style={[styles.tabText, activeTab === 'LOCAL_GOVT' && styles.tabTextActive]}>
               District / State ({countByTab.LOCAL_GOVT})
             </Text>
@@ -218,7 +218,7 @@ export const GuidelinesScreen: React.FC<GuidelinesScreenProps> = ({ onBack }) =>
             onPress={() => setActiveTab('LOCAL_NEWS')}
             activeOpacity={0.8}
           >
-            <Newspaper size={13} color={activeTab === 'LOCAL_NEWS' ? '#fff' : '#8b5cf6'} style={{ marginRight: 4 }} />
+            <Newspaper size={13} color={activeTab === 'LOCAL_NEWS' ? '#fff' : '#1C1F24'} style={{ marginRight: 4 }} />
             <Text style={[styles.tabText, activeTab === 'LOCAL_NEWS' && styles.tabTextActive]}>
               Local News ({countByTab.LOCAL_NEWS})
             </Text>
@@ -229,7 +229,7 @@ export const GuidelinesScreen: React.FC<GuidelinesScreenProps> = ({ onBack }) =>
       {/* ─── Notification Feed List ─── */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0284c7" />
+          <ActivityIndicator size="large" color="#1E2124" />
           <Text style={styles.loadingText}>Fetching Government Directives & News...</Text>
         </View>
       ) : (
@@ -604,18 +604,18 @@ const styles = StyleSheet.create({
   actionBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: '#F4F2EB',
+    borderRadius: 14,
+    padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: '#E2DDD1',
   },
   actionText: {
     flex: 1,
-    color: '#92400E',
-    fontSize: 11,
-    lineHeight: 16,
+    color: '#2D281E',
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '600',
   },
   expandedSection: {
@@ -628,9 +628,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   officialOrderHeader: {
-    color: '#0284c7',
-    fontSize: 10,
-    fontWeight: '800',
+    color: '#1C1F24',
+    fontSize: 11,
+    fontWeight: '900',
     letterSpacing: 0.8,
     marginBottom: 4,
   },

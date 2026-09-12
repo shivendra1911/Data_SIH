@@ -2,6 +2,7 @@ import { Vibration, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getLastKnownLocation } from './locationTracker';
 
 const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
 const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
@@ -292,6 +293,35 @@ class MobileSirenListener {
             noteObj = latest.notes ? JSON.parse(latest.notes) : {};
           } catch {
             noteObj = { message: latest.notes };
+          }
+
+          // Proximity guard: Don't sound alarms on citizens who are far from the disaster zone (> 40km)
+          if (latest.lat && latest.lng) {
+            try {
+              const loc = await getLastKnownLocation();
+              if (loc && loc.lat && loc.lng) {
+                const dLat = (latest.lat - loc.lat) * (Math.PI / 180);
+                const dLng = (latest.lng - loc.lng) * (Math.PI / 180);
+                const a =
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(loc.lat * (Math.PI / 180)) *
+                    Math.cos(latest.lat * (Math.PI / 180)) *
+                    Math.sin(dLng / 2) *
+                    Math.sin(dLng / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const distKm = 6371 * c;
+
+                const isUniversal =
+                  noteObj.action === 'BROADCAST_ALL' ||
+                  noteObj.zone_id === 'all_sectors' ||
+                  noteObj.is_universal === true;
+
+                if (distKm > 40 && !isUniversal) {
+                  // The siren is in another district / valley. Citizen in safe zone should not receive false alarms.
+                  return;
+                }
+              }
+            } catch {}
           }
 
           // 3. ONLY trigger once for this specific siren dispatch!
