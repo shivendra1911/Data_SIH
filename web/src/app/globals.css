@@ -12,7 +12,7 @@
 
 @layer base {
   :root {
-    /* Corwdy Color Tokens */
+    /* Corwdy Pure Neutral Color Tokens */
     --clr-bg: #161a20;
     --clr-surface: #1b2027;
     --clr-surface-2: #212730;
@@ -22,15 +22,15 @@
     --clr-text-subtle: rgba(255, 255, 255, 0.5);
     --clr-accent: #ffffff;
     --clr-accent-light: rgba(255, 255, 255, 0.1);
-    --clr-accent-2: #6366f1;
-    --clr-danger: #dc2626;
-    --clr-danger-light: rgba(220, 38, 38, 0.15);
-    --clr-success: #10b981;
-    --clr-success-light: rgba(16, 185, 129, 0.15);
-    --clr-warning: #f59e0b;
-    --clr-warning-light: rgba(245, 158, 11, 0.15);
-    --clr-info: #06b6d4;
-    --clr-info-light: rgba(6, 182, 212, 0.15);
+    --clr-accent-2: #ffffff;
+    --clr-danger: #ffffff;
+    --clr-danger-light: rgba(255, 255, 255, 0.15);
+    --clr-success: #ffffff;
+    --clr-success-light: rgba(255, 255, 255, 0.1);
+    --clr-warning: #ffffff;
+    --clr-warning-light: rgba(255, 255, 255, 0.12);
+    --clr-info: #ffffff;
+    --clr-info-light: rgba(255, 255, 255, 0.1);
     --clr-glare: rgba(255, 255, 255, 0.08);
   }
 
@@ -66,8 +66,8 @@
 }
 
 .tilt-card:hover {
-  box-shadow: 0 20px 40px -15px rgba(124, 58, 237, 0.15),
-              0 4px 12px -2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5),
+              0 0 25px -5px rgba(255, 255, 255, 0.08);
 }
 
 /* Rabto FX Radial Glare Spotlight Cursor Follower */
@@ -115,32 +115,43 @@
    Dot Grid Hero Background (modern-startup-design skill)
    ========================================================= */
 .dot-grid {
-  background-image: radial-gradient(circle, #d1d5db 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 /* =========================================================
-   Status Badge Colors
+   Status Badge Colors — Pure Neutral Corwdy Aesthetic
    ========================================================= */
 .badge-critical {
-  background: var(--clr-danger-light);
-  color: var(--clr-danger);
-  border: 1px solid #fca5a5;
+  background: #ffffff;
+  color: #161a20;
+  font-weight: 700;
+  border: 1px solid #ffffff;
 }
 .badge-warning {
-  background: var(--clr-warning-light);
-  color: var(--clr-warning);
-  border: 1px solid #fcd34d;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
 }
 .badge-safe {
-  background: var(--clr-success-light);
-  color: var(--clr-success);
-  border: 1px solid #86efac;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 .badge-info {
-  background: var(--clr-info-light);
-  color: var(--clr-info);
-  border: 1px solid #7dd3fc;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.badge-neutral-solid {
+  background: #ffffff;
+  color: #161a20;
+  font-weight: 700;
+}
+.badge-neutral-outline {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 /* =========================================================
@@ -199,7 +210,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(220, 38, 38, 0.35);
+  background: rgba(255, 255, 255, 0.25);
   animation: radar-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 .radar-wave-delayed {
@@ -210,17 +221,17 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #dc2626;
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 12px rgba(220, 38, 38, 0.6);
+  background: #ffffff;
+  border: 2px solid #161a20;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
 }
 .radar-dot.safe {
-  background: #16a34a;
-  box-shadow: 0 0 12px rgba(22, 163, 74, 0.6);
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
 }
 .radar-dot.helping {
-  background: #7C3AED;
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
 }
 @keyframes radar-ping {
   0% { transform: scale(0.6); opacity: 0.9; }
@@ -231,9 +242,9 @@
    Custom Scrollbars — Light
    ========================================================= */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #f1f3f5; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-track { background: #161a20; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
 
 /* =========================================================
    Marquee Animation (Lenis-powered partner logos)
@@ -249,16 +260,16 @@
 }
 
 /* =========================================================
-   Utility: Gradient Text
+   Utility: Gradient Text — Pure Corwdy Monochrome
    ========================================================= */
 .gradient-text {
-  background: linear-gradient(135deg, #7C3AED 0%, #6366f1 40%, #0284c7 100%);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.65) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 .gradient-text-danger {
-  background: linear-gradient(135deg, #dc2626 0%, #7C3AED 100%);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.85) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -276,8 +287,8 @@
 }
 .btn-danger {
   @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full font-bold text-[11px] uppercase tracking-[2.5px] text-white
-         bg-red-600 hover:bg-white hover:text-red-600 active:scale-95 border border-red-500
-         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2
+         bg-white/10 hover:bg-white hover:text-[#161a20] active:scale-95 border border-white/20
+         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2
          transition-all duration-200 ease-out min-h-[42px];
   font-family: var(--font-montserrat), sans-serif;
 }
@@ -424,7 +435,7 @@
 }
 
 .btn-solid-danger {
-  background-color: rgba(220, 38, 38, 0.18) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
   color: #ffffff !important;
   font-family: var(--font-montserrat), 'Montserrat', sans-serif !important;
   font-weight: 700 !important;
@@ -434,7 +445,7 @@
   font-size: 0.6875rem !important;
   letter-spacing: 2.5px !important;
   text-transform: uppercase !important;
-  border: 1px solid rgba(239, 68, 68, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -443,18 +454,18 @@
   cursor: pointer !important;
 }
 .btn-solid-danger:hover {
-  background-color: #dc2626 !important;
-  color: #ffffff !important;
-  border-color: #ef4444 !important;
+  background-color: #ffffff !important;
+  color: #161a20 !important;
+  border-color: #ffffff !important;
   transform: scale(1.03) !important;
-  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4) !important;
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2) !important;
 }
 .btn-solid-danger:active {
   transform: scale(0.97) !important;
 }
 
 .btn-solid-emerald {
-  background-color: rgba(16, 185, 129, 0.16) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
   color: #ffffff !important;
   font-family: var(--font-montserrat), 'Montserrat', sans-serif !important;
   font-weight: 700 !important;
@@ -464,7 +475,7 @@
   font-size: 0.6875rem !important;
   letter-spacing: 2.5px !important;
   text-transform: uppercase !important;
-  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -473,11 +484,11 @@
   cursor: pointer !important;
 }
 .btn-solid-emerald:hover {
-  background-color: #10b981 !important;
+  background-color: #ffffff !important;
   color: #161a20 !important;
-  border-color: #10b981 !important;
+  border-color: #ffffff !important;
   transform: scale(1.03) !important;
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2) !important;
 }
 .btn-solid-emerald:active {
   transform: scale(0.97) !important;

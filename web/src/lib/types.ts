@@ -14,7 +14,9 @@ export type ZoneId =
   | "odisha_mahanadi_01"
   | "himachal_kullu_01"
   | "jk_jhelum_01"
-  | "wb_teesta_01";
+  | "wb_teesta_01"
+  | "live_user_location"
+  | (string & {});
 
 export type ForecastHorizon = "NOW" | "+2H" | "+6H" | "+12H" | "+24H";
 
@@ -54,14 +56,44 @@ export interface CriticalInfrastructure {
 
 export interface PredictionResponse {
   zone_id: string;
+  zone_name?: string;
   flood_probability_percent: number;
   alert_color: AlertColor;
+  risk_level?: "LOW" | "ELEVATED" | "HIGH" | "CRITICAL";
   primary_trigger: string;
+  is_cryo_seismic_glof?: boolean;
   last_updated: string;
   lead_time_minutes: number;
   danger_mark_m: number;
   warning_mark_m: number;
   telemetry?: SensorTelemetry;
+  feature_contributions?: {
+    rainfall: number;
+    soil_saturation: number;
+    slope_factor: number;
+    river_stage: number;
+    seismic_anomaly: number;
+  };
+  recommendation?: string;
+  is_live_internet?: boolean;
+  data_source?: string;
+  active_provider?: string;
+  diagnostics?: Array<{
+    service: string;
+    endpoint: string;
+    status: "ONLINE" | "DEGRADED" | "OFFLINE";
+    latencyMs: number;
+    lastChecked: string;
+    errorMessage?: string;
+    apiKeyUsed?: boolean;
+  }>;
+  raw_details?: {
+    rain_mm_h: number;
+    soil_moisture_vol: number;
+    river_discharge_m3s: number;
+    recent_earthquakes_count: number;
+    max_recent_magnitude: number;
+  };
 }
 
 export interface SOSEvent {
@@ -198,10 +230,11 @@ export interface HazardZone {
   dangerMarkM: number;
   warningMarkM: number;
   telemetry: SensorTelemetry;
-  hydrograph: HydrographPoint[];
-  preventiveDirectives: PreventiveDirective[];
-  infrastructure: CriticalInfrastructure[];
+  hydrograph?: HydrographPoint[];
+  preventiveDirectives?: PreventiveDirective[];
+  infrastructure?: CriticalInfrastructure[];
   epicenter?: DisasterEpicenter;
+  isGLOFSusceptible?: boolean;
 }
 
 export interface ScannedZoneSummary {

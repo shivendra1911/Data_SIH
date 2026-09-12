@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { INDIA_FLOOD_ZONES, SAFE_EVACUATION_ROUTES } from "@/lib/constants";
+import { INDIA_FLOOD_ZONES, getSafeRoutesForZone } from "@/lib/constants";
 import { evaluateAIFloodRisk } from "@/lib/aiEngine";
+import { getLiveTelemetry } from "@/lib/liveTelemetryService";
 import { ScannedZoneSummary, NationalSentinelScan } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +25,26 @@ export async function GET(request: Request) {
 
     const now = Date.now();
 
-    for (const zone of INDIA_FLOOD_ZONES) {
+    // Ingest live internet telemetry for all monitored basins concurrently
+    const liveTelemetryResults = await Promise.all(
+      INDIA_FLOOD_ZONES.map(async (zone) => {
+        try {
+          const res = await getLiveTelemetry(
+            zone.center[0],
+            zone.center[1],
+            zone.telemetry.slope_deg,
+            zone.dangerMarkM
+          );
+          return { zone, telemetry: res.telemetry, isLive: res.isLive };
+        } catch {
+          return { zone, telemetry: zone.telemetry, isLive: false };
+        }
+      })
+    );
+
+    for (const { zone, telemetry, isLive } of liveTelemetryResults) {
       const evalResult = evaluateAIFloodRisk(
-        zone.telemetry,
+        telemetry,
         zone.dangerMarkM,
         zone.warningMarkM
       );
@@ -42,7 +60,7 @@ export async function GET(request: Request) {
         if (!lastDispatch || now - lastDispatch.timestamp > 5 * 60 * 1000) {
           const alertId = `auto-sos-${zone.id}-${Date.now().toString(36)}`;
           const targetNodes = Math.floor(1200 + Math.random() * 450);
-          const safeRoutesForZone = SAFE_EVACUATION_ROUTES[zone.id] || SAFE_EVACUATION_ROUTES["chamoli_01"];
+          const safeRoutesForZone = getSafeRoutesForZone(zone);
           const primarySafeRoute = safeRoutesForZone?.[0];
           const safeRouteText = primarySafeRoute
             ? ` Designated Safe Route: ${primarySafeRoute.route_name} to ${primarySafeRoute.assembly_point_name} (+${primarySafeRoute.elevation_gain_m}m).`
@@ -85,7 +103,7 @@ export async function GET(request: Request) {
         primary_trigger: evalResult.primary_trigger,
         is_cryo_seismic_glof: evalResult.is_cryo_seismic_glof,
         lead_time_minutes: evalResult.lead_time_minutes,
-        river_level_m: zone.telemetry.river_level_m,
+        river_level_m: telemetry.river_level_m,
         danger_mark_m: zone.dangerMarkM,
         auto_dispatched: wasAutoDispatched,
         dispatched_at: dispatchedAtTime,

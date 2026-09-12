@@ -13,10 +13,10 @@ interface FrameBankItem {
   bmp: ImageBitmap;
 }
 
-export const LERP_TAU = 8;
-export const SNAP = 0.002;
-export const LRU_MAX = 24;
-export const LEAD = 24;
+export const LERP_TAU = 32;
+export const SNAP = 0.005;
+export const LRU_MAX = 48;
+export const LEAD = 32;
 export const WATCHDOG = 60000;
 
 
@@ -155,17 +155,28 @@ export function useVideoScrub(videoSrc: string) {
     const updateFrame = () => {
       const dur = durRef.current;
       if (dur > 0) {
-        if (readyRef.current && !revertedRef.current) {
-          const nearestIdx = findNearestIndex(currentRef.current * 1_000_000);
+        const targetTs = currentRef.current * 1_000_000;
+        let drawnFromBank = false;
+
+        if (bankRef.current.length > 0 && !revertedRef.current) {
+          const nearestIdx = findNearestIndex(targetTs);
           if (nearestIdx !== -1) {
-            drawNearestFrame(nearestIdx);
+            const nearestItem = bankRef.current[nearestIdx];
+            const deltaTs = Math.abs(nearestItem.ts - targetTs);
+            // If the bank is fully populated, or nearest frame is within 300ms, draw immediately!
+            if (readyRef.current || deltaTs <= 300_000) {
+              drawNearestFrame(nearestIdx);
+              drawnFromBank = true;
+            }
           }
-        } else {
-          // Fallback video currentTime seeking
+        }
+
+        // If not drawn from bank (e.g. while frame bank is decoding ahead), seek video element smoothly
+        if (!drawnFromBank) {
           const video = videoRef.current;
           if (video) {
             if (!video.seeking) {
-              if (Math.abs(video.currentTime - currentRef.current) > 0.01) {
+              if (Math.abs(video.currentTime - currentRef.current) > 0.02) {
                 video.currentTime = currentRef.current;
               }
             } else {
@@ -217,16 +228,26 @@ export function useVideoScrub(videoSrc: string) {
         targetRef.current = p * dur;
         if (prefersReducedMotion) {
           currentRef.current = targetRef.current;
-          updateFrame();
+        } else {
+          // Immediately advance smoothly on scroll event for instant 60fps responsiveness
+          currentRef.current += (targetRef.current - currentRef.current) * 0.65;
         }
+        updateFrame();
       }
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
+    const lenis = (window as any).__lenis;
+    if (lenis && typeof lenis.on === 'function') {
+      lenis.on('scroll', onScroll);
+    }
     animationFrameId = requestAnimationFrame(tick);
 
     return () => {
       window.removeEventListener('scroll', onScroll);
+      if (lenis && typeof lenis.off === 'function') {
+        lenis.off('scroll', onScroll);
+      }
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
@@ -367,9 +388,6 @@ export function useVideoScrub(videoSrc: string) {
               .then((bmp) => {
                 if (!isDestroyed) {
                   insertSorted({ ts, bmp });
-                  if (!readyRef.current) {
-                    readyRef.current = true;
-                  }
                   // Paint initial frame on canvas immediately
                   if (!paintedRef.current) {
                     const canvas = canvasRef.current;

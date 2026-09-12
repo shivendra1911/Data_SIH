@@ -1,6 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { SAFE_EVACUATION_ROUTES } from "@/lib/constants";
-import { SafeEvacuationRoute } from "@/lib/types";
+import { NextRequest, NextResponse } from "next/server";
+import { INDIA_FLOOD_ZONES, getSafeRoutesForZone } from "@/lib/constants";
+import { HazardZone, SafeEvacuationRoute } from "@/lib/types";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,12 +14,58 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const zoneId = searchParams.get("zone_id") || "chamoli_01";
+  const zoneId = searchParams.get("zone_id") || "live_user_location";
+  const lat = searchParams.get("lat");
+  const lng = searchParams.get("lng");
+  const zoneName = searchParams.get("name") || "Local Sector";
 
-  const routes: SafeEvacuationRoute[] =
-    SAFE_EVACUATION_ROUTES[zoneId] ||
-    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
-    [];
+  let targetZone: HazardZone | undefined;
+  if (lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng))) {
+    targetZone = {
+      id: (zoneId || "custom_location") as any,
+      name: zoneName,
+      district: zoneName.split("(")[0].trim(),
+      center: [parseFloat(lat), parseFloat(lng)],
+      currentRisk: 10,
+      alertColor: "GREEN",
+      leadTimeMinutes: 480,
+      dangerMarkM: 5.0,
+      warningMarkM: 3.5,
+      primaryTrigger: "Live Coordinates",
+      telemetry: {
+        rainfall_mm: 0,
+        soil_moisture_pct: 45,
+        slope_deg: 10,
+        river_level_m: 1.2,
+        seismic_mag: 0,
+      },
+    };
+  } else {
+    targetZone = INDIA_FLOOD_ZONES.find((z) => z.id === zoneId);
+    if (!targetZone) {
+      targetZone = {
+        id: zoneId as any,
+        name: zoneName,
+        district: zoneName,
+        center: [27.4924, 77.6737],
+        currentRisk: 10,
+        alertColor: "GREEN",
+        leadTimeMinutes: 480,
+        dangerMarkM: 5.0,
+        warningMarkM: 3.5,
+        primaryTrigger: "District Center",
+        telemetry: {
+          rainfall_mm: 0,
+          soil_moisture_pct: 45,
+          slope_deg: 10,
+          river_level_m: 1.2,
+          seismic_mag: 0,
+        },
+      };
+    }
+  }
+
+  const routes: SafeEvacuationRoute[] = getSafeRoutesForZone(targetZone);
 
   return NextResponse.json(
     {
@@ -27,7 +73,7 @@ export async function GET(req: NextRequest) {
       zone_id: zoneId,
       total_routes: routes.length,
       routes,
-      elevation_clearance_protocol: "MINIMUM +20M VERTICAL BUFFER ABOVE 100-YR FLOOD LEVEL",
+      elevation_clearance_protocol: "MINIMUM +18M TO +28M VERTICAL BUFFER ABOVE 100-YR FLOOD LEVEL",
       timestamp: new Date().toISOString(),
     },
     { headers: corsHeaders }

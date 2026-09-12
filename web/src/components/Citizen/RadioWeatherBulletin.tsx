@@ -77,51 +77,51 @@ export default function RadioWeatherBulletin({
   };
 
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4">
+    <div className="tilt-card rounded-2xl bg-[#1b2027]/90 border border-white/10 p-5 sm:p-6 shadow-xl space-y-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3.5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center">
-            <Radio className="w-5 h-5 animate-pulse" />
+          <div className="w-10 h-10 rounded-xl bg-white/10 text-white border border-white/15 flex items-center justify-center">
+            <Radio className="w-5 h-5 text-white animate-pulse" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               {b.title}
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/15">
                 AIR BROADCAST
               </span>
             </h2>
-            <p className="text-xs text-slate-400 font-medium">{b.broadcaster}</p>
+            <p className="text-xs text-white/60 font-medium">{b.broadcaster}</p>
           </div>
         </div>
 
         {/* Listen Button */}
         <button
           onClick={handlePlayBulletin}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition min-h-[44px] shadow-lg self-start sm:self-auto ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition min-h-[38px] shadow-sm self-start sm:self-auto ${
             isPlaying
-              ? "bg-amber-500 text-slate-950 ring-4 ring-amber-400/30"
-              : "bg-cyan-600 hover:bg-cyan-500 text-white"
+              ? "bg-white/20 text-white border border-white/30"
+              : "btn-solid-primary"
           }`}
         >
           {isPlaying ? (
             <>
-              <VolumeX className="w-4 h-4 animate-spin" />
+              <VolumeX className="w-3.5 h-3.5" />
               <span>{language === "hi" ? "बुलेटिन रोकें" : "Stop Audio"}</span>
             </>
           ) : (
             <>
-              <Volume2 className="w-4 h-4" />
-              <span>{language === "hi" ? "📻 पूरा बुलेटिन सुनें" : "📻 Listen to Radio Broadcast"}</span>
+              <Volume2 className="w-3.5 h-3.5 text-[#161a20]" />
+              <span>{language === "hi" ? "पूरा बुलेटिन सुनें" : "Listen to Radio Broadcast"}</span>
             </>
           )}
         </button>
       </div>
 
       {/* Spoken Summary Card */}
-      <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
-        <div className="text-[11px] font-mono text-cyan-400 mb-1.5 flex items-center gap-1.5 font-bold">
-          <Clock className="w-3.5 h-3.5" />
+      <div className="p-4 rounded-xl bg-[#161a20]/80 border border-white/10 text-xs sm:text-sm text-white/80 leading-relaxed font-normal">
+        <div className="text-[11px] font-mono text-white/60 mb-1.5 flex items-center gap-1.5 font-bold">
+          <Clock className="w-3.5 h-3.5 text-white/50" />
           <span>{b.time}</span>
         </div>
         {b.summary}
@@ -129,33 +129,33 @@ export default function RadioWeatherBulletin({
 
       {/* 3 Quick Status Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-start gap-2">
-          <Waves className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+        <div className="p-3 rounded-xl bg-[#161a20]/60 border border-white/10 flex items-start gap-2.5">
+          <Waves className="w-4 h-4 text-white/60 shrink-0 mt-0.5" />
           <div>
-            <span className="text-slate-400 font-bold block text-[11px] uppercase">
+            <span className="text-white/50 font-bold block text-[11px] uppercase">
               {language === "hi" ? "नदी स्थिति" : "River Gauge Status"}
             </span>
-            <span className="text-slate-200 font-medium">{b.riverStatus}</span>
+            <span className="text-white/85 font-medium">{b.riverStatus}</span>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-start gap-2">
-          <Truck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-3 rounded-xl bg-[#161a20]/60 border border-white/10 flex items-start gap-2.5">
+          <Truck className="w-4 h-4 text-white/60 shrink-0 mt-0.5" />
           <div>
-            <span className="text-slate-400 font-bold block text-[11px] uppercase">
+            <span className="text-white/50 font-bold block text-[11px] uppercase">
               {language === "hi" ? "सड़क व पुल" : "Road & Bridge Status"}
             </span>
-            <span className="text-slate-200 font-medium">{b.roadStatus}</span>
+            <span className="text-white/85 font-medium">{b.roadStatus}</span>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-start gap-2">
-          <CloudSun className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+        <div className="p-3 rounded-xl bg-[#161a20]/60 border border-white/10 flex items-start gap-2.5">
+          <CloudSun className="w-4 h-4 text-white/60 shrink-0 mt-0.5" />
           <div>
-            <span className="text-slate-400 font-bold block text-[11px] uppercase">
+            <span className="text-white/50 font-bold block text-[11px] uppercase">
               {language === "hi" ? "मौसम अनुमान" : "Weather Outlook"}
             </span>
-            <span className="text-slate-200 font-medium">{b.weatherOutlook}</span>
+            <span className="text-white/85 font-medium">{b.weatherOutlook}</span>
           </div>
         </div>
       </div>

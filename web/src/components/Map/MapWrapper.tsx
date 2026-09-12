@@ -28,12 +28,12 @@ interface MapWrapperProps {
 const EmergencyMap = dynamic(() => import("./EmergencyMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full min-h-[460px] rounded-2xl border border-slate-800 bg-slate-950 flex flex-col items-center justify-center gap-3 p-6 text-slate-400">
-      <div className="w-10 h-10 border-4 border-rose-500/30 border-t-rose-500 rounded-full animate-spin"></div>
-      <p className="text-sm font-medium tracking-wide">
-        Initializing Leaflet Tactical Geospatial Radar...
+    <div className="w-full h-full min-h-[460px] rounded-2xl border border-white/10 bg-[#161a20] flex flex-col items-center justify-center gap-3 p-6 text-white/70">
+      <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+      <p className="text-sm font-medium tracking-wide text-white">
+        Initializing Tactical Geospatial Radar...
       </p>
-      <span className="text-xs text-slate-500">
+      <span className="text-xs text-white/40">
         Streaming PostGIS coordinates from Supabase
       </span>
     </div>

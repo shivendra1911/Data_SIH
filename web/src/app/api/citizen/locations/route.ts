@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { INITIAL_CITIZEN_LOCATIONS } from "@/lib/constants";
 import { CitizenLocation } from "@/lib/types";
 
-// Unified global in-memory store for citizen telemetry
+// Unified global in-memory store for citizen telemetry (0 demo data)
 declare global {
   var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
 }
 
 if (!global.__NEERNETRA_CITIZENS__) {
-  global.__NEERNETRA_CITIZENS__ = [...INITIAL_CITIZEN_LOCATIONS];
+  global.__NEERNETRA_CITIZENS__ = [];
 }
 
 const corsHeaders = {
@@ -78,17 +77,21 @@ export async function POST(req: NextRequest) {
       medical_distress: body.medical_distress || "WATER_RISING",
     };
 
-    const existingIndex = global.__NEERNETRA_CITIZENS__!.findIndex(
+    if (!global.__NEERNETRA_CITIZENS__) {
+      global.__NEERNETRA_CITIZENS__ = [];
+    }
+
+    const existingIndex = global.__NEERNETRA_CITIZENS__.findIndex(
       (c) => c.device_uuid === device_uuid || c.id === newCitizen.id
     );
 
     if (existingIndex >= 0) {
-      global.__NEERNETRA_CITIZENS__![existingIndex] = {
-        ...global.__NEERNETRA_CITIZENS__![existingIndex],
+      global.__NEERNETRA_CITIZENS__[existingIndex] = {
+        ...global.__NEERNETRA_CITIZENS__[existingIndex],
         ...newCitizen,
       };
     } else {
-      global.__NEERNETRA_CITIZENS__!.unshift(newCitizen);
+      global.__NEERNETRA_CITIZENS__.unshift(newCitizen);
     }
 
     return NextResponse.json(

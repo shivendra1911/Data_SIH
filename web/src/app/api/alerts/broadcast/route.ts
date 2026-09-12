@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { INITIAL_REGIONAL_ALERTS } from "@/lib/constants";
 import { RegionalAlert } from "@/lib/types";
+
+declare global {
+  var __NEERNETRA_ALERTS_HISTORY__: RegionalAlert[] | undefined;
+}
+
+if (!global.__NEERNETRA_ALERTS_HISTORY__) {
+  global.__NEERNETRA_ALERTS_HISTORY__ = [];
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,19 +15,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-// Global in-memory log of regional alerts
-let broadcastHistory: RegionalAlert[] = [...INITIAL_REGIONAL_ALERTS];
-
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
 export async function GET() {
+  const alerts = global.__NEERNETRA_ALERTS_HISTORY__ || [];
   return NextResponse.json(
     {
       status: "success",
-      total_dispatched: broadcastHistory.length,
-      alerts: broadcastHistory,
+      total_dispatched: alerts.length,
+      alerts,
     },
     { headers: corsHeaders }
   );
@@ -34,13 +39,13 @@ export async function POST(req: NextRequest) {
       alert_id: `alert-${Date.now()}`,
       zone_id: body.zone_id || "chamoli_01",
       severity: body.severity || "CRITICAL RED",
-      title: body.title || "ZERO-MINUTE MANDATORY EVACUATION DISPATCH",
+      title: body.title || "MANDATORY EVACUATION DISPATCH",
       message:
         body.message ||
-        "Immediate flash flood / GLOF surge approaching. Move to designated high ground immediately.",
+        "Flash flood / surge approaching. Move to designated high ground immediately.",
       safe_havens: body.safe_havens || [
-        "Joshimath Helipad Multi-Hazard Shelter",
-        "Govindghat High Ground Gurdwara",
+        "High-Ground Relief Shelter",
+        "Elevated Community Sanctuary",
       ],
       trigger_acoustic_siren:
         body.trigger_acoustic_siren !== undefined
@@ -52,7 +57,7 @@ export async function POST(req: NextRequest) {
       delivery_rate_pct: 98.4,
     };
 
-    broadcastHistory = [newAlert, ...broadcastHistory];
+    global.__NEERNETRA_ALERTS_HISTORY__ = [newAlert, ...(global.__NEERNETRA_ALERTS_HISTORY__ || [])];
 
     return NextResponse.json(
       {

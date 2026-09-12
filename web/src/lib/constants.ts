@@ -9,9 +9,33 @@ import {
   EmergencyResponder,
   EvacuationGuidelines,
 } from "./types";
+import { calculateDynamicSafeRoutes, calculateDynamicResponders } from "./safeSpaceAlgorithm";
 
 // Alias for backward compat
 export const HIMALAYAN_ZONES: HazardZone[] = [];
+
+export const DEFAULT_USER_ZONE: HazardZone = {
+  id: "live_user_location",
+  name: "My Live Location",
+  district: "Live Location",
+  center: [24.7114, 83.0387],
+  currentRisk: 6.5,
+  alertColor: "GREEN",
+  leadTimeMinutes: 480,
+  dangerMarkM: 5.0,
+  warningMarkM: 3.5,
+  primaryTrigger: "Live Meteorological Telemetry",
+  telemetry: {
+    rainfall_mm: 0.0,
+    soil_moisture_pct: 45.0,
+    slope_deg: 10.0,
+    river_level_m: 1.2,
+    seismic_mag: 0.0,
+  },
+  hydrograph: [],
+  preventiveDirectives: [],
+  infrastructure: [],
+};
 
 // All-India Flood Monitoring Zones — SIH 2026 PS: SIH26192
 export const INDIA_FLOOD_ZONES: HazardZone[] = [
@@ -20,18 +44,18 @@ export const INDIA_FLOOD_ZONES: HazardZone[] = [
     name: "Chamoli (Rishi Ganga - Dhauliganga Valley)",
     district: "Chamoli",
     center: [30.5573, 79.5642],
-    currentRisk: 86.4,
-    alertColor: "RED",
-    primaryTrigger: "Cryo-Seismic GLOF Signature (4.6M Tremor + Moraine Lake Breached)",
-    leadTimeMinutes: 225, // 3h 45m
+    currentRisk: 14.5,
+    alertColor: "GREEN",
+    primaryTrigger: "Normal Hydrometric Baseline Surveillance",
+    leadTimeMinutes: 360,
     dangerMarkM: 7.5,
     warningMarkM: 6.0,
     telemetry: {
-      rainfall_mm: 18.5,
-      soil_moisture_pct: 82.0,
+      rainfall_mm: 0.0,
+      soil_moisture_pct: 48.0,
       slope_deg: 44.5,
-      river_level_m: 6.8,
-      seismic_mag: 4.6,
+      river_level_m: 2.2,
+      seismic_mag: 0.0,
     },
     hydrograph: [
       { time: "-06h", level_m: 3.2, discharge_cumecs: 180, isPredicted: false },
@@ -554,362 +578,13 @@ export const INDIA_FLOOD_ZONES: HazardZone[] = [
 // Backward-compat alias — points to Uttarakhand/HP zones (first 5)
 HIMALAYAN_ZONES.push(...INDIA_FLOOD_ZONES.slice(0, 5));
 
-export const INITIAL_MOCK_SOS_EVENTS: SOSEvent[] = [
-  {
-    id: "sos-101",
-    device_uuid: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
-    lat: 30.5582,
-    lng: 79.5651,
-    status: "SOS",
-    sos_type: "TRAPPED IN RIVER VALLEY",
-    is_mesh_relayed: true,
-    created_at: new Date(Date.now() - 4 * 60000).toISOString(),
-  },
-  {
-    id: "sos-102",
-    device_uuid: "550e8400-e29b-41d4-a716-446655440001",
-    lat: 30.5565,
-    lng: 79.5638,
-    status: "SOS",
-    sos_type: "BRIDGE APPROACH WASHED OUT",
-    is_mesh_relayed: true,
-    created_at: new Date(Date.now() - 9 * 60000).toISOString(),
-  },
-  {
-    id: "sos-105",
-    device_uuid: "550e8400-e29b-41d4-a716-446655440004",
-    lat: 30.5532,
-    lng: 79.5615,
-    status: "SAFE",
-    sos_type: "EVACUATED TO JOSHIMATH HELIPAD SHELTER",
-    is_mesh_relayed: false,
-    created_at: new Date(Date.now() - 28 * 60000).toISOString(),
-  },
-];
+export const INITIAL_MOCK_SOS_EVENTS: SOSEvent[] = [];
 
-export const INITIAL_MOCK_CLUSTERS: SOSCluster[] = [
-  {
-    cluster_id: 1,
-    center_lat: 30.5578,
-    center_lng: 79.5645,
-    total_people: 47,
-    priority: "P1",
-    dispatched: false,
-  },
-  {
-    cluster_id: 2,
-    center_lat: 30.5552,
-    center_lng: 79.5671,
-    total_people: 22,
-    priority: "P1",
-    dispatched: false,
-  },
-];
+export const INITIAL_MOCK_CLUSTERS: SOSCluster[] = [];
 
-export const INITIAL_CITIZEN_LOCATIONS: CitizenLocation[] = [
-  // Chamoli (Uttarakhand)
-  {
-    id: "cit-101",
-    device_uuid: "node-f81d4f-live",
-    zone_id: "chamoli_01",
-    name: "Aarav Sharma",
-    phone: "+91-98765-43210",
-    lat: 30.5582,
-    lng: 79.5651,
-    is_live: true,
-    last_seen_minutes_ago: 1,
-    accuracy_radius_m: 14,
-    drift_radius_m: 0,
-    battery_pct: 78,
-    status: "SOS",
-    sos_type: "TRAPPED IN RIVER VALLEY (RAPID RISE)",
-    medical_distress: "WATER_RISING",
-    mesh_hops: 0,
-    breadcrumbs: [
-      [30.5575, 79.564],
-      [30.5582, 79.5651],
-    ],
-  },
-  {
-    id: "cit-102",
-    device_uuid: "node-550e84-mesh",
-    zone_id: "chamoli_01",
-    name: "Sunita Rawat",
-    lat: 30.5565,
-    lng: 79.5638,
-    is_live: false,
-    last_seen_minutes_ago: 18,
-    accuracy_radius_m: 65,
-    drift_radius_m: 350,
-    battery_pct: 34,
-    status: "SOS",
-    sos_type: "LAST SEEN NEAR WASHED BRIDGE PIER",
-    medical_distress: "CRITICAL_INJURY",
-    mesh_hops: 2,
-    mesh_relay_chain: ["Node-f81d (Aarav)", "Relay-Tower-04", "Node-550e (Sunita)"],
-    breadcrumbs: [
-      [30.555, 79.562],
-      [30.5565, 79.5638],
-    ],
-  },
-  {
-    id: "cit-103",
-    device_uuid: "node-a74b12-offline",
-    zone_id: "chamoli_01",
-    name: "Devendra Negi",
-    lat: 30.5595,
-    lng: 79.568,
-    is_live: false,
-    last_seen_minutes_ago: 32,
-    accuracy_radius_m: 120,
-    drift_radius_m: 600,
-    battery_pct: 19,
-    status: "SOS",
-    sos_type: "COMM CELL TOWER SEVERED (LAST BEACON)",
-    medical_distress: "HYPOTHERMIA",
-    mesh_hops: 3,
-    mesh_relay_chain: ["Node-f81d", "Mesh-Bridge-02", "Volunteer-01", "Node-a74b"],
-  },
-  {
-    id: "cit-104",
-    device_uuid: "node-safe-01",
-    zone_id: "chamoli_01",
-    name: "Pooja Joshi",
-    lat: 30.5532,
-    lng: 79.5615,
-    is_live: true,
-    last_seen_minutes_ago: 0,
-    accuracy_radius_m: 8,
-    drift_radius_m: 0,
-    battery_pct: 92,
-    status: "SAFE",
-    sos_type: "EVACUATED TO JOSHIMATH HELIPAD SHELTER",
-    medical_distress: "NONE",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-105",
-    device_uuid: "node-volunteer-01",
-    zone_id: "chamoli_01",
-    name: "Vikram Chauhan (Civil Defense)",
-    lat: 30.5545,
-    lng: 79.5628,
-    is_live: true,
-    last_seen_minutes_ago: 2,
-    accuracy_radius_m: 15,
-    drift_radius_m: 0,
-    battery_pct: 86,
-    status: "HELPING",
-    sos_type: "CIVIL DEFENSE VOLUNTEER RELAY NODE",
-    medical_distress: "NONE",
-    mesh_hops: 1,
-  },
+export const INITIAL_CITIZEN_LOCATIONS: CitizenLocation[] = [];
 
-  // Himachal Pradesh (Kullu - Parvati & Beas Valley)
-  {
-    id: "cit-201",
-    device_uuid: "node-hp-live-01",
-    zone_id: "himachal_kullu_01",
-    name: "Rajesh Thakur",
-    phone: "+91-94180-12345",
-    lat: 31.9865,
-    lng: 77.125,
-    is_live: true,
-    last_seen_minutes_ago: 2,
-    accuracy_radius_m: 12,
-    drift_radius_m: 0,
-    battery_pct: 68,
-    status: "SOS",
-    sos_type: "MANIKARAN RIVERSIDE CAMP INUNDATED",
-    medical_distress: "WATER_RISING",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-202",
-    device_uuid: "node-hp-mesh-02",
-    zone_id: "himachal_kullu_01",
-    name: "Ananya Sen",
-    lat: 31.984,
-    lng: 77.122,
-    is_live: false,
-    last_seen_minutes_ago: 24,
-    accuracy_radius_m: 80,
-    drift_radius_m: 450,
-    battery_pct: 21,
-    status: "SOS",
-    sos_type: "KASOL FOOTBRIDGE SWEPT AWAY (ISOLATED)",
-    medical_distress: "ELDERLY_IMMOBILE",
-    mesh_hops: 3,
-    mesh_relay_chain: ["Kasol Cafe Mesh", "Tourist Device #4", "Node-hp-02"],
-  },
-
-  // West Bengal / Sikkim (Teesta River Corridor)
-  {
-    id: "cit-301",
-    device_uuid: "node-wb-live-01",
-    zone_id: "wb_teesta_01",
-    name: "Bikram Thapa",
-    phone: "+91-98320-56789",
-    lat: 26.882,
-    lng: 88.472,
-    is_live: true,
-    last_seen_minutes_ago: 1,
-    accuracy_radius_m: 10,
-    drift_radius_m: 0,
-    battery_pct: 74,
-    status: "SOS",
-    sos_type: "NH-10 SEVOKE ROAD COLLAPSE (VEHICLE TRAPPED)",
-    medical_distress: "CRITICAL_INJURY",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-302",
-    device_uuid: "node-wb-mesh-02",
-    zone_id: "wb_teesta_01",
-    name: "Doma Lepcha",
-    lat: 26.879,
-    lng: 88.468,
-    is_live: false,
-    last_seen_minutes_ago: 41,
-    accuracy_radius_m: 140,
-    drift_radius_m: 700,
-    battery_pct: 12,
-    status: "SOS",
-    sos_type: "TEESTA BAZAAR EMBANKMENT BREACH (OFFLINE)",
-    medical_distress: "HYPOTHERMIA",
-    mesh_hops: 4,
-    mesh_relay_chain: ["Kalimpong Border Mesh", "Truck Driver 09", "Local Shop", "Node-wb-02"],
-  },
-
-  // Assam (Brahmaputra Floodplain)
-  {
-    id: "cit-401",
-    device_uuid: "node-as-live-01",
-    zone_id: "assam_brahmaputra_01",
-    name: "Pranab Gogoi",
-    lat: 26.952,
-    lng: 94.218,
-    is_live: true,
-    last_seen_minutes_ago: 3,
-    accuracy_radius_m: 16,
-    drift_radius_m: 0,
-    battery_pct: 81,
-    status: "SOS",
-    sos_type: "MAJULI GHAT OVERFLOW (32 PEOPLE ON MOUND)",
-    medical_distress: "WATER_RISING",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-402",
-    device_uuid: "node-as-mesh-02",
-    zone_id: "assam_brahmaputra_01",
-    name: "Juri Hazarika",
-    lat: 26.948,
-    lng: 94.214,
-    is_live: false,
-    last_seen_minutes_ago: 19,
-    accuracy_radius_m: 90,
-    drift_radius_m: 500,
-    battery_pct: 28,
-    status: "SOS",
-    sos_type: "ISOLATED ON RIVER ISLET (BATTERY CRITICAL)",
-    medical_distress: "NONE",
-    mesh_hops: 2,
-    mesh_relay_chain: ["Ferry Relay #1", "Node-as-02"],
-  },
-
-  // Bihar (Kosi River Embankment)
-  {
-    id: "cit-501",
-    device_uuid: "node-br-live-01",
-    zone_id: "bihar_kosi_01",
-    name: "Sanjay Yadav",
-    lat: 26.124,
-    lng: 86.598,
-    is_live: true,
-    last_seen_minutes_ago: 4,
-    accuracy_radius_m: 18,
-    drift_radius_m: 0,
-    battery_pct: 64,
-    status: "SOS",
-    sos_type: "SUPAUL EMBANKMENT SPUR #14 WASHED",
-    medical_distress: "WATER_RISING",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-502",
-    device_uuid: "node-br-mesh-02",
-    zone_id: "bihar_kosi_01",
-    name: "Rameshwar Paswan",
-    lat: 26.12,
-    lng: 86.592,
-    is_live: false,
-    last_seen_minutes_ago: 35,
-    accuracy_radius_m: 110,
-    drift_radius_m: 650,
-    battery_pct: 17,
-    status: "SOS",
-    sos_type: "FARM SETTLEMENT FLOODED (OFFLINE MESH)",
-    medical_distress: "ELDERLY_IMMOBILE",
-    mesh_hops: 3,
-  },
-
-  // Kerala (Chalakudy River Catchment)
-  {
-    id: "cit-601",
-    device_uuid: "node-kl-live-01",
-    zone_id: "kerala_chalakudy_01",
-    name: "Mathew Varghese",
-    lat: 10.312,
-    lng: 76.335,
-    is_live: true,
-    last_seen_minutes_ago: 1,
-    accuracy_radius_m: 11,
-    drift_radius_m: 0,
-    battery_pct: 79,
-    status: "SOS",
-    sos_type: "PORINGALKUTHU DAM SPILLWAY SURGE INUNDATION",
-    medical_distress: "WATER_RISING",
-    mesh_hops: 0,
-  },
-  {
-    id: "cit-602",
-    device_uuid: "node-kl-mesh-02",
-    zone_id: "kerala_chalakudy_01",
-    name: "Fathima Noor",
-    lat: 10.308,
-    lng: 76.331,
-    is_live: false,
-    last_seen_minutes_ago: 22,
-    accuracy_radius_m: 75,
-    drift_radius_m: 400,
-    battery_pct: 29,
-    status: "SOS",
-    sos_type: "PLANTATION HOUSING CUT OFF (BRIDGE SUBMERGED)",
-    medical_distress: "CRITICAL_INJURY",
-    mesh_hops: 2,
-  },
-];
-
-export const INITIAL_REGIONAL_ALERTS: RegionalAlert[] = [
-  {
-    alert_id: "alert-rec-01",
-    zone_id: "chamoli_01",
-    severity: "CRITICAL RED",
-    title: "ZERO-MINUTE MANDATORY EVACUATION DISPATCH",
-    message:
-      "CRITICAL GLOF / FLASH FLOOD BREACH DETECTED in Rishi Ganga Valley. Evacuate all riverbanks immediately to high ground (>100m vertical elevation).",
-    safe_havens: [
-      "Joshimath Helipad Multi-Hazard Shelter",
-      "Govindghat High Ground Gurdwara",
-    ],
-    trigger_acoustic_siren: true,
-    dispatched_at: new Date(Date.now() - 12 * 60000).toISOString(),
-    status: "ACTIVE_IN_EDGE_MESH",
-    target_nodes_count: 1420,
-    delivery_rate_pct: 98.4,
-  },
-];
+export const INITIAL_REGIONAL_ALERTS: RegionalAlert[] = [];
 
 // ================================================================
 // VERIFIED SAFE EVACUATION ROUTES (High Ground Above Flood Contours)
@@ -1082,6 +757,24 @@ export const SAFE_EVACUATION_ROUTES: Record<string, SafeEvacuationRoute[]> = {
     },
   ],
 };
+
+/**
+ * Universal safe evacuation route resolver.
+ * Never defaults to Chamoli when viewing a custom location, live user location, or unmapped basin.
+ * Calculates dynamic geodesic high-ground refuges with accurate Tobler walking time and elevation gain.
+ */
+export function getSafeRoutesForZone(zone: HazardZone | null | undefined): SafeEvacuationRoute[] {
+  if (!zone) return [];
+  if (
+    zone.id &&
+    zone.id !== "live_user_location" &&
+    !zone.id.startsWith("custom_") &&
+    SAFE_EVACUATION_ROUTES[zone.id]?.length
+  ) {
+    return SAFE_EVACUATION_ROUTES[zone.id];
+  }
+  return calculateDynamicSafeRoutes(zone);
+}
 
 // ================================================================
 // EMERGENCY RESPONDER GRID (108 Ambulances, Police Thanas, NDRF/SDRF)
@@ -1425,6 +1118,24 @@ export const DEFAULT_EMERGENCY_RESPONDERS: EmergencyResponder[] = [
   },
 ];
 
+/**
+ * Universal emergency responders resolver.
+ * Never defaults to Chamoli units when viewing another location.
+ * Calculates localized 108 Ambulance, Police QRT, and NDRF/SDRF units around the zone center.
+ */
+export function getRespondersForZone(zone: HazardZone | null | undefined): EmergencyResponder[] {
+  if (!zone) return [];
+  if (
+    zone.id &&
+    zone.id !== "live_user_location" &&
+    !zone.id.startsWith("custom_") &&
+    EMERGENCY_RESPONDERS_GRID[zone.id]?.length
+  ) {
+    return EMERGENCY_RESPONDERS_GRID[zone.id];
+  }
+  return calculateDynamicResponders(zone);
+}
+
 // ================================================================
 // OFFICIAL EVACUATION GUIDELINES (SIH 2026 Emergency Directives)
 // ================================================================
@@ -1456,3 +1167,48 @@ export const ZONE_EVACUATION_GUIDELINES: Record<string, EvacuationGuidelines> = 
     ],
   },
 };
+
+/**
+ * Universal evacuation guidelines resolver for any location or live GPS.
+ */
+export function getGuidelinesForZone(zone: HazardZone | null | undefined): EvacuationGuidelines {
+  const rawName = zone?.district || zone?.name || "Local River Basin";
+  const cleanName = rawName.split("(")[0].replace(/district|valley|basin/gi, "").trim() || "Local";
+  const zoneId = zone?.id || "local_sector";
+
+  if (
+    zone?.id &&
+    zone.id !== "live_user_location" &&
+    !zone.id.startsWith("custom_") &&
+    ZONE_EVACUATION_GUIDELINES[zone.id]
+  ) {
+    return ZONE_EVACUATION_GUIDELINES[zone.id];
+  }
+
+  return {
+    zone_id: zoneId,
+    zone_name: `${cleanName} Disaster Management Sector`,
+    alert_level: zone?.alertColor === "RED" ? "RED" : "ORANGE",
+    alarm_tone: "CIVIL_DEFENSE_SIREN_105DB",
+    immediate_actions: [
+      `EVACUATE IMMEDIATELY: Move away from ${cleanName} drainage lowlands and riverbanks uphill without delay.`,
+      "DO NOT cross flooded causeways, subway underpasses, or submerged bridges.",
+      "Turn off domestic gas cylinders and main power breakers before vacating buildings.",
+      "Carry emergency survival kits (Drinking water, prescribed medications, identification papers, emergency light).",
+    ],
+    high_ground_directives: [
+      `Follow the verified evacuation corridors displayed on your NeerNetra live radar towards designated elevated refuges.`,
+      "Ascend to multi-hazard high-ground sanctuaries maintaining safe clearance above flood stages.",
+      "Keep clear of unstable soil banks and stormwater drainage outflow culverts.",
+    ],
+    offline_mesh_protocol:
+      "KEEP BLUETOOTH AND GPS SWITCHED ON: In event of cellular tower failure, your device connects with peer mobile APK nodes via NeerNetra P2P BLE mesh to transmit distress beacons and GPS fixes to NDRF/SDRF emergency search teams.",
+    disaster_radio_mhz: "All India Radio (AIR) Disaster Broadcast: 102.8 MHz FM / National Disaster Channel",
+    emergency_helplines: [
+      { agency: "National Disaster Response Force (NDRF)", phone: "1078" },
+      { agency: "State Disaster Management Authority (SDMA)", phone: "1070" },
+      { agency: "Ambulance Emergency Medical Service", phone: "108" },
+      { agency: "Police Emergency & Quick Response", phone: "112" },
+    ],
+  };
+}

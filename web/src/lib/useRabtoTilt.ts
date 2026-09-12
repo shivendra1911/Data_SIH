@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 
 /**
- * Rabto FX Engine — 60fps Mouse-Tethered 3D Card Tilt & Radial Spotlight Physics
- * Directly implements the Rabto interpolation and spotlight system from global-logic-media-builder.
+ * Ultra-Lightweight Tilt & Spotlight Physics (Lag-Free & Zero Layout Thrashing)
+ * Completely event-driven: zero requestAnimationFrame running on idle.
  */
 export function useRabtoTilt() {
   useEffect(() => {
@@ -14,49 +14,42 @@ export function useRabtoTilt() {
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    let mouseX = 0;
-    let mouseY = 0;
-    let currentRotationX = 0;
-    let currentRotationY = 0;
-    let animFrameId: number;
+    if (prefersReducedMotion) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      // Normalize mouse coords (-1 to +1)
-      mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+      const target = e.target as HTMLElement | null;
+      const card = target?.closest?.(".tilt-card") as HTMLElement | null;
+      if (!card) return;
 
-      // Update radial spotlight on all tilt-cards
-      const cards = document.querySelectorAll<HTMLElement>(".tilt-card");
-      cards.forEach((card) => {
-        const rect = card.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        card.style.setProperty("--mouse-x", `${x}px`);
-        card.style.setProperty("--mouse-y", `${y}px`);
-      });
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty("--mouse-x", `${x}px`);
+      card.style.setProperty("--mouse-y", `${y}px`);
+
+      if (card.classList.contains("tilt-card-physics")) {
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * -4;
+        const rotateY = ((x - centerX) / centerX) * 4;
+        card.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg)`;
+      }
     };
 
-    const animate = () => {
-      if (!prefersReducedMotion) {
-        // Smooth RAF lerp interpolation
-        currentRotationX += (mouseY * 3.5 - currentRotationX) * 0.1;
-        currentRotationY += (mouseX * 3.5 - currentRotationY) * 0.1;
-
-        const activeCards = document.querySelectorAll<HTMLElement>(".tilt-card-physics");
-        activeCards.forEach((card) => {
-          card.style.transform = `perspective(1200px) rotateX(${-currentRotationX}deg) rotateY(${currentRotationY}deg)`;
-        });
+    const handleMouseLeave = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const card = target?.closest?.(".tilt-card-physics") as HTMLElement | null;
+      if (card) {
+        card.style.transform = "perspective(1000px) rotateX(0deg) rotateY(0deg)";
       }
-
-      animFrameId = requestAnimationFrame(animate);
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    animFrameId = requestAnimationFrame(animate);
+    window.addEventListener("mouseout", handleMouseLeave, { passive: true });
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      cancelAnimationFrame(animFrameId);
+      window.removeEventListener("mouseout", handleMouseLeave);
     };
   }, []);
 }

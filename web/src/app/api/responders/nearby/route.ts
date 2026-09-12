@@ -1,9 +1,9 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
-  EMERGENCY_RESPONDERS_GRID,
-  DEFAULT_EMERGENCY_RESPONDERS,
+  INDIA_FLOOD_ZONES,
+  getRespondersForZone,
 } from "@/lib/constants";
-import { EmergencyResponder } from "@/lib/types";
+import { EmergencyResponder, HazardZone } from "@/lib/types";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,13 +36,55 @@ function calculateDistanceKm(
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const zoneId = searchParams.get("zone_id") || "chamoli_01";
+  const zoneId = searchParams.get("zone_id") || "live_user_location";
   const agencyFilter = searchParams.get("type"); // "AMBULANCE", "POLICE", "NDRF"
   const refLat = searchParams.get("lat") ? Number(searchParams.get("lat")) : null;
   const refLng = searchParams.get("lng") ? Number(searchParams.get("lng")) : null;
 
-  let responders: EmergencyResponder[] =
-    EMERGENCY_RESPONDERS_GRID[zoneId] || DEFAULT_EMERGENCY_RESPONDERS;
+  let targetZone = INDIA_FLOOD_ZONES.find((z) => z.id === zoneId);
+  if (!targetZone && refLat !== null && refLng !== null && !isNaN(refLat) && !isNaN(refLng)) {
+    targetZone = {
+      id: zoneId as any,
+      name: "Live Coordinates",
+      district: "Local Sector",
+      center: [refLat, refLng],
+      currentRisk: 10,
+      alertColor: "GREEN",
+      leadTimeMinutes: 480,
+      dangerMarkM: 5.0,
+      warningMarkM: 3.5,
+      primaryTrigger: "Live Coordinates",
+      telemetry: {
+        rainfall_mm: 0,
+        soil_moisture_pct: 45,
+        slope_deg: 10,
+        river_level_m: 1.2,
+        seismic_mag: 0,
+      },
+    };
+  } else if (!targetZone) {
+    targetZone = {
+      id: "live_user_location" as any,
+      name: "Live Sector",
+      district: "Local District",
+      center: [27.4924, 77.6737],
+      currentRisk: 10,
+      alertColor: "GREEN",
+      leadTimeMinutes: 480,
+      dangerMarkM: 5.0,
+      warningMarkM: 3.5,
+      primaryTrigger: "Live Sector",
+      telemetry: {
+        rainfall_mm: 0,
+        soil_moisture_pct: 45,
+        slope_deg: 10,
+        river_level_m: 1.2,
+        seismic_mag: 0,
+      },
+    };
+  }
+
+  let responders: EmergencyResponder[] = getRespondersForZone(targetZone);
 
   // Filter by agency if specified
   if (agencyFilter) {

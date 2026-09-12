@@ -19,28 +19,28 @@ export default function ClusterTriagePanel({
   const pendingClusters = clusters.filter((c) => !c.dispatched).length;
 
   return (
-    <div className="rounded-2xl glass-panel shadow-md overflow-hidden flex flex-col h-full border border-white/60">
+    <div className="tilt-card rounded-2xl bg-[#1b2027]/90 shadow-xl overflow-hidden flex flex-col h-full border border-white/10 text-white">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-white/60 flex items-center justify-between bg-white/40">
+      <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between bg-[#161a20]/60">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shadow-xs">
-            <Users className="w-4 h-4 text-amber-700" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shadow-xs">
+            <Users className="w-4 h-4 text-white" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-black text-slate-950 uppercase tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               Autonomous Rescue Clusters
             </h2>
-            <p className="text-[11px] font-semibold text-slate-600">
+            <p className="text-[11px] font-semibold text-white/60">
               K-Means Geospatial Density Triage (/api/sos/clusters)
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 shadow-xs">
+          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-white text-[#161a20] shadow-xs">
             {pendingClusters} Pending
           </span>
-          <span className="text-[11px] font-black text-slate-900">
+          <span className="text-[11px] font-bold text-white/80">
             {totalStranded} Stranded
           </span>
         </div>
@@ -49,7 +49,7 @@ export default function ClusterTriagePanel({
       {/* Clusters List */}
       <div className="p-4 space-y-3 max-h-[360px] overflow-y-auto flex-1">
         {clusters.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 text-xs">
+          <div className="p-8 text-center text-white/40 text-xs">
             No active SOS clusters detected in this sector.
           </div>
         ) : (
@@ -60,37 +60,37 @@ export default function ClusterTriagePanel({
                 key={cluster.cluster_id}
                 className={`p-3.5 rounded-xl border transition-all ${
                   cluster.dispatched
-                    ? "bg-gray-50 border-gray-200 opacity-80"
+                    ? "bg-[#161a20]/40 border-white/5 opacity-80"
                     : isP1
-                    ? "bg-red-50/40 border-red-200 shadow-sm"
-                    : "bg-white border-gray-200"
+                    ? "bg-[#161a20] border-white/30 shadow-sm"
+                    : "bg-[#161a20]/80 border-white/10"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-gray-900" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <span className="font-bold text-sm text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         Cluster #{cluster.cluster_id}
                       </span>
                       <span
-                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                           isP1
-                            ? "bg-red-600 text-white"
-                            : "bg-amber-500 text-gray-900"
+                            ? "bg-white text-[#161a20]"
+                            : "bg-white/10 text-white border border-white/15"
                         }`}
                       >
                         Priority {cluster.priority}
                       </span>
                     </div>
 
-                    <div className="text-xs text-gray-600 mt-1 flex items-baseline gap-1.5">
-                      <strong className="text-gray-900 text-sm font-bold">
+                    <div className="text-xs text-white/70 mt-1 flex items-baseline gap-1.5">
+                      <strong className="text-white text-sm font-bold">
                         {cluster.total_people}
                       </strong>{" "}
                       <span>Citizens Stranded</span>
                     </div>
 
-                    <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                    <div className="text-[11px] text-white/50 mt-0.5 flex items-center gap-1.5">
                       <span>
                         Coordinates: {cluster.center_lat.toFixed(4)}°N, {cluster.center_lng.toFixed(4)}°E
                       </span>
@@ -108,9 +108,9 @@ export default function ClusterTriagePanel({
                         }
                         title="Locate Cluster on Map"
                         aria-label={`Locate cluster ${cluster.cluster_id} on map`}
-                        className="px-3 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 transition text-xs flex items-center gap-1 min-h-[44px] justify-center"
+                        className="btn-solid-dark px-3 py-1.5 rounded-full text-xs flex items-center gap-1 min-h-[36px] justify-center"
                       >
-                        <Navigation className="w-3.5 h-3.5 text-violet-600" aria-hidden />
+                        <Navigation className="w-3.5 h-3.5 text-white/70" aria-hidden />
                         <span>Focus</span>
                       </button>
                     )}
@@ -118,10 +118,10 @@ export default function ClusterTriagePanel({
                 </div>
 
                 {/* Dispatch Status / Action */}
-                <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between">
+                <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between">
                   {cluster.dispatched ? (
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" aria-hidden />
+                    <div className="flex items-center gap-1.5 text-xs text-white/80 font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-white" aria-hidden />
                       <span>
                         {cluster.assigned_team || "Team Dispatched En Route"}
                       </span>
@@ -130,9 +130,9 @@ export default function ClusterTriagePanel({
                     <button
                       onClick={() => onDispatch(cluster.cluster_id)}
                       aria-label={`Dispatch NDRF rescue team to cluster ${cluster.cluster_id}`}
-                      className="btn-solid-danger w-full text-xs shadow-md"
+                      className="btn-solid-primary w-full text-xs font-bold py-2 rounded-full shadow-sm"
                     >
-                      <ShieldAlert className="w-4 h-4" aria-hidden />
+                      <ShieldAlert className="w-4 h-4 text-[#161a20]" aria-hidden />
                       <span>Dispatch Rescue Team</span>
                     </button>
                   )}

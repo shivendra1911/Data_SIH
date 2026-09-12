@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { INITIAL_REGIONAL_ALERTS } from "@/lib/constants";
+import { RegionalAlert } from "@/lib/types";
+
+declare global {
+  var __NEERNETRA_ALERTS_HISTORY__: RegionalAlert[] | undefined;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,11 +16,12 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
+  const alerts = global.__NEERNETRA_ALERTS_HISTORY__ || [];
   return NextResponse.json(
     {
       status: "success",
-      total_dispatched: INITIAL_REGIONAL_ALERTS.length,
-      alerts: INITIAL_REGIONAL_ALERTS,
+      total_dispatched: alerts.length,
+      alerts,
     },
     { headers: corsHeaders }
   );

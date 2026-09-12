@@ -10,11 +10,9 @@ import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBro
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
 import {
   INDIA_FLOOD_ZONES,
-  SAFE_EVACUATION_ROUTES,
-  INITIAL_CITIZEN_LOCATIONS,
-  INITIAL_MOCK_SOS_EVENTS,
-  INITIAL_MOCK_CLUSTERS,
-  EMERGENCY_RESPONDERS_GRID,
+  DEFAULT_USER_ZONE,
+  getSafeRoutesForZone,
+  getRespondersForZone,
 } from "@/lib/constants";
 import {
   HazardZone,
@@ -24,6 +22,7 @@ import {
   SafeEvacuationRoute,
   EmergencyResponder,
 } from "@/lib/types";
+import { fetchActiveClusters } from "@/lib/api";
 import {
   Compass,
   MapPin,
@@ -42,9 +41,9 @@ import {
 const MapWrapper = dynamic(() => import("@/components/Map/MapWrapper"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full min-h-[580px] rounded-2xl flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-md text-slate-400 gap-3 border border-white/20">
-      <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-      <span className="text-xs font-mono tracking-wider uppercase text-slate-300">
+    <div className="w-full h-full min-h-[580px] rounded-2xl flex flex-col items-center justify-center bg-slate-100 text-slate-600 gap-3 border border-slate-300">
+      <div className="w-8 h-8 rounded-full border-2 border-slate-300 border-t-slate-900 animate-spin" />
+      <span className="text-xs font-mono tracking-wider uppercase text-slate-700">
         Loading GIS Tactical Radar Engine...
       </span>
     </div>
@@ -53,8 +52,8 @@ const MapWrapper = dynamic(() => import("@/components/Map/MapWrapper"), {
 
 export default function TacticalRadarPage() {
   const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
-  const [sosEvents, setSOSEvents] = useState<SOSEvent[]>(INITIAL_MOCK_SOS_EVENTS);
-  const [clusters, setClusters] = useState<SOSCluster[]>(INITIAL_MOCK_CLUSTERS);
+  const [sosEvents, setSOSEvents] = useState<SOSEvent[]>([]);
+  const [clusters, setClusters] = useState<SOSCluster[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>(INDIA_FLOOD_ZONES[0].center);
   const [mapZoom, setMapZoom] = useState<number>(12);
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
@@ -62,18 +61,10 @@ export default function TacticalRadarPage() {
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
   const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
   const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
-  const [citizens, setCitizens] = useState<CitizenLocation[]>(INITIAL_CITIZEN_LOCATIONS);
+  const [citizens, setCitizens] = useState<CitizenLocation[]>([]);
 
-  const activeSafeRoutes: SafeEvacuationRoute[] =
-    SAFE_EVACUATION_ROUTES[selectedZone.id] ||
-    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
-    [];
-
-  const activeResponders: EmergencyResponder[] =
-    EMERGENCY_RESPONDERS_GRID[selectedZone.id] ||
-    EMERGENCY_RESPONDERS_GRID["chamoli_01"] ||
-    [];
-
+  const activeSafeRoutes: SafeEvacuationRoute[] = getSafeRoutesForZone(selectedZone);
+  const activeResponders: EmergencyResponder[] = getRespondersForZone(selectedZone);
 
   const playAlertSound = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -92,21 +83,42 @@ export default function TacticalRadarPage() {
     }
   }, []);
 
-  // Poll citizen distress locations from shared Node store
+  // Poll citizen distress locations and clusters from live API (tab-visibility aware)
   useEffect(() => {
     const fetchCit = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
-        const res = await fetch("/api/citizen/locations");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.citizens) setCitizens(data.citizens);
+        const [citRes, clusterList] = await Promise.all([
+          fetch("/api/citizen/locations"),
+          fetchActiveClusters(selectedZone.id),
+        ]);
+        if (citRes.ok) {
+          const data = await citRes.json();
+          if (data.citizens && Array.isArray(data.citizens)) {
+            setCitizens(data.citizens);
+            const liveSos: SOSEvent[] = data.citizens
+              .filter((c: CitizenLocation) => c.status === "SOS")
+              .map((c: CitizenLocation) => ({
+                id: c.id,
+                device_uuid: c.device_uuid,
+                lat: c.lat,
+                lng: c.lng,
+                status: c.status,
+                sos_type: c.sos_type,
+                is_mesh_relayed: c.mesh_hops > 0,
+                created_at: new Date().toISOString(),
+                rescued: false,
+              }));
+            setSOSEvents(liveSos);
+          }
         }
+        setClusters(clusterList);
       } catch {}
     };
     fetchCit();
-    const interval = setInterval(fetchCit, 2500);
+    const interval = setInterval(fetchCit, 12000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedZone.id]);
 
   const handleSelectZone = (zone: HazardZone) => {
     setSelectedZone(zone);
@@ -119,9 +131,44 @@ export default function TacticalRadarPage() {
     setMapZoom(14);
   };
 
+  const detectLiveLocation = useCallback(async () => {
+    try {
+      const res = await fetch("/api/geolocation");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lat && data.lng) {
+          const locName = `${data.city} (${data.region})`;
+          const userZone: HazardZone = {
+            id: "live_user_location",
+            name: locName,
+            district: data.city,
+            center: [data.lat, data.lng],
+            dangerMarkM: 5.0,
+            warningMarkM: 3.5,
+            currentRisk: 6.5,
+            alertColor: "GREEN",
+            leadTimeMinutes: 480,
+            primaryTrigger: "Live Meteorological Telemetry",
+            telemetry: {
+              rainfall_mm: 0.0,
+              soil_moisture_pct: 45.0,
+              slope_deg: 10.0,
+              river_level_m: 1.2,
+              seismic_mag: 0.0,
+            },
+          };
+          setSelectedZone(userZone);
+          setMapCenter([data.lat, data.lng]);
+        }
+      }
+    } catch (e) {
+      console.warn("Radar geolocation error:", e);
+    }
+  }, []);
+
   return (
-    <div className="relative min-h-screen flex flex-col bg-transparent text-slate-950 font-sans selection:bg-violet-600 selection:text-white">
-      {/* Background Video */}
+    <div className="relative min-h-screen flex flex-col text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
+      {/* Fixed Ambient Dynamic Video Background */}
       <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
         <video
           src="/download.mp4"
@@ -132,7 +179,7 @@ export default function TacticalRadarPage() {
           preload="auto"
           className="w-full h-full object-cover scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/40 to-slate-950/75 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/70 via-[#161a20]/35 to-[#161a20]/75 pointer-events-none" />
       </div>
 
       <div className="relative z-10 min-h-screen flex flex-col bg-transparent">
@@ -148,38 +195,39 @@ export default function TacticalRadarPage() {
           floodRiskPercent={selectedZone.currentRisk}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled((p) => !p)}
+          connectedMobileCount={citizens.length}
         />
 
-        {/* Tactical Command Action Strip */}
-        <div className="bg-[#1b2027]/80 border-b border-white/10 px-4 lg:px-6 py-3 backdrop-blur-md font-sans text-white">
+        {/* Tactical Command Action Strip in Frosted Theme */}
+        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
           <div className="flex flex-wrap items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-              <span className="font-bold text-white uppercase tracking-[1.5px] text-[11px] font-display">
-                /TACTICAL GIS RADAR:
+              <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+              <span className="font-extrabold text-slate-950 uppercase tracking-[1.5px] text-[11px] font-display">
+                LIVE FLOOD RADAR MAP:
               </span>
-              <span className="font-bold text-white bg-white/10 px-3 py-0.5 rounded-full border border-white/15">
+              <span className="font-bold text-slate-900 bg-[#faf9f5] px-3 py-0.5 rounded-full border border-slate-300">
                 {selectedZone.name} ({selectedZone.district})
               </span>
-              <span className="text-white/60 font-medium">
-                &bull; Danger Threshold: {selectedZone.dangerMarkM}m &bull; Elevation: {selectedZone.telemetry.slope_deg}&deg; Slope
+              <span className="text-slate-500 font-medium">
+                &bull; Danger Mark: {selectedZone.dangerMarkM}m &bull; Slope: {selectedZone.telemetry.slope_deg}&deg;
               </span>
             </div>
 
             <div className="flex items-center gap-2.5">
               <button
                 onClick={() => setIsRegionalModalOpen(true)}
-                className="btn-solid-danger text-xs h-[38px] px-4"
+                className="h-[36px] px-3.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-xs flex items-center gap-1.5 transition shadow-2xs"
               >
                 <Radio className="w-3.5 h-3.5" />
                 <span>Zone Broadcast</span>
               </button>
               <Link
                 href="/rescue"
-                className="btn-solid-primary text-xs h-[38px] px-4 flex items-center gap-1.5"
+                className="h-[36px] px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs"
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Citizen Grid ({citizens.filter(c => c.status === "SOS").length})</span>
+                <span>Citizen SOS ({citizens.filter(c => c.status === "SOS").length})</span>
               </Link>
             </div>
           </div>
@@ -193,13 +241,25 @@ export default function TacticalRadarPage() {
             
             {/* GIS Tactical Map Container */}
             <div className="lg:col-span-8 flex flex-col space-y-4">
-              <div className="w-full h-[580px] lg:h-[660px] rounded-2xl overflow-hidden border border-white/15 shadow-sm relative bg-[#161a20]">
-                {/* Floating Map Header Chip */}
-                <div className="absolute top-3 left-3 z-[400] flex items-center gap-2 bg-[#161a20]/90 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 shadow-md text-white font-sans">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                  <span className="text-xs font-bold text-white font-display uppercase">{selectedZone.name}</span>
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase bg-red-600 text-white tracking-wider">
-                    {selectedZone.currentRisk}% RISK
+              <div className="w-full h-[580px] lg:h-[660px] rounded-2xl overflow-hidden border border-slate-300 shadow-sm relative bg-white">
+                {/* Floating Map Header Chip with User Color-Coding */}
+                <div className="absolute top-3 left-3 z-[400] flex items-center gap-2 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-300 shadow-md text-slate-900 font-sans">
+                  <span className={`w-2 h-2 rounded-full ${
+                    selectedZone.currentRisk >= 70
+                      ? "bg-red-600 animate-pulse"
+                      : selectedZone.currentRisk >= 35
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-emerald-600 animate-pulse"
+                  }`} />
+                  <span className="text-xs font-bold text-slate-950 font-display uppercase">{selectedZone.name}</span>
+                  <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                    selectedZone.currentRisk >= 70
+                      ? "bg-red-50 text-red-700 border border-red-300"
+                      : selectedZone.currentRisk >= 35
+                      ? "bg-amber-50 text-amber-800 border border-amber-300"
+                      : "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                  }`}>
+                    {selectedZone.currentRisk.toFixed(0)}% RISK
                   </span>
                 </div>
 
@@ -222,8 +282,8 @@ export default function TacticalRadarPage() {
                 />
               </div>
 
-              {/* Inundation Hydrograph Panel */}
-              <div className="rounded-2xl glass-panel border border-white/10 p-4 shadow-sm">
+              {/* Inundation Hydrograph Panel in White Theme */}
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
                 <HydrographPanel activeZone={selectedZone} />
               </div>
             </div>
@@ -231,14 +291,14 @@ export default function TacticalRadarPage() {
             {/* Right 4 Cols: Verified Safe Evacuation Routes & High Ground Shelters */}
             <div className="lg:col-span-4 flex flex-col space-y-4">
               
-              {/* Safe Evacuation Corridors Drawer */}
-              <div className="rounded-2xl glass-panel border border-white/10 p-5 shadow-sm space-y-4 flex-1 text-white">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <div className="corwdy-subtitle">
-                    <Compass className="w-3.5 h-3.5 text-white/80" />
-                    <span>/SAFE ROUTES ({activeSafeRoutes.length})</span>
+              {/* Safe Evacuation Corridors Drawer in White Theme */}
+              <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-4 flex-1 text-slate-900">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                    <Compass className="w-4 h-4 text-slate-700" />
+                    <span>SAFE ROUTES ({activeSafeRoutes.length})</span>
                   </div>
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 uppercase tracking-wider">
                     +20M CLEARANCE
                   </span>
                 </div>
@@ -247,45 +307,45 @@ export default function TacticalRadarPage() {
                   {activeSafeRoutes.map((route, idx) => (
                     <div
                       key={route.id}
-                      className="p-4 rounded-2xl bg-[#1b2027]/75 border border-white/10 shadow-xs hover:border-white/25 transition space-y-3 text-white"
+                      className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-200 shadow-2xs hover:border-slate-400 transition space-y-3 text-slate-900"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-xs font-bold text-white flex items-center gap-2 font-display">
-                            <span className="w-5 h-5 rounded-full bg-white text-[#161a20] text-[10px] flex items-center justify-center font-bold">
+                          <div className="text-xs font-extrabold text-slate-950 flex items-center gap-2 font-display">
+                            <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] flex items-center justify-center font-bold">
                               {idx + 1}
                             </span>
                             <span>{route.route_name}</span>
                           </div>
-                          <div className="text-[11px] text-white/60 flex items-center gap-1.5 mt-1">
-                            <MapPin className="w-3 h-3 text-white/50" />
+                          <div className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-1">
+                            <MapPin className="w-3 h-3 text-slate-500" />
                             <span>Destination: {route.assembly_point_name}</span>
                           </div>
                         </div>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0 uppercase tracking-wider">
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0 uppercase tracking-wider">
                           +{route.elevation_gain_m}m Gain
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white/5 border border-white/10 text-[10px] text-white/70">
+                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white border border-slate-200 text-[10px] text-slate-700">
                         <div>
-                          <span className="text-white/40 block uppercase text-[9px] font-semibold">Distance</span>
-                          <span className="font-bold text-white">{route.distance_km} km</span>
+                          <span className="text-slate-500 block uppercase text-[9px] font-semibold">Distance</span>
+                          <span className="font-bold text-slate-950">{route.distance_km} km</span>
                         </div>
                         <div>
-                          <span className="text-white/40 block uppercase text-[9px] font-semibold">Walking ETA</span>
-                          <span className="font-bold text-white">{route.walk_time_minutes} mins</span>
+                          <span className="text-slate-500 block uppercase text-[9px] font-semibold">Walking ETA</span>
+                          <span className="font-bold text-slate-950">{route.walk_time_minutes} mins</span>
                         </div>
                         <div>
-                          <span className="text-white/40 block uppercase text-[9px] font-semibold">Shelter Cap</span>
-                          <span className="font-bold text-white">{route.shelter_capacity} Pax</span>
+                          <span className="text-slate-500 block uppercase text-[9px] font-semibold">Capacity</span>
+                          <span className="font-bold text-slate-950">{route.shelter_capacity} Pax</span>
                         </div>
                       </div>
 
                       <div className="pt-1">
                         <button
                           onClick={() => handleFocusRoute(route)}
-                          className="btn-solid-primary w-full text-xs h-[36px]"
+                          className="w-full h-[36px] rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
                         >
                           <Compass className="w-3.5 h-3.5" />
                           <span>Track Path on Map</span>
@@ -297,40 +357,40 @@ export default function TacticalRadarPage() {
 
                 <button
                   onClick={() => setIsGuidelineModalOpen(true)}
-                  className="btn-solid-dark w-full text-xs h-[40px]"
+                  className="w-full h-[40px] rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition shadow-2xs"
                 >
-                  <Send className="w-3.5 h-3.5 text-white" />
+                  <Send className="w-3.5 h-3.5 text-slate-700" />
                   <span>Broadcast Routes &amp; Guidelines</span>
                 </button>
               </div>
 
-              {/* Civil Defense Quick Help Desk */}
-              <div className="rounded-2xl glass-panel border border-white/10 p-5 shadow-sm space-y-3 text-xs text-white">
-                <div className="corwdy-subtitle">
-                  <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-                  <span>/CIVIL DEFENSE HOTLINES</span>
+              {/* Civil Defense Hotlines Card in White Theme */}
+              <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3 text-xs text-slate-900">
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                  <ShieldAlert className="w-4 h-4 text-slate-700" />
+                  <span>CIVIL DEFENSE HOTLINES</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2.5 text-center pt-1 font-sans">
                   <a
                     href="tel:1078"
-                    className="p-3 rounded-2xl bg-[#1b2027]/75 border border-white/10 hover:bg-[#212730]/90 transition block text-white"
+                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
                   >
-                    <div className="font-bold text-sm text-emerald-400 font-display">1078</div>
-                    <div className="text-[10px] text-white/60 mt-0.5">NDRF Control</div>
+                    <div className="font-black text-sm text-slate-950 font-display">1078</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">NDRF Control</div>
                   </a>
                   <a
                     href="tel:1070"
-                    className="p-3 rounded-2xl bg-[#1b2027]/75 border border-white/10 hover:bg-[#212730]/90 transition block text-white"
+                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
                   >
-                    <div className="font-bold text-sm text-sky-400 font-display">1070</div>
-                    <div className="text-[10px] text-white/60 mt-0.5">State SDMA</div>
+                    <div className="font-black text-sm text-slate-950 font-display">1070</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">State SDMA</div>
                   </a>
                   <a
                     href="tel:108"
-                    className="p-3 rounded-2xl bg-[#1b2027]/75 border border-white/10 hover:bg-[#212730]/90 transition block text-white"
+                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
                   >
-                    <div className="font-bold text-sm text-rose-400 font-display">108</div>
-                    <div className="text-[10px] text-white/60 mt-0.5">ALS Ambulance</div>
+                    <div className="font-black text-sm text-slate-950 font-display">108</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">ALS Ambulance</div>
                   </a>
                 </div>
               </div>
@@ -367,4 +427,3 @@ export default function TacticalRadarPage() {
     </div>
   );
 }
-

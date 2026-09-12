@@ -43,25 +43,17 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
   const isOrange = riskPercent >= 55 && !isRed;
 
   return (
-    <div
-      className={`tilt-card rounded-2xl transition-all duration-200 overflow-hidden glass-panel shadow-md border ${
-        isRed
-          ? "border-red-300"
-          : isOrange
-          ? "border-amber-300"
-          : "border-white/60"
-      }`}
-    >
+    <div className="tilt-card rounded-2xl transition-all duration-200 overflow-hidden bg-[#1b2027]/90 border border-white/10 shadow-xl text-white">
       <div className="p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 relative z-10">
         {/* Left: Voice Broadcast */}
         <div className="flex items-center gap-3">
           <button
             onClick={handleSpeak}
             aria-label={isSpeaking ? "Stop voice broadcast" : "Start voice emergency broadcast"}
-            className={`btn-solid-danger flex items-center gap-2.5 text-xs shadow-md ${
+            className={`flex items-center gap-2.5 text-xs shadow-sm rounded-full px-4 py-2 font-bold transition min-h-[38px] ${
               isSpeaking
-                ? "bg-amber-400 text-slate-950 ring-4 ring-amber-400/40 animate-pulse"
-                : ""
+                ? "bg-white/20 text-white border border-white/30 animate-pulse"
+                : "btn-solid-primary"
             }`}
           >
             {isSpeaking ? (
@@ -71,17 +63,17 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
               </>
             ) : (
               <>
-                <RadioTower className="w-4 h-4 animate-pulse" aria-hidden />
+                <RadioTower className="w-4 h-4 text-[#161a20]" aria-hidden />
                 <span>Acoustic Voice Alert</span>
               </>
             )}
           </button>
 
           <div className="hidden sm:block">
-            <div className="text-[10px] uppercase tracking-widest text-slate-600 font-extrabold mb-0.5">
+            <div className="text-[10px] uppercase tracking-widest text-white/50 font-extrabold mb-0.5">
               Civil Defense Voice Dispatch
             </div>
-            <p className="text-xs font-bold text-slate-900 line-clamp-1">
+            <p className="text-xs font-bold text-white line-clamp-1">
               {isRed
                 ? "CRITICAL: Low-lying riverbanks must evacuate uphill immediately."
                 : isOrange
@@ -94,25 +86,25 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
         {/* Right: Solid Action Hotlines & Toggle */}
         <div className="flex flex-wrap items-center gap-2">
           <a href="tel:1078" aria-label="Call NDRF emergency 1078"
-            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
-            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
+            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
+            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
             <span>NDRF 1078</span>
           </a>
           <a href="tel:1070" aria-label="Call SDMA emergency 1070"
-            className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
-            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
+            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
+            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
             <span>SDMA 1070</span>
           </a>
           <a href="tel:108" aria-label="Call ambulance 108"
-            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]">
-            <PhoneCall className="w-3.5 h-3.5" aria-hidden />
+            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
+            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
             <span>Ambulance 108</span>
           </a>
           <button
             onClick={() => setIsExpanded((prev) => !prev)}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? "Hide evacuation checklist" : "Show evacuation checklist"}
-            className="px-3.5 py-2 rounded-xl bg-white/90 hover:bg-white text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 transition min-h-[44px] shadow-sm active:scale-[0.98]"
+            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]"
           >
             <span>{isExpanded ? "Hide Checklist" : "Evacuation Checklist"}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" aria-hidden /> : <ChevronDown className="w-3.5 h-3.5" aria-hidden />}
@@ -122,39 +114,39 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
 
       {/* Evacuation Checklist */}
       {isExpanded && (
-        <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 relative z-10">
+        <div className="p-3 sm:p-4 bg-[#161a20] border-t border-white/10 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            <div className="p-3 rounded-xl bg-white border border-gray-200 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
-                <Footprints className="w-4 h-4" aria-hidden />
+            <div className="p-3 rounded-xl bg-[#1b2027] border border-white/10 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-white/10 text-white border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Footprints className="w-4 h-4 text-white" aria-hidden />
               </div>
               <div>
-                <strong className="text-xs text-gray-900 block mb-0.5 font-bold">1. Move to High Ground</strong>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <strong className="text-xs text-white block mb-0.5 font-bold">1. Move to High Ground</strong>
+                <p className="text-xs text-white/60 leading-relaxed">
                   Evacuate to elevated terrain at least 100m vertically above the nearest riverbank.
                 </p>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-white border border-gray-200 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-red-50 text-red-600 border border-red-200 flex items-center justify-center shrink-0 mt-0.5">
-                <Ban className="w-4 h-4" aria-hidden />
+            <div className="p-3 rounded-xl bg-[#1b2027] border border-white/10 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-white/10 text-white border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Ban className="w-4 h-4 text-white" aria-hidden />
               </div>
               <div>
-                <strong className="text-xs text-gray-900 block mb-0.5 font-bold">2. Clear Bridges & Crossings</strong>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <strong className="text-xs text-white block mb-0.5 font-bold">2. Clear Bridges & Crossings</strong>
+                <p className="text-xs text-white/60 leading-relaxed">
                   Do not cross submerged causeways, footbridges, or river fords under any circumstance.
                 </p>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-white border border-gray-200 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 border border-violet-200 flex items-center justify-center shrink-0 mt-0.5">
-                <Radio className="w-4 h-4" aria-hidden />
+            <div className="p-3 rounded-xl bg-[#1b2027] border border-white/10 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-white/10 text-white border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <Radio className="w-4 h-4 text-white" aria-hidden />
               </div>
               <div>
-                <strong className="text-xs text-gray-900 block mb-0.5 font-bold">3. Maintain BLE Beacon</strong>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <strong className="text-xs text-white block mb-0.5 font-bold">3. Maintain BLE Beacon</strong>
+                <p className="text-xs text-white/60 leading-relaxed">
                   Keep Android device on and connected to offline BLE mesh nodes for relay to emergency services.
                 </p>
               </div>

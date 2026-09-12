@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat, Syne } from "next/font/google";
 import "./globals.css";
 import SmoothScrollProvider from "@/components/Providers/SmoothScrollProvider";
+import RabtoFXProvider from "@/components/Providers/RabtoFXProvider";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -34,7 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${montserrat.variable} ${syne.variable} font-sans min-h-screen bg-[#161a20] text-white antialiased selection:bg-white selection:text-[#161a20]`}>
-        <SmoothScrollProvider>{children}</SmoothScrollProvider>
+        <SmoothScrollProvider>
+          <RabtoFXProvider>{children}</RabtoFXProvider>
+        </SmoothScrollProvider>
       </body>
     </html>
   );

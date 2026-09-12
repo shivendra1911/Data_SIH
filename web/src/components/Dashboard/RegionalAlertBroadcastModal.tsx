@@ -29,7 +29,7 @@ export default function RegionalAlertBroadcastModal({
   riskPercent,
   onBroadcastSuccess,
 }: RegionalAlertBroadcastModalProps) {
-  const isZeroMinute = riskPercent >= 75;
+  const isZeroMinute = riskPercent >= 70;
 
   const [severity, setSeverity] = useState<"CRITICAL RED" | "HIGH ORANGE">(
     isZeroMinute ? "CRITICAL RED" : "HIGH ORANGE"
@@ -84,28 +84,22 @@ export default function RegionalAlertBroadcastModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in font-sans">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-slate-900">
         {/* Modal Header */}
-        <div className="bg-white px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="bg-[#faf9f5] px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                severity === "CRITICAL RED"
-                  ? "bg-red-50 text-red-600 border border-red-200"
-                  : "bg-amber-50 text-amber-600 border border-amber-200"
-              }`}
-            >
-              <Radio className="w-5 h-5" aria-hidden />
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white border border-slate-300 text-slate-900">
+              <Radio className="w-5 h-5 text-red-600 animate-pulse" aria-hidden />
             </div>
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-950 flex items-center gap-2 font-display">
                 <span>Regional Mobile Alert Dispatcher</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-bold">
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black">
                   ZERO-MINUTE
                 </span>
               </h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500 font-medium">
                 Direct Geo-Fenced Push to Citizen Android Devices in Sector
               </p>
             </div>
@@ -113,7 +107,7 @@ export default function RegionalAlertBroadcastModal({
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="w-9 h-9 rounded-xl text-slate-500 hover:text-slate-950 hover:bg-slate-100 transition flex items-center justify-center border border-slate-200"
           >
             <X className="w-5 h-5" aria-hidden />
           </button>
@@ -122,35 +116,35 @@ export default function RegionalAlertBroadcastModal({
         {/* Modal Body */}
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
           {dispatchedAlert ? (
-            <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border border-emerald-200">
-                <CheckCircle2 className="w-8 h-8" aria-hidden />
+            <div className="p-6 rounded-2xl bg-[#faf9f5] border border-slate-200 space-y-4 text-center">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto border border-emerald-300">
+                <CheckCircle2 className="w-8 h-8 text-emerald-700" aria-hidden />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h3 className="text-base font-extrabold text-slate-950 font-display">
                   Regional Alert Broadcasted Successfully!
                 </h3>
-                <p className="text-xs text-emerald-800 font-medium mt-1">
+                <p className="text-xs text-slate-600 font-medium mt-1">
                   Dispatched to {dispatchedAlert.target_nodes_count} mobile phones in {activeZone.name}
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 bg-white p-3 rounded-2xl border border-emerald-200 text-left">
+              <div className="grid grid-cols-3 gap-2 bg-white p-3.5 rounded-2xl border border-slate-200 text-left">
                 <div>
-                  <span className="text-[10px] uppercase text-gray-400 block font-semibold">Status</span>
-                  <span className="text-xs font-bold text-emerald-700">
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Status</span>
+                  <span className="text-xs font-black text-slate-950 font-mono">
                     {dispatchedAlert.status}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase text-gray-400 block font-semibold">Delivery ACK</span>
-                  <span className="text-xs font-bold text-gray-900">
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Delivery ACK</span>
+                  <span className="text-xs font-black text-slate-950 font-mono">
                     {dispatchedAlert.delivery_rate_pct}%
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase text-gray-400 block font-semibold">Acoustic Siren</span>
-                  <span className="text-xs font-bold text-violet-700">
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Acoustic Siren</span>
+                  <span className="text-xs font-black text-slate-950 font-mono">
                     {dispatchedAlert.trigger_acoustic_siren ? "TRIGGERED" : "OFF"}
                   </span>
                 </div>
@@ -158,7 +152,7 @@ export default function RegionalAlertBroadcastModal({
 
               <button
                 onClick={() => setDispatchedAlert(null)}
-                className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-xs font-semibold text-white transition min-h-[44px]"
+                className="px-5 py-2.5 rounded-full text-xs font-bold bg-slate-900 hover:bg-black text-white transition shadow-xs"
               >
                 Send Another Dispatch
               </button>
@@ -166,127 +160,131 @@ export default function RegionalAlertBroadcastModal({
           ) : (
             <>
               {/* Sector Target Details */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-[#faf9f5] p-3.5 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-[10px] uppercase text-gray-500 block font-semibold">Target Sector</span>
-                  <span className="text-xs font-bold text-gray-900 flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5 text-violet-600" aria-hidden />
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Target Sector</span>
+                  <span className="text-xs font-black text-slate-950 flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3.5 h-3.5 text-slate-500" aria-hidden />
                     {activeZone.district}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase text-gray-500 block font-semibold">Current AI Risk</span>
-                  <span
-                    className={`text-xs font-bold ${
-                      riskPercent >= 75
-                        ? "text-red-600"
-                        : riskPercent >= 55
-                        ? "text-amber-600"
-                        : "text-emerald-600"
-                    }`}
-                  >
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Current Risk</span>
+                  <span className="text-xs font-black text-slate-950">
                     {riskPercent.toFixed(1)}% (
-                    {riskPercent >= 75 ? "RED" : riskPercent >= 55 ? "ORANGE" : "NORMAL"})
+                    {riskPercent >= 70 ? "CRITICAL" : riskPercent >= 35 ? "ELEVATED" : "NORMAL"})
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase text-gray-500 block font-semibold">Estimated Devices</span>
-                  <span className="text-xs font-bold text-gray-900 flex items-center gap-1 mt-0.5">
-                    <Smartphone className="w-3.5 h-3.5 text-violet-600" aria-hidden />
-                    ~1,420 Phones in Zone
+                  <span className="text-[10px] uppercase text-slate-500 block font-bold">Estimated Devices</span>
+                  <span className="text-xs font-black text-slate-950 flex items-center gap-1 mt-0.5">
+                    <Smartphone className="w-3.5 h-3.5 text-slate-500" aria-hidden />
+                    ~1,420 Active Nodes
                   </span>
                 </div>
               </div>
 
               {/* Severity Selector */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                  Alert Severity Tier
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider text-[11px] block">
+                  Broadcast Alert Severity Level:
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setSeverity("CRITICAL RED")}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 min-h-[44px] ${
+                    className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
                       severity === "CRITICAL RED"
-                        ? "bg-red-50 border-red-500 text-red-700 ring-2 ring-red-200"
-                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        ? "bg-red-50 border-red-400 ring-2 ring-red-400/20 shadow-xs"
+                        : "bg-[#faf9f5] border-slate-200 hover:border-slate-300"
                     }`}
                   >
-                    <AlertTriangle className="w-4 h-4 text-red-600" aria-hidden />
-                    <span>CRITICAL RED (ZERO-MINUTE)</span>
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-black text-red-950 block">
+                        CRITICAL RED
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Immediate Evacuation Mandate
+                      </span>
+                    </div>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setSeverity("HIGH ORANGE")}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 min-h-[44px] ${
+                    className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
                       severity === "HIGH ORANGE"
-                        ? "bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-200"
-                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400/20 shadow-xs"
+                        : "bg-[#faf9f5] border-slate-200 hover:border-slate-300"
                     }`}
                   >
-                    <Radio className="w-4 h-4 text-amber-600" aria-hidden />
-                    <span>HIGH ORANGE (STANDBY)</span>
+                    <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-black text-amber-950 block">
+                        HIGH ORANGE
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Elevated Flood Advisory
+                      </span>
+                    </div>
                   </button>
                 </div>
               </div>
 
-              {/* Alert Title */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="alert-title-input"
-                  className="text-xs font-bold uppercase tracking-wider text-gray-700"
-                >
-                  Broadcast Push Title
+              {/* Title Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                  Alert Broadcast Headline:
                 </label>
                 <input
-                  id="alert-title-input"
-                  name="alert_title"
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 min-h-[40px]"
+                  className="w-full bg-[#faf9f5] border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
-              {/* Alert Message */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="alert-message-input"
-                  className="text-xs font-bold uppercase tracking-wider text-gray-700"
-                >
-                  Emergency Directive Message
+              {/* Message Textarea */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                  Directive Instructions (Sent via SMS &amp; Edge Mesh Notification):
                 </label>
                 <textarea
-                  id="alert-message-input"
-                  name="alert_message"
                   rows={3}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full bg-[#faf9f5] border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 leading-relaxed"
                 />
               </div>
 
               {/* Acoustic Siren Toggle */}
-              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gray-50 border border-gray-200">
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#faf9f5] border border-slate-200">
                 <div className="flex items-center gap-2.5">
-                  <Volume2 className="w-4 h-4 text-red-600" aria-hidden />
+                  <Volume2 className="w-4 h-4 text-slate-700" />
                   <div>
-                    <span className="text-xs font-bold text-gray-900 block">
-                      Trigger Phone Siren Alert
+                    <span className="text-xs font-bold text-slate-900 block">
+                      Force Autonomous High-Decibel Siren
                     </span>
-                    <span className="text-[11px] text-gray-500 block">
-                      Overrides silent mode on all citizen Android phones in region
+                    <span className="text-[10px] text-slate-500">
+                      Plays piercing oscillating civil defense tone on receiver devices
                     </span>
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  id="siren-toggle"
-                  checked={triggerAcousticSiren}
-                  onChange={(e) => setTriggerAcousticSiren(e.target.checked)}
-                  className="w-5 h-5 rounded text-violet-600 focus:ring-violet-500 border-gray-300 cursor-pointer"
-                />
+
+                <button
+                  type="button"
+                  onClick={() => setTriggerAcousticSiren(!triggerAcousticSiren)}
+                  className={`w-11 h-6 rounded-full transition flex items-center p-0.5 ${
+                    triggerAcousticSiren ? "bg-slate-900" : "bg-slate-300"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      triggerAcousticSiren ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
             </>
           )}
@@ -294,28 +292,31 @@ export default function RegionalAlertBroadcastModal({
 
         {/* Modal Footer */}
         {!dispatchedAlert && (
-          <div className="bg-white px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-[11px] text-gray-500">
-              Authorized under NDMA / SDMA Early Warning Protocol
-            </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs font-semibold text-gray-700 transition min-h-[44px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSending}
-                onClick={handleSendBroadcast}
-                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm min-h-[44px]"
-              >
-                <Send className="w-4 h-4" aria-hidden />
-                <span>{isSending ? "Broadcasting..." : "Dispatch Regional Alert"}</span>
-              </button>
-            </div>
+          <div className="bg-[#faf9f5] px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-950 hover:bg-slate-200 transition"
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={handleSendBroadcast}
+              disabled={isSending}
+              className="px-6 py-2.5 rounded-full text-xs font-extrabold bg-red-600 hover:bg-red-700 text-white transition flex items-center gap-2 shadow-xs"
+            >
+              {isSending ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Dispatching to Edge...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Dispatch Alert to Phones</span>
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>

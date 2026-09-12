@@ -11,7 +11,7 @@ import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
-import { INDIA_FLOOD_ZONES, SAFE_EVACUATION_ROUTES } from "@/lib/constants";
+import { INDIA_FLOOD_ZONES, getSafeRoutesForZone } from "@/lib/constants";
 import {
   HazardZone,
   PredictionResponse,
@@ -20,6 +20,7 @@ import {
   ForecastHorizon,
 } from "@/lib/types";
 import { fetchCurrentPrediction } from "@/lib/api";
+import { autonomousAlertEngine, MobileSirenState } from "@/lib/autonomousAlertEngine";
 import { useRabtoTilt } from "@/lib/useRabtoTilt";
 import { useScrollReveal } from "@/lib/useScrollReveal";
 import {
@@ -33,7 +34,35 @@ import {
   Activity,
   ChevronDown,
   ChevronUp,
+  BellRing,
+  VolumeX,
+  Smartphone,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
+
+const DEFAULT_USER_ZONE: HazardZone = {
+  id: "live_user_location",
+  name: "My Live Location (Detecting...)",
+  district: "Live Location",
+  center: [24.7114, 83.0387],
+  dangerMarkM: 5.0,
+  warningMarkM: 3.5,
+  currentRisk: 6.5,
+  alertColor: "GREEN",
+  leadTimeMinutes: 480,
+  primaryTrigger: "Live Meteorological Telemetry",
+  telemetry: {
+    rainfall_mm: 0.0,
+    soil_moisture_pct: 45.0,
+    slope_deg: 10.0,
+    river_level_m: 1.2,
+    seismic_mag: 0.0,
+  },
+  hydrograph: [],
+  preventiveDirectives: [],
+  infrastructure: [],
+};
 
 export default function NationalSentinelPage() {
   useRabtoTilt();
@@ -43,65 +72,218 @@ export default function NationalSentinelPage() {
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(true);
   const [forecastHorizon, setForecastHorizon] = useState<ForecastHorizon>("NOW");
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState<boolean>(false);
   const [isRegionalModalOpen, setIsRegionalModalOpen] = useState<boolean>(false);
   const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
   const [sentinelScan, setSentinelScan] = useState<NationalSentinelScan | null>(null);
   const [loadingScan, setLoadingScan] = useState<boolean>(false);
   const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const activeSafeRoutes: SafeEvacuationRoute[] =
-    SAFE_EVACUATION_ROUTES[selectedZone.id] ||
-    SAFE_EVACUATION_ROUTES["chamoli_01"] ||
-    [];
+  // Government Mobile Siren State (Dispatched exclusively to mobile APKs in danger zone)
+  const [sirenState, setSirenState] = useState<MobileSirenState>(autonomousAlertEngine.getState());
 
+  const [connectedMobileCount, setConnectedMobileCount] = useState<number>(0);
 
-  const playAlertSound = useCallback(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-      } catch {}
-    }
+  useEffect(() => {
+    const unsub = autonomousAlertEngine.subscribe((state) => {
+      setSirenState(state);
+    });
+    return () => {
+      unsub();
+    };
   }, []);
 
+  // Poll real connected mobile devices from /api/citizen/locations (tab-visibility aware)
+  useEffect(() => {
+    const fetchMobileCount = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const res = await fetch("/api/citizen/locations");
+        if (res.ok) {
+          const data = await res.json();
+          setConnectedMobileCount(data.total || 0);
+          autonomousAlertEngine.updateRegisteredDeviceCount(data.total || 0);
+        }
+      } catch (err) {
+        // silent fail
+      }
+    };
+    fetchMobileCount();
+    const interval = setInterval(fetchMobileCount, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeSafeRoutes: SafeEvacuationRoute[] = getSafeRoutesForZone(selectedZone);
+
+  // Non-blocking toast notification helper
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  const handleTriggerSOS = useCallback(async () => {
+    try {
+      const res = await fetch("/api/citizen/locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Emergency Citizen SOS (${selectedZone.name.split("(")[0].trim()})`,
+          phone: "+91 98765 43210",
+          lat: selectedZone.center[0],
+          lng: selectedZone.center[1],
+          zone_id: selectedZone.id,
+          status: "SOS",
+          medical_distress: "HIGH_WATER_EVACUATION",
+          sos_type: "CITIZEN 1-TAP DISTRESS BEACON",
+        }),
+      });
+      if (res.ok) {
+        showToast("🚨 Emergency SOS signal registered! Rescue teams and NDRF hotline 1078 dispatched.");
+      }
+    } catch (err) {
+      console.error("SOS dispatch error:", err);
+    }
+  }, [selectedZone]);
+
   const runNationalScan = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) return;
     setLoadingScan(true);
     try {
       const res = await fetch(`/api/sentinel/scan?auto_dispatch=${autoDispatchEnabled}`);
       if (res.ok) {
         const data: NationalSentinelScan = await res.json();
         setSentinelScan(data);
-        if (data.recent_auto_sos_dispatches.length > 0 && soundEnabled) {
-          playAlertSound();
-        }
       }
     } catch (err) {
       console.warn("National sentinel scan error:", err);
     } finally {
       setLoadingScan(false);
     }
-  }, [autoDispatchEnabled, soundEnabled, playAlertSound]);
+  }, [autoDispatchEnabled]);
 
   useEffect(() => {
     runNationalScan();
-    const interval = setInterval(runNationalScan, 10000);
+    const interval = setInterval(runNationalScan, 30000);
     return () => clearInterval(interval);
   }, [runNationalScan]);
+
+  const detectLiveLocation = useCallback(async () => {
+    // 1. Instant IP geolocation resolution (<100ms)
+    try {
+      const res = await fetch("/api/geolocation");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lat && data.lng) {
+          const locName = `${data.city} (${data.region})`;
+          const userZone: HazardZone = {
+            id: "live_user_location",
+            name: locName,
+            district: data.city,
+            center: [data.lat, data.lng],
+            dangerMarkM: 5.0,
+            warningMarkM: 3.5,
+            currentRisk: 6.5,
+            alertColor: "GREEN",
+            leadTimeMinutes: 480,
+            primaryTrigger: "Live Meteorological Telemetry",
+            telemetry: {
+              rainfall_mm: 0.0,
+              soil_moisture_pct: 45.0,
+              slope_deg: 10.0,
+              river_level_m: 1.2,
+              seismic_mag: 0.0,
+            },
+          };
+          setSelectedZone(userZone);
+          showToast(`📍 Live Location Active: ${locName}`);
+        }
+      }
+    } catch (e) {
+      console.warn("IP Geolocation error:", e);
+    }
+
+    // 2. High-precision GPS enhancement if granted by browser
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          try {
+            const geoRes = await fetch(
+              `https://geocoding-api.open-meteo.com/v1/search?name=&latitude=${lat}&longitude=${lng}&count=1`
+            );
+            let locName = "My GPS Location";
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              if (geoData.results?.[0]?.name) {
+                locName = `${geoData.results[0].name} (${geoData.results[0].admin1 || "India"})`;
+              }
+            }
+            const userZone: HazardZone = {
+              id: "live_user_location",
+              name: locName,
+              district: locName.split("(")[0].trim(),
+              center: [lat, lng],
+              dangerMarkM: 5.0,
+              warningMarkM: 3.5,
+              currentRisk: 6.5,
+              alertColor: "GREEN",
+              leadTimeMinutes: 480,
+              primaryTrigger: "Live GPS Meteorological Telemetry",
+              telemetry: {
+                rainfall_mm: 0.0,
+                soil_moisture_pct: 45.0,
+                slope_deg: 10.0,
+                river_level_m: 1.2,
+                seismic_mag: 0.0,
+              },
+            };
+            setSelectedZone(userZone);
+            showToast(`📍 Precision GPS Active: ${locName}`);
+          } catch {
+            const userZone: HazardZone = {
+              id: "live_user_location",
+              name: `GPS Location (${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E)`,
+              district: "My Location",
+              center: [lat, lng],
+              dangerMarkM: 5.0,
+              warningMarkM: 3.5,
+              currentRisk: 6.5,
+              alertColor: "GREEN",
+              leadTimeMinutes: 480,
+              primaryTrigger: "Live GPS Telemetry",
+              telemetry: {
+                rainfall_mm: 0.0,
+                soil_moisture_pct: 45.0,
+                slope_deg: 10.0,
+                river_level_m: 1.2,
+                seismic_mag: 0.0,
+              },
+            };
+            setSelectedZone(userZone);
+          }
+        },
+        () => {},
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    }
+  }, []);
+
 
   const loadZoneData = useCallback(async (zone: HazardZone) => {
     setLoadingPrediction(true);
     try {
-      const pred = await fetchCurrentPrediction(zone.id);
+      let pred: PredictionResponse;
+      if (zone.id === "live_user_location" || zone.id.startsWith("custom_")) {
+        pred = await fetchCurrentPrediction({
+          lat: zone.center[0],
+          lng: zone.center[1],
+          name: zone.name,
+        });
+      } else {
+        pred = await fetchCurrentPrediction(zone.id);
+      }
       setPrediction(pred);
     } catch (err) {
       console.warn("Using fallback telemetry for zone", zone.name, err);
@@ -122,9 +304,24 @@ export default function NationalSentinelPage() {
   if (forecastHorizon === "+12H") displayedRisk = displayedRisk * 0.85;
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
+  // Autonomous Mobile Siren Dispatch: automatically sent to mobile APKs in danger zone when risk >= 70%
+  useEffect(() => {
+    if (autoDispatchEnabled && displayedRisk >= 70) {
+      autonomousAlertEngine.evaluateAndDispatchAutonomousAlert(
+        selectedZone.id,
+        selectedZone.name,
+        displayedRisk,
+        selectedZone.center
+      );
+    }
+  }, [displayedRisk, selectedZone, autoDispatchEnabled]);
+
+  const isSirenBroadcasting = sirenState.isDispatchedToMobile;
+  const isSirenHalted = sirenState.isManuallyHalted;
+
   return (
-    <div className="relative min-h-screen flex flex-col bg-transparent text-white font-sans selection:bg-white selection:text-[#161a20]">
-      {/* Background Video for Continuous Scroll Animation */}
+    <div className="relative min-h-screen flex flex-col text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
+      {/* Fixed Ambient Dynamic Video Background for entire page */}
       <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
         <video
           src="/download.mp4"
@@ -135,20 +332,26 @@ export default function NationalSentinelPage() {
           preload="auto"
           className="w-full h-full object-cover scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/80 via-[#161a20]/45 to-[#161a20]/85 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/70 via-[#161a20]/35 to-[#161a20]/75 pointer-events-none" />
       </div>
 
-      {/* Cinematic Hero Section */}
+      {/* Floating In-App Non-Blocking Toast */}
+      {toastMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Cinematic Hero Section with Fixed & Smooth Video Scrubbing */}
       <div className="relative z-10">
         <ScrollVideoHero
           onEnterCommandCenter={() => {
-            const el = document.getElementById("sentinel-overview");
-            if (el) {
-              if ((window as any).__lenis) {
-                (window as any).__lenis.scrollTo(el);
-              } else {
-                el.scrollIntoView({ behavior: "smooth" });
-              }
+            const lenis = (window as any).__lenis;
+            if (lenis) {
+              lenis.scrollTo('#sentinel-overview', { duration: 1.2 });
+            } else {
+              document.getElementById("sentinel-overview")?.scrollIntoView({ behavior: "smooth" });
             }
           }}
         />
@@ -159,109 +362,196 @@ export default function NationalSentinelPage() {
         <Header
           selectedZone={selectedZone}
           onSelectZone={setSelectedZone}
-          onSimulateSOS={() => {
-            if (soundEnabled) playAlertSound();
-          }}
           onOpenMobileModal={() => setIsMobileModalOpen(true)}
           onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
           onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
           floodRiskPercent={displayedRisk}
-          soundEnabled={soundEnabled}
-          onToggleSound={() => setSoundEnabled((p) => !p)}
+          isMobileSirenActive={sirenState.isDispatchedToMobile}
+          connectedMobileCount={connectedMobileCount}
+          onToggleMobileSiren={() => {
+            if (sirenState.isDispatchedToMobile) {
+              autonomousAlertEngine.haltMobileSiren(selectedZone.id);
+              showToast("Mobile siren halted across danger zone devices.");
+            } else {
+              autonomousAlertEngine.dispatchMobileSiren(
+                selectedZone.id,
+                selectedZone.name,
+                displayedRisk,
+                selectedZone.center
+              );
+              showToast(`Emergency siren transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+            }
+          }}
         />
 
-        {/* Real-time Telemetry Ribbon */}
-        <TelemetryStrip activeZone={selectedZone} riskPercent={displayedRisk} />
+        {/* GOVERNMENT OPERATIONAL COMMAND RIBBON */}
+        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 sm:px-6 lg:px-8 py-2.5 shadow-xs font-sans text-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-3 max-w-[1800px] mx-auto w-full text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-extrabold uppercase tracking-widest text-[11px] text-slate-900 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                GOVERNMENT TACTICAL FLOOD COMMAND
+              </span>
+              <span className="text-slate-400">•</span>
+              <span className="text-slate-600 font-medium">
+                National Disaster Management Authority (NDMA) &bull; Central Water Commission (CWC)
+              </span>
+            </div>
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-[1800px] mx-auto w-full space-y-6">
-          
-          {/* Quick Hub Navigation Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Link
-              href="/radar"
-              className="p-5 rounded-2xl border border-white/10 hover:border-white/30 bg-[#1b2027]/75 hover:bg-[#212730]/90 transition flex items-center justify-between group shadow-lg text-white font-sans"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-full bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
-                  <Compass className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display uppercase tracking-tight">
-                    Tactical GIS Radar &amp; Inundation Command
-                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">
-                      LIVE GIS
-                    </span>
-                  </h2>
-                  <p className="text-xs text-white/70">
-                    Full-view spatial radar, Topo/Sat overlays, flood wave vectors &amp; safe routes
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-white/70 group-hover:translate-x-1 transition" />
-            </Link>
-
-            <Link
-              href="/rescue"
-              className="p-5 rounded-2xl border border-white/10 hover:border-white/30 bg-[#1b2027]/75 hover:bg-[#212730]/90 transition flex items-center justify-between group shadow-lg text-white font-sans"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-full bg-white/10 text-white border border-white/15 flex items-center justify-center group-hover:scale-105 transition shadow-xs">
-                  <Users className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display uppercase tracking-tight">
-                    Citizen Distress &amp; Emergency Response Grid
-                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30 uppercase tracking-wider">
-                      APK SYNC
-                    </span>
-                  </h2>
-                  <p className="text-xs text-white/70">
-                    Mobile APK distress telemetry, Live GPS vs Last Known Beacons, 108/Police/NDRF dispatch
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-white/70 group-hover:translate-x-1 transition" />
-            </Link>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                12 Basins Scanned
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
+                Cell Broadcast CH-4370 Armed
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-300">
+                Target: Danger Zone Mobile APKs
+              </span>
+            </div>
           </div>
+        </div>
 
-          {/* Section 1: Pan-India Autonomous Sentinel Basin Surveillance (12 Basins) */}
-          <div className="space-y-4 text-white font-sans">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
-              <div>
-                <div className="corwdy-subtitle mb-1">
-                  <span>/PAN-INDIA BASIN SURVEILLANCE</span>
-                </div>
-                <h2 className="text-base font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
-                  <Radio className="w-4 h-4 text-red-400" />
-                  Autonomous Sentinel Basin Surveillance (12 Basins)
-                </h2>
-                <p className="text-xs text-white/70">
-                  Continuous multi-basin telemetry monitoring river stage anomalies, flood crest velocity, and autonomous red alerts across India.
-                </p>
+        {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE */}
+        {isSirenBroadcasting ? (
+          <div className="bg-red-600 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shadow-md sticky top-[61px] z-40">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-lg animate-pulse shrink-0">
+                🚨
               </div>
-
-              <div className="flex items-center gap-2.5">
-                <button
-                  onClick={() => setAutoDispatchEnabled((p) => !p)}
-                  className={`text-[10px] uppercase font-bold tracking-[1.5px] px-4 py-2 rounded-full border transition flex items-center gap-1.5 ${
-                    autoDispatchEnabled
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
-                      : "bg-white/10 text-white/70 border-white/15"
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Auto-SOS: {autoDispatchEnabled ? "ARMED" : "OFF"}</span>
-                </button>
-                <button
-                  onClick={runNationalScan}
-                  disabled={loadingScan}
-                  className="btn-solid-primary text-xs h-[38px] px-4"
-                >
-                  <span>{loadingScan ? "Scanning..." : "Scan All Basins"}</span>
-                </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider">
+                    EMERGENCY CELL SIREN ACTIVE ON {sirenState.targetDevicesCount.toLocaleString()} CITIZEN MOBILE DEVICES
+                  </span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-white text-red-700 uppercase">
+                    MOBILE APK ONLY
+                  </span>
+                </div>
+                <p className="text-xs text-red-100 mt-0.5 font-medium">
+                  Broadcasting civic evacuation siren &amp; forced vibration to all phones located in {selectedZone.name.split("(")[0].trim()}.
+                  Web command audio is muted for operator composure.
+                </p>
               </div>
             </div>
 
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  autonomousAlertEngine.haltMobileSiren(selectedZone.id);
+                  showToast("Mobile emergency siren halted for citizen devices.");
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-red-700 font-extrabold text-xs transition shadow-xs flex items-center gap-1.5"
+              >
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Halt Mobile Siren</span>
+              </button>
+              <button
+                onClick={() => {
+                  autonomousAlertEngine.dispatchMobileSiren(
+                    selectedZone.id,
+                    selectedZone.name,
+                    displayedRisk,
+                    selectedZone.center
+                  );
+                  showToast(`Emergency siren re-transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-red-800 hover:bg-red-900 text-white font-extrabold text-xs transition shadow-xs flex items-center gap-1.5 border border-red-500"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                <span>Re-Broadcast Siren</span>
+              </button>
+            </div>
+          </div>
+        ) : isSirenHalted ? (
+          <div className="bg-amber-500 text-slate-950 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs sticky top-[61px] z-40">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">⚠️</span>
+              <span className="text-xs font-black uppercase tracking-wider">
+                MOBILE SIREN HALTED BY OPERATOR:
+              </span>
+              <span className="text-xs font-semibold">
+                Citizen devices in {selectedZone.name.split("(")[0].trim()} on audio standby. Auto-dispatch temporarily suspended.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                autonomousAlertEngine.dispatchMobileSiren(
+                  selectedZone.id,
+                  selectedZone.name,
+                  displayedRisk,
+                  selectedZone.center
+                );
+                showToast(`Emergency siren resumed on ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-950 hover:bg-black text-white font-bold text-xs transition shadow-xs flex items-center gap-1.5"
+            >
+              <BellRing className="w-3.5 h-3.5 text-amber-400" />
+              <span>Resume Mobile Siren</span>
+            </button>
+          </div>
+        ) : (
+          <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              <span className="font-bold text-slate-700">Mobile Siren Broadcast:</span>
+              <span className="text-slate-500 font-medium">
+                Standby for {selectedZone.name.split("(")[0].trim()} ({sirenState.targetDevicesCount.toLocaleString()} citizen &amp; responder mobile APKs registered).
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                autonomousAlertEngine.dispatchMobileSiren(
+                  selectedZone.id,
+                  selectedZone.name,
+                  displayedRisk,
+                  selectedZone.center
+                );
+                showToast(`Emergency siren authorized and transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
+              }}
+              className="px-3 py-1 rounded-lg bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-xs flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <BellRing className="w-3.5 h-3.5 text-slate-700" />
+              <span>Authorize &amp; Send Mobile Siren</span>
+            </button>
+          </div>
+        )}
+
+        {/* Real-time 3-Card Telemetry Ribbon with LIVE Telemetry */}
+        <TelemetryStrip
+          activeZone={selectedZone}
+          riskPercent={displayedRisk}
+          liveTelemetry={prediction?.telemetry}
+          isLiveInternet={prediction?.is_live_internet}
+        />
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto w-full space-y-8 font-sans">
+          
+          {/* PRIMARY FOCAL POINT: Big, Crystal-Clear Flood Risk Status Card */}
+          <section aria-label="Current Flood Threat Assessment">
+            <PredictionPanel
+              prediction={
+                prediction
+                  ? {
+                      ...prediction,
+                      flood_probability_percent: displayedRisk,
+                      alert_color:
+                        displayedRisk >= 70
+                          ? "RED"
+                          : displayedRisk >= 35
+                          ? "YELLOW"
+                          : "GREEN",
+                    }
+                  : null
+              }
+              loading={loadingPrediction}
+              onRefresh={() => loadZoneData(selectedZone)}
+              onTriggerSOS={handleTriggerSOS}
+            />
+          </section>
+
+          {/* Section 2: All-India 12 River Basins Quick Switcher */}
+          <section aria-label="All-India River Basins" className="space-y-3">
             <NationalSentinelRadar
               scanData={sentinelScan}
               loading={loadingScan}
@@ -275,76 +565,62 @@ export default function NationalSentinelPage() {
               onToggleAutoDispatch={() => setAutoDispatchEnabled((p) => !p)}
               compact={false}
             />
-          </div>
+          </section>
 
-          {/* Section 2: Multi-Horizon Forecast & AI Hydrological Risk Engine */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left 7 Cols: Multi-Horizon Forecast Simulation & Directives */}
-            <div className="lg:col-span-7 space-y-4 font-sans">
-              {/* Multi-Horizon Surge Forecast Simulation */}
-              <div className="space-y-3 text-white">
-                <div className="flex items-center justify-between">
-                  <div className="corwdy-subtitle">
-                    <Clock className="w-3.5 h-3.5 text-white/80" />
-                    <span>/MULTI-HORIZON WAVE FORECAST</span>
-                  </div>
-                  <span className="text-[11px] text-white/60 font-mono">
-                    Sector: {selectedZone.name}
-                  </span>
+          {/* Section 3: Navigation Cards to Map and Rescue in White & Vanilla Theme */}
+          <section aria-label="Quick Hub Navigation" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link
+              href="/radar"
+              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
+                  <Compass className="w-6 h-6 text-slate-900" />
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                  {[
-                    { key: "NOW", label: "T - 0 (NOW)", desc: "Baseline / Anomaly" },
-                    { key: "+2H", label: "+2 HOURS", desc: "Runoff Influx" },
-                    { key: "+6H", label: "+6 HOURS", desc: "Peak Crest" },
-                    { key: "+12H", label: "+12 HOURS", desc: "Propagation" },
-                    { key: "+24H", label: "+24 HOURS", desc: "Recession" },
-                  ].map((h) => (
-                    <button
-                      key={h.key}
-                      onClick={() => setForecastHorizon(h.key as ForecastHorizon)}
-                      className={`p-3 rounded-2xl text-left border transition ${
-                        forecastHorizon === h.key
-                          ? "bg-white text-[#161a20] border-white font-bold shadow-md"
-                          : "bg-[#1b2027]/75 text-white/80 border-white/10 hover:bg-[#212730]/90"
-                      }`}
-                    >
-                      <div className="font-bold text-[11px] uppercase tracking-wider">{h.label}</div>
-                      <div className="text-[9px] opacity-70 truncate mt-0.5">{h.desc}</div>
-                    </button>
-                  ))}
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
+                    <span>Live Flood Radar Map</span>
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 uppercase tracking-wider">
+                      LIVE GIS
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                    View satellite imagery, real river heights, and verified safe evacuation shelters
+                  </p>
                 </div>
               </div>
+              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
+            </Link>
 
-              {/* Pre-Disaster Mitigation Directives */}
-              <PreventiveDirectivesPanel activeZone={selectedZone} />
-            </div>
+            <Link
+              href="/rescue"
+              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
+                  <Users className="w-6 h-6 text-slate-900" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
+                    <span>Citizen Rescue &amp; SOS Hub</span>
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 uppercase tracking-wider">
+                      LIVE SOS
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                    Live mobile distress beacons, medical emergencies, and local rescue team dispatch
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
+            </Link>
+          </section>
 
-            {/* Right 5 Cols: AI Hydrological Risk Engine Card */}
-            <div className="lg:col-span-5">
-              <PredictionPanel
-                prediction={
-                  prediction
-                    ? {
-                        ...prediction,
-                        flood_probability_percent: displayedRisk,
-                        alert_color:
-                          displayedRisk >= 75
-                            ? "RED"
-                            : displayedRisk >= 55
-                            ? "ORANGE"
-                            : displayedRisk >= 35
-                            ? "YELLOW"
-                            : "GREEN",
-                      }
-                    : null
-                }
-                loading={loadingPrediction}
-                onRefresh={() => loadZoneData(selectedZone)}
-              />
-            </div>
-          </div>
+          {/* Section 4: Secondary Operations & Directives in White & Vanilla Theme */}
+          <section aria-label="Safety Directives" className="space-y-4">
+            <PreventiveDirectivesPanel activeZone={selectedZone} />
+          </section>
+
         </main>
       </div>
 
@@ -352,9 +628,7 @@ export default function NationalSentinelPage() {
       <MobilePairingModal
         isOpen={isMobileModalOpen}
         onClose={() => setIsMobileModalOpen(false)}
-        onSimulateAndroidSOS={() => {
-          if (soundEnabled) playAlertSound();
-        }}
+        onSimulateAndroidSOS={handleTriggerSOS}
       />
 
       <RegionalAlertBroadcastModal
@@ -370,44 +644,43 @@ export default function NationalSentinelPage() {
         activeZone={selectedZone}
         safeRoutes={activeSafeRoutes}
         onBroadcastGuidelines={() => {
-          if (soundEnabled) playAlertSound();
+          showToast("Safe guidelines broadcasted across regional edge network.");
         }}
       />
 
-      {/* Quick Jump Floating Pill (Corwdy Capsule) */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-[#161a20]/85 backdrop-blur-xl border border-white/15 rounded-full p-2 shadow-2xl text-white font-sans">
+      {/* Quick Jump Floating Pill in White Theme */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-slate-300 rounded-full p-2 shadow-xl text-slate-900 font-sans">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           aria-label="Scroll to top"
           title="Back to Top"
-          className="circle-btn w-[36px] h-[36px]"
+          className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center transition"
         >
           <ChevronUp className="w-4 h-4" />
         </button>
         <Link
           href="/radar"
-          className="btn-solid-primary text-xs h-[36px] px-4"
+          className="px-4 py-2 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
         >
           <span>Tactical Radar</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10 bg-[#161a20]/90 backdrop-blur-md px-6 py-5 text-center text-xs text-white/70 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
-        <div className="font-semibold text-white">
+      {/* Footer in Frosted Glass Theme */}
+      <footer className="border-t border-white/20 bg-white/85 backdrop-blur-xl px-6 py-5 text-center text-xs text-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans">
+        <div className="font-bold text-slate-900">
           NeerNetra — India Flash Flood Early Warning System &bull; SIH 2026 PS: SIH26192
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block pulse-green" />
+          <span className="flex items-center gap-1.5 text-emerald-800 font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse" />
             12 Basins Online
           </span>
-          <span className="text-white/20">|</span>
-          <span className="text-white/70">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
+          <span className="text-slate-300">|</span>
+          <span className="text-slate-600 font-medium">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
         </div>
       </footer>
     </div>
   );
 }
-

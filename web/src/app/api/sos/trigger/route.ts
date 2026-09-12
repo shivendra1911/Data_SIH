@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { INITIAL_CITIZEN_LOCATIONS } from "@/lib/constants";
 import { CitizenLocation, SOSEvent } from "@/lib/types";
 
 // Global in-memory cache for fast local retrieval and mobile synchronization
@@ -13,7 +12,7 @@ if (!global.__NEERNETRA_SOS_EVENTS__) {
   global.__NEERNETRA_SOS_EVENTS__ = [];
 }
 if (!global.__NEERNETRA_CITIZENS__) {
-  global.__NEERNETRA_CITIZENS__ = [...INITIAL_CITIZEN_LOCATIONS];
+  global.__NEERNETRA_CITIZENS__ = [];
 }
 
 const corsHeaders = {
