@@ -30,6 +30,7 @@ export default function EmergencyResponderGrid({
   compact = false,
 }: EmergencyResponderGridProps) {
   const [dispatchedUnits, setDispatchedUnits] = useState<Record<string, boolean>>({});
+  const [comingSoonId, setComingSoonId] = useState<string | null>(null);
   const [multiAgencyDone, setMultiAgencyDone] = useState(false);
   const [agencyFilter, setAgencyFilter] = useState<"ALL" | "AMBULANCE" | "POLICE" | "NDRF">("ALL");
 
@@ -51,6 +52,10 @@ export default function EmergencyResponderGrid({
       onDispatchUnit(responder);
     }
     setDispatchedUnits((prev) => ({ ...prev, [responder.id]: true }));
+    setComingSoonId(responder.id);
+    setTimeout(() => {
+      setComingSoonId((prev) => (prev === responder.id ? null : prev));
+    }, 3500);
   };
 
   const handleMultiAgency = () => {
@@ -238,22 +243,22 @@ export default function EmergencyResponderGrid({
 
                 <button
                   onClick={() => handleUnitDispatch(responder)}
-                  disabled={isDispatched}
-                  className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border ${
-                    isDispatched
-                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                  className={`flex-1 h-[34px] min-h-[34px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border cursor-pointer active:scale-95 ${
+                    comingSoonId === responder.id
+                      ? "bg-amber-500/15 text-amber-800 border-amber-500/30 animate-pulse"
                       : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] border-slate-700"
                   }`}
+                  title={comingSoonId === responder.id ? "Dispatch Link is coming soon" : "Dispatch Link"}
                 >
-                  {isDispatched ? (
+                  {comingSoonId === responder.id ? (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Mobilized</span>
+                      <span className="text-xs">⏳</span>
+                      <span>Coming Soon</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-3 h-3 text-[#f8fafc]" />
-                      <span>Dispatch Unit</span>
+                      <span>Dispatch Link</span>
                     </>
                   )}
                 </button>

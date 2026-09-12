@@ -26,7 +26,7 @@ export default function CitizenTrackingMatrix({
   compact = false,
 }: CitizenTrackingMatrixProps) {
   const [filter, setFilter] = useState<"ALL" | "LIVE" | "LAST_KNOWN" | "CRITICAL">("ALL");
-  const [dispatchSuccessId, setDispatchSuccessId] = useState<string | null>(null);
+  const [comingSoonId, setComingSoonId] = useState<string | null>(null);
 
   const liveCitizens = citizens.filter((c) => c.is_live);
   const lastKnownCitizens = citizens.filter((c) => !c.is_live);
@@ -47,8 +47,10 @@ export default function CitizenTrackingMatrix({
     if (onDispatchToCitizen) {
       onDispatchToCitizen(cit);
     }
-    setDispatchSuccessId(cit.id);
-    setTimeout(() => setDispatchSuccessId(null), 3000);
+    setComingSoonId(cit.id);
+    setTimeout(() => {
+      setComingSoonId((prev) => (prev === cit.id ? null : prev));
+    }, 3500);
   };
 
   return (
@@ -133,7 +135,7 @@ export default function CitizenTrackingMatrix({
           </div>
         ) : (
           filteredList.map((citizen) => {
-            const isJustDispatched = dispatchSuccessId === citizen.id;
+            const isComingSoon = comingSoonId === citizen.id;
 
             return (
               <div
@@ -271,22 +273,22 @@ export default function CitizenTrackingMatrix({
 
                   <button
                     onClick={() => handleDispatch(citizen)}
-                    disabled={isJustDispatched}
-                    className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border ${
-                      isJustDispatched
-                        ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                    className={`flex-1 h-[34px] min-h-[34px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border cursor-pointer active:scale-95 ${
+                      isComingSoon
+                        ? "bg-amber-500/15 text-amber-800 border-amber-500/30 animate-pulse"
                         : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] border-slate-700"
                     }`}
+                    title={isComingSoon ? "Dispatch Link is coming soon" : "Dispatch Link"}
                   >
-                    {isJustDispatched ? (
+                    {isComingSoon ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Dispatched</span>
+                        <span className="text-xs">⏳</span>
+                        <span>Coming Soon</span>
                       </>
                     ) : (
                       <>
                         <Send className="w-3 h-3 text-[#f8fafc]" />
-                        <span>Dispatch Unit</span>
+                        <span>Dispatch Link</span>
                       </>
                     )}
                   </button>

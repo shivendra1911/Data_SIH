@@ -8,17 +8,21 @@ import PredictionPanel from "@/components/Dashboard/PredictionPanel";
 import PreventiveDirectivesPanel from "@/components/Dashboard/PreventiveDirectivesPanel";
 import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
 import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar";
+import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
+import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
 import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
-import { INDIA_FLOOD_ZONES, getSafeRoutesForZone } from "@/lib/constants";
+import { INDIA_FLOOD_ZONES, getSafeRoutesForZone, getRespondersForZone } from "@/lib/constants";
 import {
   HazardZone,
   PredictionResponse,
   NationalSentinelScan,
   SafeEvacuationRoute,
   ForecastHorizon,
+  CitizenLocation,
+  EmergencyResponder,
 } from "@/lib/types";
 import { fetchCurrentPrediction } from "@/lib/api";
 import { autonomousAlertEngine, MobileSirenState } from "@/lib/autonomousAlertEngine";
@@ -84,6 +88,7 @@ export default function NationalSentinelPage() {
   const [sirenState, setSirenState] = useState<MobileSirenState>(autonomousAlertEngine.getState());
 
   const [connectedMobileCount, setConnectedMobileCount] = useState<number>(0);
+  const [citizens, setCitizens] = useState<CitizenLocation[]>([]);
 
   useEffect(() => {
     const unsub = autonomousAlertEngine.subscribe((state) => {
@@ -103,6 +108,9 @@ export default function NationalSentinelPage() {
         if (res.ok) {
           const data = await res.json();
           setConnectedMobileCount(data.total || 0);
+          if (data.citizens && Array.isArray(data.citizens)) {
+            setCitizens(data.citizens);
+          }
           autonomousAlertEngine.updateRegisteredDeviceCount(data.total || 0);
         }
       } catch (err) {
@@ -110,11 +118,12 @@ export default function NationalSentinelPage() {
       }
     };
     fetchMobileCount();
-    const interval = setInterval(fetchMobileCount, 15000);
+    const interval = setInterval(fetchMobileCount, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const activeSafeRoutes: SafeEvacuationRoute[] = getSafeRoutesForZone(selectedZone);
+  const activeResponders: EmergencyResponder[] = getRespondersForZone(selectedZone);
 
   // Non-blocking toast notification helper
   const showToast = (msg: string) => {
@@ -518,9 +527,37 @@ export default function NationalSentinelPage() {
             />
           </section>
 
-          {/* Section 3: Secondary Operations & Directives in White & Vanilla Theme */}
-          <section aria-label="Safety Directives" className="space-y-4">
+          {/* Section 3: High-Frequency GPS Telemetry, Citizen Rescue List & Emergency Response Grid */}
+          <section aria-label="Field Telemetry & Citizen Operations" className="space-y-6">
             <DisasterLocationStream />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left 7 Cols: Citizen Rescue List */}
+              <div className="lg:col-span-7">
+                <CitizenTrackingMatrix
+                  citizens={citizens}
+                  onFocusCoordinates={(coords) => {
+                    if (typeof window !== "undefined") {
+                      window.location.href = `/radar?lat=${coords[0]}&lng=${coords[1]}`;
+                    }
+                  }}
+                  onDispatchToCitizen={(cit) => {
+                    showToast(`Dispatched response unit to citizen ${cit.name || cit.device_uuid}`);
+                  }}
+                />
+              </div>
+
+              {/* Right 5 Cols: Emergency Response Grid */}
+              <div className="lg:col-span-5">
+                <EmergencyResponderGrid
+                  responders={activeResponders}
+                  zoneName={selectedZone.name}
+                  onDispatchUnit={(resp) => {
+                    showToast(`Dispatched unit ${resp.unit_name}`);
+                  }}
+                />
+              </div>
+            </div>
 
             <PreventiveDirectivesPanel activeZone={selectedZone} />
           </section>
