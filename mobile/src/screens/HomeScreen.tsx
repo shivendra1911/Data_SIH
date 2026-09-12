@@ -121,7 +121,11 @@ export const HomeScreen: React.FC = () => {
 
       const bleOk = await bleEngine.init(storedUuid, 'Citizen');
       if (bleOk) {
-        await startBLEAdvertising('NeerNetra_' + storedUuid.substring(4, 10));
+        try {
+          await startBLEAdvertising('NeerNetra_' + storedUuid.substring(4, 10));
+        } catch (bleErr) {
+          console.warn('[HomeScreen] startBLEAdvertising safely caught:', bleErr);
+        }
         bleEngine.onPeersChanged = (peers) => setPeerCount(peers.length);
         bleEngine.onIncomingCall = (caller) => {
           setIncomingCaller(caller);

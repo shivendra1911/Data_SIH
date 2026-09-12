@@ -118,60 +118,67 @@ class NeerNetraBLEMesh {
   public onVoiceBurstReceived?: (senderId: string, base64Audio: string) => void;
 
   constructor() {
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      try {
-        this.manager = new BleManager();
-        this.setupStateListener();
-      } catch (e) {
-        console.warn('[BLE Mesh] Could not instantiate BleManager:', e);
-      }
-    }
+    // BleManager is lazily initialized in init() AFTER permissions are granted.
+    // Instantiating BleManager on Android 12+ before BLUETOOTH_CONNECT is granted
+    // causes a fatal SecurityException that crashes the app on launch!
   }
 
   private setupStateListener() {
     if (!this.manager) return;
-    this.manager.onStateChange((state: any) => {
-      console.log('[BLE Mesh] Bluetooth state changed:', state);
-      if (this.onStateChange) this.onStateChange(state);
-      if (state === State.PoweredOn && !this.isMeshStarted) {
-        this.startMesh();
-      }
-    }, false);
+    try {
+      this.manager.onStateChange((state: any) => {
+        console.log('[BLE Mesh] Bluetooth state changed:', state);
+        if (this.onStateChange) this.onStateChange(state);
+        if (state === State.PoweredOn && !this.isMeshStarted) {
+          this.startMesh().catch((e) => console.warn('[BLE Mesh] startMesh error:', e));
+        }
+      }, false);
+    } catch (e) {
+      console.warn('[BLE Mesh] setupStateListener error:', e);
+    }
   }
 
   // ── Permissions ────────────────────────────────────────────────────────────
   async requestAndroidPermissions(): Promise<boolean> {
     if (Platform.OS !== 'android') return true;
 
-    const apiLevel = parseInt(String(Platform.Version), 10);
+    try {
+      const apiLevel = parseInt(String(Platform.Version), 10);
 
-    if (apiLevel >= 31) {
-      // Android 12+
-      const results = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ]);
+      if (apiLevel >= 31) {
+        // Android 12+ requires runtime Nearby Devices (BLUETOOTH_SCAN, CONNECT, ADVERTISE)
+        const perms = [
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ];
 
-      const allGranted = Object.values(results).every(
-        (r) => r === PermissionsAndroid.RESULTS.GRANTED
-      );
+        // Android 13+ (API 33+) notification permission
+        if (apiLevel >= 33 && (PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS) {
+          perms.push((PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS);
+        }
 
-      if (!allGranted) {
-        Alert.alert(
-          'Bluetooth Required',
-          'NeerNetra needs Bluetooth permissions to connect with nearby phones in emergencies. Please grant all permissions.',
-          [{ text: 'OK' }]
+        const results = await PermissionsAndroid.requestMultiple(perms);
+
+        const allGranted = Object.values(results).every(
+          (r) => r === PermissionsAndroid.RESULTS.GRANTED
         );
+
+        if (!allGranted) {
+          console.warn('[BLE Mesh] Some permissions not granted:', results);
+        }
+        return allGranted;
+      } else {
+        // Android < 12
+        const locationGranted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        return locationGranted === PermissionsAndroid.RESULTS.GRANTED;
       }
-      return allGranted;
-    } else {
-      // Android < 12
-      const locationGranted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-      );
-      return locationGranted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn('[BLE Mesh] Permission request error:', err);
+      return false;
     }
   }
 
@@ -180,26 +187,40 @@ class NeerNetraBLEMesh {
     this.myDeviceId = deviceId.substring(0, 16);
     this.myName = userName;
 
-    const permOk = await this.requestAndroidPermissions();
-    if (!permOk) {
-      console.warn('[BLE Mesh] Permissions not granted — mesh will not work.');
+    try {
+      const permOk = await this.requestAndroidPermissions();
+      if (!permOk) {
+        console.warn('[BLE Mesh] Permissions not granted — mesh will not work, but app continues safely.');
+      }
+
+      // Lazily instantiate BleManager only AFTER permissions request
+      if (!this.manager && (Platform.OS === 'android' || Platform.OS === 'ios') && BleManager) {
+        try {
+          this.manager = new BleManager();
+          this.setupStateListener();
+        } catch (e) {
+          console.warn('[BLE Mesh] Could not instantiate BleManager:', e);
+        }
+      }
+
+      if (this.manager) {
+        try {
+          const state = await this.manager.state();
+          if (state === State.PoweredOn && !this.isMeshStarted) {
+            await this.startMesh();
+          }
+        } catch (err) {
+          console.warn('[BLE Mesh] Error checking manager state:', err);
+        }
+      } else {
+        console.log('[BLE Mesh] BLE manager not available in this environment.');
+      }
+
+      return true;
+    } catch (fatalErr) {
+      console.warn('[BLE Mesh] Init error safely handled:', fatalErr);
       return false;
     }
-
-    if (this.manager) {
-      try {
-        const state = await this.manager.state();
-        if (state === State.PoweredOn && !this.isMeshStarted) {
-          await this.startMesh();
-        }
-      } catch (err) {
-        console.warn('[BLE Mesh] Error checking manager state:', err);
-      }
-    } else {
-      console.log('[BLE Mesh] Web preview mode — skipping native BLE manager state check.');
-    }
-
-    return true;
   }
 
   // ── Start Mesh (Scan + Advertise cycle) ────────────────────────────────────
