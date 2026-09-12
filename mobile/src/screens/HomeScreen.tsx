@@ -69,6 +69,7 @@ export const HomeScreen: React.FC = () => {
   const [lastLocation, setLastLocation] = useState<LocationSyncPayload | null>(null);
   const [queuedCount, setQueuedCount] = useState<number>(0);
   const [peerCount, setPeerCount] = useState<number>(0);
+  const [peers, setPeers] = useState<MeshPeer[]>([]);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [showRedAlertOverlay, setShowRedAlertOverlay] = useState<boolean>(false);
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
@@ -148,8 +149,14 @@ export const HomeScreen: React.FC = () => {
       setLastLocation(cachedLoc);
 
       // Initialize mesh engine listeners
+      meshEngine.onPeersChanged = (newPeers: MeshPeer[]) => {
+        setPeers([...newPeers]);
+        setPeerCount(newPeers.length);
+      };
       (meshEngine as any).onPeerDiscovered = (peer: MeshPeer) => {
-        setPeerCount(meshEngine.getConnectedPeers().length);
+        const current = meshEngine.getConnectedPeers();
+        setPeers([...current]);
+        setPeerCount(current.length);
       };
       (meshEngine as any).onSOSRelayed = async () => {
         checkOfflineQueue();
@@ -157,7 +164,13 @@ export const HomeScreen: React.FC = () => {
 
       // Lazy-init Bluetooth on native Android/iOS
       if (Platform.OS !== 'web') {
-        await (bleEngine as any).init();
+        const modelName = getDeviceModelName();
+        const nodeName = `Citizen [${modelName || storedUuid.substring(0, 8)}]`;
+        await bleEngine.init(storedUuid, nodeName);
+        const initialPeers = meshEngine.getConnectedPeers();
+        setPeers([...initialPeers]);
+        setPeerCount(initialPeers.length);
+
         (bleEngine as any).onCallReceived = (callerId: string, callerName: string) => {
           setActiveCallPeer({ id: callerId, name: callerName, hopCount: 1 });
         };
@@ -373,7 +386,7 @@ export const HomeScreen: React.FC = () => {
         {currentTab === 'map' && (
           <MapScreen
             lastLocation={lastLocation}
-            peers={meshEngine.getConnectedPeers()}
+            peers={peers}
             isRedZone={isRedZone}
             networkMode={networkMode}
             targetHavenCoords={targetHavenCoords}
@@ -383,7 +396,7 @@ export const HomeScreen: React.FC = () => {
 
         {currentTab === 'mesh' && (
           <MeshScreen
-            peers={meshEngine.getConnectedPeers()}
+            peers={peers}
             networkMode={networkMode}
             onInitiateCall={(peer: any) => {
               (bleEngine as any).initiateCall(peer.id);

@@ -463,17 +463,53 @@ const BLECallModal: React.FC<{
 // ─────────────────────────────────────────────
 // Main MeshScreen
 // ─────────────────────────────────────────────
-export const MeshScreen: React.FC<MeshScreenProps> = ({ peers, isDisasterConfirmed = false }) => {
+export const MeshScreen: React.FC<MeshScreenProps> = ({ peers: initialPeers, isDisasterConfirmed = false }) => {
+  const [localPeers, setLocalPeers] = useState<MeshPeer[]>(initialPeers || []);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
 
-  const livePeers = peers.length > 0 ? peers : meshEngine.getConnectedPeers();
+  useEffect(() => {
+    if (initialPeers && initialPeers.length > 0) {
+      setLocalPeers(initialPeers);
+    } else {
+      setLocalPeers(meshEngine.getConnectedPeers());
+    }
+
+    const prevOnPeersChanged = meshEngine.onPeersChanged;
+    meshEngine.onPeersChanged = (newPeers) => {
+      setLocalPeers([...newPeers]);
+      if (prevOnPeersChanged) prevOnPeersChanged(newPeers);
+    };
+
+    // Auto-trigger fresh scan on entering screen
+    meshEngine.triggerManualScan().catch(() => {});
+
+    return () => {
+      meshEngine.onPeersChanged = prevOnPeersChanged;
+    };
+  }, [initialPeers]);
+
+  const livePeers = localPeers.length > 0 ? localPeers : meshEngine.getConnectedPeers();
+
+  const handleManualScan = async () => {
+    setIsScanning(true);
+    try {
+      await meshEngine.triggerManualScan();
+      const updated = meshEngine.getConnectedPeers();
+      setLocalPeers([...updated]);
+    } catch (e) {
+      console.warn('Manual scan error:', e);
+    } finally {
+      setTimeout(() => setIsScanning(false), 3000);
+    }
+  };
 
   const handleChainReport = () => {
     const hopCount = Math.max(1, livePeers.length);
     Alert.alert(
       'Bluetooth Chain Report',
-      `Your signal is hopping through ${hopCount} device(s) to reach the backend.\n\nStrong peers: ${livePeers.filter((p) => p.signalStrength > -70).length}\nWeak peers: ${livePeers.filter((p) => p.signalStrength <= -70).length}`,
+      `Your signal is hopping through ${hopCount} device(s) to reach the backend.\n\nActive BLE peers: ${livePeers.length}\nStrong signal (> -70 dBm): ${livePeers.filter((p) => p.signalStrength > -70).length}\nWeak signal (<= -70 dBm): ${livePeers.filter((p) => p.signalStrength <= -70).length}`,
     );
   };
 
@@ -503,15 +539,15 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers, isDisasterConfirm
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={handleChainReport}
+            onPress={handleManualScan}
             activeOpacity={0.84}
           >
-            <Activity size={16} color="#1C1F24" strokeWidth={2} />
-            <Text style={styles.actionText}>Chain Info</Text>
+            <Activity size={16} color={isScanning ? "#10b981" : "#1C1F24"} strokeWidth={2} />
+            <Text style={styles.actionText}>{isScanning ? "Scanning..." : "Scan Peers"}</Text>
           </TouchableOpacity>
         </View>
 
-        <BluetoothWalkieTalkie />
+        <BluetoothWalkieTalkie peers={livePeers} />
         <NearbyVictimsHelpCard isDisasterConfirmed={isDisasterConfirmed} />
         <MeshRelayFeed peers={livePeers} />
         <View style={styles.bottomPadding} />

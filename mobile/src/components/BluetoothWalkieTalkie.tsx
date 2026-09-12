@@ -13,13 +13,34 @@ import { MeshChatMessage, MeshPeer } from '../types';
 import { meshEngine } from '../services/bluetoothMesh';
 import { Radio, Mic, MicOff, Send, WifiOff, Volume2, Shield } from 'lucide-react-native';
 
-export const BluetoothWalkieTalkie: React.FC = () => {
+interface BluetoothWalkieTalkieProps {
+  peers?: MeshPeer[];
+}
+
+export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({ peers: propPeers }) => {
   const [messages, setMessages] = useState<MeshChatMessage[]>(meshEngine.getMeshChatMessages());
   const [inputMsg, setInputMsg] = useState<string>('');
   const [isCalling, setIsCalling] = useState<boolean>(false);
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
+  const [peers, setPeers] = useState<MeshPeer[]>(propPeers || meshEngine.getConnectedPeers());
 
-  const peers = meshEngine.getConnectedPeers();
+  useEffect(() => {
+    if (propPeers) {
+      setPeers(propPeers);
+    }
+  }, [propPeers]);
+
+  useEffect(() => {
+    const prevMsgHandler = meshEngine.onMessageReceived;
+    meshEngine.onMessageReceived = (msg) => {
+      setMessages([...meshEngine.getMeshChatMessages()]);
+      if (prevMsgHandler) prevMsgHandler(msg);
+    };
+
+    return () => {
+      meshEngine.onMessageReceived = prevMsgHandler;
+    };
+  }, []);
 
   const handleSendMessage = async () => {
     if (!inputMsg.trim()) return;
@@ -84,31 +105,39 @@ export const BluetoothWalkieTalkie: React.FC = () => {
 
       {/* Connected Bluetooth Peers List */}
       <View style={styles.peersSection}>
-        <Text style={styles.subTitle}>Nearby Mesh Nodes ({peers.length} Connected):</Text>
-        <FlatList
-          data={peers}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.peerCard,
-                isCalling && activePeerName === item.name && styles.peerCardActive,
-              ]}
-              onPress={() => handleStartWalkieTalkie(item)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.peerIconCircle}>
-                <Mic size={14} color="#60a5fa" />
-              </View>
-              <View>
-                <Text style={styles.peerName}>{item.name}</Text>
-                <Text style={styles.peerDist}>{item.distanceMeters}m away • {item.signalStrength}dBm</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
+        <Text style={styles.subTitle}>Nearby Mesh Nodes ({peers.length} Active):</Text>
+        {peers.length === 0 ? (
+          <View style={{ paddingVertical: 10, paddingHorizontal: 4 }}>
+            <Text style={{ color: '#707A84', fontSize: 12 }}>
+              Scanning for emergency nodes... Keep Bluetooth ON on friends' devices.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={peers}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.peerCard,
+                  isCalling && activePeerName === item.name && styles.peerCardActive,
+                ]}
+                onPress={() => handleStartWalkieTalkie(item)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.peerIconCircle}>
+                  <Mic size={14} color="#60a5fa" />
+                </View>
+                <View>
+                  <Text style={styles.peerName}>{item.name}</Text>
+                  <Text style={styles.peerDist}>{item.distanceMeters ?? '?'}m away • {item.signalStrength}dBm</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        )}
       </View>
 
       {/* Offline Mesh Messages Feed */}

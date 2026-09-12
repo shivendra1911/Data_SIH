@@ -183,14 +183,15 @@ class NeerNetraBLEMesh {
   }
 
   // ── Initialise ─────────────────────────────────────────────────────────────
-  async init(deviceId: string, userName: string): Promise<boolean> {
-    this.myDeviceId = deviceId.substring(0, 16);
-    this.myName = userName;
+  async init(deviceId?: string, userName?: string): Promise<boolean> {
+    const rawId = deviceId || 'dev_' + Math.random().toString(36).substring(2, 10);
+    this.myDeviceId = rawId.substring(0, 16);
+    this.myName = userName || 'NeerNetra Node';
 
     try {
       const permOk = await this.requestAndroidPermissions();
       if (!permOk) {
-        console.warn('[BLE Mesh] Permissions not granted — mesh will not work, but app continues safely.');
+        console.warn('[BLE Mesh] Some Bluetooth permissions not granted — attempting to proceed.');
       }
 
       // Lazily instantiate BleManager only AFTER permissions request
@@ -206,8 +207,11 @@ class NeerNetraBLEMesh {
       if (this.manager) {
         try {
           const state = await this.manager.state();
+          console.log('[BLE Mesh] Bluetooth manager state:', state);
           if (state === State.PoweredOn && !this.isMeshStarted) {
             await this.startMesh();
+          } else if (state === 'PoweredOff') {
+            console.warn('[BLE Mesh] Bluetooth is powered off on this device');
           }
         } catch (err) {
           console.warn('[BLE Mesh] Error checking manager state:', err);
@@ -227,11 +231,18 @@ class NeerNetraBLEMesh {
   async startMesh() {
     if (this.isMeshStarted) return;
     this.isMeshStarted = true;
-    console.log('[BLE Mesh] Starting NeerNetra mesh network...');
+    console.log('[BLE Mesh] Starting NeerNetra mesh network for:', this.myName);
 
     // 1. Start native GATT Server + Advertising (Peripheral mode)
     try {
-      await startBLEAdvertising(this.myName || 'NeerNetra Node');
+      const gattStarted = await startGattServer(this.myName || 'NeerNetra Node', (fromDevice, data) => {
+        this.handleIncomingPacket(fromDevice, data);
+      });
+      console.log('[BLE Mesh] Native GATT Server started:', gattStarted);
+      if (!gattStarted) {
+        // Fallback to react-native-ble-advertiser if native module was unready
+        await startBLEAdvertising(this.myName || 'NeerNetra Node');
+      }
     } catch (e) {
       console.warn('[BLE Mesh] Advertising init warning:', e);
     }
@@ -241,7 +252,7 @@ class NeerNetraBLEMesh {
   }
 
   // ── Central: Scan for NeerNetra peers ─────────────────────────────────────
-  private async startScanning() {
+  async startScanning() {
     if (this.isScanning || !this.manager) return;
     this.isScanning = true;
 
@@ -252,49 +263,93 @@ class NeerNetraBLEMesh {
     } catch {}
 
     try {
-      // Pass null to avoid Android 128-bit hardware filter rejects
+      // Pass null to scan all BLE peripherals and avoid hardware filter drops
       this.manager.startDeviceScan(
         null,
-        { allowDuplicates: false },
+        { allowDuplicates: true },
         async (error: any, device: any) => {
           if (error) {
             console.warn('[BLE Mesh] Scan notice:', error.message);
             this.isScanning = false;
-            // Cooldown to respect Android scan rate limits (prevent throttle)
-            setTimeout(() => this.startScanning(), 25000);
+            // Cooldown before retrying
+            setTimeout(() => this.startScanning(), 10000);
             return;
           }
 
-          if (!device || this.connectedDevices.has(device.id)) return;
+          if (!device) return;
 
-          // Filter for NeerNetra devices
-          const isNeerDevice =
-            (device.name && device.name.toLowerCase().includes('neernetra')) ||
-            (device.serviceUUIDs && device.serviceUUIDs.map((u: string) => u.toLowerCase()).includes(NEERNETRA_SERVICE_UUID.toLowerCase())) ||
-            (device.manufacturerData && device.manufacturerData.length > 0);
+          // Check if device is a NeerNetra emergency node:
+          // 1. Name contains 'neer' or 'citizen'
+          // 2. Service UUIDs match NEERNETRA_SERVICE_UUID
+          // 3. Manufacturer data contains NeerNetra signature
+          const devName = (device.name || '').toLowerCase();
+          const devUuids = (device.serviceUUIDs || []).map((u: string) => u.toLowerCase());
+          const targetUuid = NEERNETRA_SERVICE_UUID.toLowerCase();
 
+          const hasNeerName = devName.includes('neer') || devName.includes('citizen');
+          const hasNeerUuid = devUuids.includes(targetUuid);
+          const hasNeerMfr = Boolean(
+            device.manufacturerData && (
+              device.manufacturerData.includes('TmVlcg') || // 'Neer' in base64
+              (device.manufacturerData.length > 0 && hasNeerName)
+            )
+          );
+
+          const isNeerDevice = hasNeerName || hasNeerUuid || hasNeerMfr;
           if (!isNeerDevice) return;
 
-          console.log(`[BLE Mesh] Discovered NeerNetra peer: ${device.name || device.id}`);
-          await this.connectToPeer(device);
+          const peerRssi = device.rssi || -68;
+          const peerName = device.name || `Citizen_${device.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`;
+          const existingPeer = this.activePeers.get(device.id);
+
+          const peer: MeshPeer = {
+            id: device.id,
+            name: existingPeer?.name && !existingPeer.name.startsWith('Citizen_') ? existingPeer.name : peerName,
+            signalStrength: peerRssi,
+            relayedPacketsCount: existingPeer ? existingPeer.relayedPacketsCount : 0,
+            role: 'Citizen Node',
+            distanceMeters: this.rssiToDistance(peerRssi),
+            status: existingPeer ? existingPeer.status : 'SAFE',
+            lastSeen: new Date(),
+          };
+
+          // Register IMMEDIATELY in activePeers so peer list updates in real time!
+          this.activePeers.set(device.id, peer);
+          this.emitPeersUpdate();
+
+          // Connect in background if not already connected
+          if (!this.connectedDevices.has(device.id)) {
+            this.connectToPeer(device).catch(() => {});
+          }
         }
       );
     } catch (scanErr: any) {
       console.warn('[BLE Mesh] startDeviceScan call error:', scanErr?.message);
       this.isScanning = false;
-      setTimeout(() => this.startScanning(), 25000);
+      setTimeout(() => this.startScanning(), 10000);
       return;
     }
 
-    // Gentle restart scan every 45 seconds to find newly arrived peers
+    // Refresh scan every 20 seconds so newly arriving friends are quickly discovered
     if (this.scanTimer) clearInterval(this.scanTimer);
     this.scanTimer = setInterval(() => {
       try {
         this.manager?.stopDeviceScan();
       } catch {}
       this.isScanning = false;
-      setTimeout(() => this.startScanning(), 2000);
-    }, 45000);
+      setTimeout(() => this.startScanning(), 1500);
+    }, 20000);
+  }
+
+  /** Manually trigger an immediate scan burst (user refresh) */
+  async triggerManualScan(): Promise<MeshPeer[]> {
+    console.log('[BLE Mesh] Manual scan triggered by user');
+    try {
+      this.manager?.stopDeviceScan();
+    } catch {}
+    this.isScanning = false;
+    await this.startScanning();
+    return this.getConnectedPeers();
   }
 
   stopScanning() {
