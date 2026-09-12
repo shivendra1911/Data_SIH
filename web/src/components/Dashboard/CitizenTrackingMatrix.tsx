@@ -55,22 +55,22 @@ export default function CitizenTrackingMatrix({
     <div
       className={`flex flex-col ${
         compact
-          ? "space-y-2.5 p-1 font-sans text-slate-900"
-          : "rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-900 font-sans"
+          ? "space-y-2.5 p-1 font-sans text-slate-800"
+          : "rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-800 font-sans"
       }`}
     >
       {/* Header & Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#faf9f5] border border-slate-300 flex items-center justify-center text-slate-900 shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 shrink-0">
             <Radio className="w-4 h-4 text-red-600 animate-pulse" aria-hidden />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-950 font-display">
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 font-display">
                 Citizen Rescue List
               </h3>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black uppercase tracking-wider">
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20 font-bold uppercase tracking-wider">
                 {criticalCitizens.length} Urgent
               </span>
             </div>
@@ -80,14 +80,14 @@ export default function CitizenTrackingMatrix({
           </div>
         </div>
 
-        {/* Filter Pills in White & Vanilla Theme */}
-        <div className="flex items-center gap-1 bg-[#faf9f5] p-1 rounded-xl border border-slate-200 text-xs font-bold">
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1 bg-[#f1f5f9] p-1 rounded-xl border border-slate-200 text-xs font-bold">
           <button
             onClick={() => setFilter("ALL")}
             className={`px-3 py-1 rounded-lg transition ${
               filter === "ALL"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             All ({citizens.length})
@@ -96,8 +96,8 @@ export default function CitizenTrackingMatrix({
             onClick={() => setFilter("LIVE")}
             className={`px-3 py-1 rounded-lg transition ${
               filter === "LIVE"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Live ({liveCitizens.length})
@@ -106,8 +106,8 @@ export default function CitizenTrackingMatrix({
             onClick={() => setFilter("LAST_KNOWN")}
             className={`px-3 py-1 rounded-lg transition ${
               filter === "LAST_KNOWN"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Offline ({lastKnownCitizens.length})
@@ -116,8 +116,8 @@ export default function CitizenTrackingMatrix({
             onClick={() => setFilter("CRITICAL")}
             className={`px-3 py-1 rounded-lg transition ${
               filter === "CRITICAL"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-                : "text-slate-600 hover:text-slate-950"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             Urgent ({criticalCitizens.length})
@@ -128,7 +128,7 @@ export default function CitizenTrackingMatrix({
       {/* Scannable Citizen Rows */}
       <div className={`space-y-2.5 overflow-y-auto pr-1 ${compact ? "max-h-[560px]" : "max-h-[500px]"}`}>
         {filteredList.length === 0 ? (
-          <div className="py-12 text-center text-xs text-slate-500 rounded-2xl bg-[#faf9f5] border border-slate-200">
+          <div className="py-12 text-center text-xs text-slate-500 rounded-2xl bg-[#f1f5f9] border border-slate-200">
             No distress signals currently reported. The rescue queue updates automatically in real-time.
           </div>
         ) : (
@@ -138,7 +138,7 @@ export default function CitizenTrackingMatrix({
             return (
               <div
                 key={citizen.id}
-                className="p-4 rounded-2xl border transition-all relative bg-[#faf9f5] border-slate-200 hover:border-slate-400 shadow-2xs text-slate-900 font-sans"
+                className="p-4 rounded-2xl border transition-all relative bg-[#f1f5f9] border-slate-200 hover:border-slate-300 shadow-2xs text-slate-800 font-sans"
               >
                 {/* Row Header */}
                 <div className="flex items-center justify-between gap-2">
@@ -150,7 +150,7 @@ export default function CitizenTrackingMatrix({
                           : "bg-slate-400"
                       }`}
                     />
-                    <span className="text-xs font-black text-slate-950 truncate font-display">
+                    <span className="text-xs font-bold text-slate-800 truncate font-display">
                       {citizen.name || `Citizen [${citizen.device_uuid.slice(0, 8)}]`}
                     </span>
                     {citizen.phone && (
@@ -166,8 +166,8 @@ export default function CitizenTrackingMatrix({
                     <div
                       className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                         citizen.battery_pct <= 20
-                          ? "bg-red-50 text-red-700 border-red-300"
-                          : "bg-white text-slate-700 border-slate-300"
+                          ? "bg-red-500/10 text-red-700 border-red-500/20"
+                          : "bg-white text-slate-700 border-slate-200"
                       }`}
                     >
                       <Battery className="w-3 h-3" aria-hidden />
@@ -175,37 +175,37 @@ export default function CitizenTrackingMatrix({
                     </div>
 
                     <span
-                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                         citizen.is_live
-                          ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
-                          : "bg-slate-200 text-slate-800 border border-slate-300"
+                          ? "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
+                          : "bg-slate-200 text-slate-700 border border-slate-300"
                       }`}
                     >
                       {citizen.is_live ? "LIVE GPS" : `${citizen.last_seen_minutes_ago || 15}m AGO`}
                     </span>
 
                     {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE" ? (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
                         🖐️ GYRO SAFE
                       </span>
                     ) : citizen.sos_type === "TRAPPED" ? (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-50 text-red-800 border border-red-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20">
                         🚨 TRAPPED
                       </span>
                     ) : citizen.sos_type === "MEDICAL" ? (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 border border-rose-500/20">
                         🩸 MEDICAL
                       </span>
                     ) : citizen.sos_type === "WATER_RISING" ? (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-700 border border-blue-500/20">
                         🌊 WATER RISING
                       </span>
                     ) : citizen.sos_type === "FOOD_WATER" ? (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
                         🍞 FOOD / WATER
                       </span>
                     ) : (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-300">
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 border border-slate-300">
                         📍 TRACKING
                       </span>
                     )}
@@ -215,7 +215,7 @@ export default function CitizenTrackingMatrix({
                 {/* Sub-line: Distress type + Coordinates */}
                 <div className="flex items-center justify-between gap-2 mt-2 text-xs text-slate-700">
                   <div className="flex items-center gap-2 truncate">
-                    <span className="font-bold text-slate-950 truncate">
+                    <span className="font-bold text-slate-800 truncate">
                       {citizen.sos_type === "TOUCH_FREE_MOTION_SAFE"
                         ? "🖐️ Confirmed Safe via Gyro / Motion Sensor"
                         : citizen.sos_type === "TRAPPED"
@@ -229,20 +229,20 @@ export default function CitizenTrackingMatrix({
                         : "📍 Live GPS Tracking Active"}
                     </span>
                     {citizen.medical_distress && citizen.medical_distress !== "NONE" && (
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 shrink-0 uppercase tracking-wider">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20 shrink-0 uppercase tracking-wider">
                         {citizen.medical_distress.replace("_", " ")}
                       </span>
                     )}
                   </div>
 
-                  <span className="text-[10px] font-mono text-slate-600 shrink-0 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] font-mono text-slate-600 shrink-0 font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                     {citizen.lat.toFixed(4)}°, {citizen.lng.toFixed(4)}°
                   </span>
                 </div>
 
                 {/* Mesh Chain */}
                 {!citizen.is_live && citizen.mesh_relay_chain && (
-                  <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-600 font-mono">
+                  <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                     <span className="flex items-center gap-1.5 truncate">
                       <Share2 className="w-3 h-3 text-slate-400 shrink-0" />
                       <span className="truncate">{citizen.mesh_relay_chain.join(" ➔ ")}</span>
@@ -263,29 +263,29 @@ export default function CitizenTrackingMatrix({
                         window.location.href = `/radar?lat=${citizen.lat}&lng=${citizen.lng}&uuid=${encodeURIComponent(citizen.device_uuid)}`;
                       }
                     }}
-                    className="flex-1 h-[32px] rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+                    className="flex-1 h-[32px] rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
                   >
-                    <Crosshair className="w-3 h-3 text-slate-700" aria-hidden />
+                    <Crosshair className="w-3 h-3 text-slate-600" aria-hidden />
                     <span>Locate on Map</span>
                   </button>
 
                   <button
                     onClick={() => handleDispatch(citizen)}
                     disabled={isJustDispatched}
-                    className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                    className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border ${
                       isJustDispatched
-                        ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
-                        : "bg-slate-900 hover:bg-black text-white"
+                        ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                        : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] border-slate-700"
                     }`}
                   >
                     {isJustDispatched ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Dispatched</span>
                       </>
                     ) : (
                       <>
-                        <Send className="w-3 h-3" />
+                        <Send className="w-3 h-3 text-[#f8fafc]" />
                         <span>Dispatch Unit</span>
                       </>
                     )}

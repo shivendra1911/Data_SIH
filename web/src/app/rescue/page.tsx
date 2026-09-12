@@ -242,22 +242,20 @@ export default function RescueCitizenGridPage() {
           connectedMobileCount={citizens.length}
         />
 
-        {/* Live Mobile Telemetry Bar — status only. Mobile pairing lives in
-            the floating command menu and the Live Map is one tap away in
-            the nav tabs, so they no longer need a duplicate button here. */}
-        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
+        {/* Secondary Alert / Live Mobile Telemetry Bar in Deep Muted Neutral Palette */}
+        <div className="bg-[#1e293b] text-[#f8fafc] border-b border-slate-700 px-4 lg:px-6 py-3 shadow-sm font-sans">
           <div className="flex flex-wrap items-center gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-              <span className="font-extrabold uppercase tracking-wider text-[10px]">Live Phone Sync Active</span>
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-bold uppercase tracking-wider text-[10px]">Live Phone Sync Active</span>
             </div>
 
-            <div className="flex items-center gap-2 text-slate-600">
-              <span className="font-bold text-slate-900">Distress Queue:</span>
-              <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-black text-[10px] uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-slate-300">
+              <span className="font-bold text-[#f8fafc]">Distress Queue:</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-bold text-[10px] uppercase tracking-wider">
                 {sosCitizens.length} Active SOS
               </span>
-              <span className="text-slate-500 text-[11px]">
+              <span className="text-slate-400 text-[11px]">
                 ({liveCount} Live GPS &bull; {offlineCount} Offline Mesh)
               </span>
             </div>
@@ -267,14 +265,14 @@ export default function RescueCitizenGridPage() {
         {/* Dispatch Notification Alert */}
         {dispatchNotice && (
           <div className="max-w-[1800px] mx-auto w-full px-4 pt-3 font-sans">
-            <div className="p-3.5 rounded-2xl bg-white text-slate-900 border border-slate-300 shadow-md flex items-center justify-between text-xs font-bold animate-in fade-in">
+            <div className="p-3.5 rounded-2xl bg-slate-900 text-[#f8fafc] border border-slate-700 shadow-md flex items-center justify-between text-xs font-bold animate-in fade-in">
               <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>{dispatchNotice}</span>
               </div>
               <button
                 onClick={() => setDispatchNotice(null)}
-                className="text-slate-500 hover:text-slate-950 font-bold"
+                className="text-slate-400 hover:text-white font-bold"
               >
                 Dismiss
               </button>
@@ -316,6 +314,21 @@ export default function RescueCitizenGridPage() {
           </div>
 
         </main>
+
+        {/* Footer in Deep Muted Neutral Palette */}
+        <footer className="border-t border-slate-800 bg-[#0f172a]/95 backdrop-blur-xl px-6 py-5 text-center text-xs text-slate-300 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans shadow-lg">
+          <div className="font-bold text-[#f8fafc]">
+            NeerNetra &bull; India Flash Flood Early Warning System &bull; SIH 2026
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block live-dot-green" />
+              12 Basins Online
+            </span>
+            <span className="text-slate-700">|</span>
+            <span className="text-slate-400 font-normal">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
+          </div>
+        </footer>
       </div>
 
       {/* Modals */}

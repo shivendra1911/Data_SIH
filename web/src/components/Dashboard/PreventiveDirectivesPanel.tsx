@@ -146,15 +146,15 @@ export default function PreventiveDirectivesPanel({
   const pendingCount = directives.filter((d) => !d.executed).length;
 
   return (
-    <div className="p-6 rounded-3xl glass-card text-slate-900 font-sans space-y-4">
+    <div className="p-6 rounded-3xl glass-card text-slate-800 font-sans space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-200/70">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#faf9f5] border border-slate-300 flex items-center justify-center text-slate-900">
-            <ShieldAlert className="w-4 h-4 text-slate-900" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800">
+            <ShieldAlert className="w-4 h-4 text-slate-800" aria-hidden />
           </div>
           <div>
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-950 font-display">
+            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 font-display">
               Pre-Impact Preventive Directives
             </h3>
             <p className="text-xs text-slate-500 font-medium">
@@ -164,13 +164,13 @@ export default function PreventiveDirectivesPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-black font-mono px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300">
+          <span className="text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
             {pendingCount} Pending Authorization
           </span>
 
           <button
             onClick={() => setIsAddingDirective((p) => !p)}
-            className="h-[30px] px-2.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1 transition shadow-2xs"
+            className="h-[30px] px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold flex items-center gap-1 transition shadow-2xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Write Directive</span>
@@ -180,13 +180,13 @@ export default function PreventiveDirectivesPanel({
 
       {/* Write Directive Inline Form */}
       {isAddingDirective && (
-        <form onSubmit={handleAddDirective} className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-300 space-y-3">
+        <form onSubmit={handleAddDirective} className="p-4 rounded-2xl bg-[#f1f5f9] border border-slate-300 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-slate-900">✍️ Add Custom Directive</span>
+            <span className="text-xs font-bold text-slate-800">✍️ Add Custom Directive</span>
             <button
               type="button"
               onClick={() => setIsAddingDirective(false)}
-              className="text-xs text-slate-500 hover:text-slate-900 font-bold"
+              className="text-xs text-slate-500 hover:text-slate-800 font-bold"
             >
               Cancel
             </button>
@@ -197,7 +197,7 @@ export default function PreventiveDirectivesPanel({
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Directive title (e.g. Halt Riverbank Ferry Operations)"
-            className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-800"
           />
 
           <textarea
@@ -205,7 +205,7 @@ export default function PreventiveDirectivesPanel({
             value={newAction}
             onChange={(e) => setNewAction(e.target.value)}
             placeholder="Mandatory action instructions..."
-            className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-800"
           />
 
           <div className="flex items-center justify-between gap-3">
@@ -213,7 +213,7 @@ export default function PreventiveDirectivesPanel({
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value as any)}
-                className="px-2.5 py-1 text-xs rounded-lg bg-white border border-slate-300 text-slate-900"
+                className="px-2.5 py-1 text-xs rounded-lg bg-white border border-slate-300 text-slate-800"
               >
                 <option value="DAM">DAM</option>
                 <option value="HIGHWAY">HIGHWAY</option>
@@ -224,7 +224,7 @@ export default function PreventiveDirectivesPanel({
               <select
                 value={newPriority}
                 onChange={(e) => setNewPriority(e.target.value as any)}
-                className="px-2.5 py-1 text-xs rounded-lg bg-white border border-slate-300 text-slate-900"
+                className="px-2.5 py-1 text-xs rounded-lg bg-white border border-slate-300 text-slate-800"
               >
                 <option value="IMMEDIATE">IMMEDIATE</option>
                 <option value="URGENT">URGENT</option>
@@ -234,7 +234,7 @@ export default function PreventiveDirectivesPanel({
 
             <button
               type="submit"
-              className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition shadow-2xs"
+              className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-[#f8fafc] text-xs font-bold transition shadow-2xs border border-slate-700"
             >
               Commit Directive
             </button>
@@ -245,7 +245,7 @@ export default function PreventiveDirectivesPanel({
       {/* Directives List */}
       <div className="space-y-2.5">
         {directives.length === 0 ? (
-          <div className="p-6 text-center text-xs text-slate-500 rounded-2xl bg-[#faf9f5] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
+          <div className="p-6 text-center text-xs text-slate-500 rounded-2xl bg-[#f1f5f9] border border-slate-200">
             No active directives for this basin. Click &ldquo;Write Directive&rdquo; to author orders.
           </div>
         ) : (
@@ -256,10 +256,10 @@ export default function PreventiveDirectivesPanel({
             return (
               <div
                 key={dir.id}
-                className={`p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] ${
+                className={`p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 border shadow-xs ${
                   isExecuted
-                    ? "bg-slate-100/70 opacity-60"
-                    : "bg-[#faf9f5]/90 hover:bg-white"
+                    ? "bg-slate-100/70 border-slate-200 opacity-60 text-slate-700"
+                    : "bg-[#f1f5f9] border-slate-200/80 hover:bg-white text-slate-800"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -268,12 +268,12 @@ export default function PreventiveDirectivesPanel({
                   </div>
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-950">{dir.title}</h4>
+                      <h4 className="text-xs font-bold text-slate-800">{dir.title}</h4>
                       <span
-                        className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                           isImmediate
-                            ? "bg-red-50 text-red-700 border border-red-200 font-mono"
-                            : "bg-amber-50 text-amber-800 border border-amber-200 font-mono"
+                            ? "bg-red-500/10 text-red-700 border border-red-500/20 font-mono"
+                            : "bg-amber-500/10 text-amber-700 border border-amber-500/20 font-mono"
                         }`}
                       >
                         {dir.priority}
@@ -286,23 +286,23 @@ export default function PreventiveDirectivesPanel({
                 </div>
 
                 <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
-                  <span className="text-[11px] font-mono text-slate-600 font-bold tracking-tight">
+                  <span className="text-[11px] font-mono text-slate-500 font-bold tracking-tight">
                     {dir.deadline}
                   </span>
 
                   {/* High-Contrast Action Authorization Button */}
                   <button
                     onClick={() => handleAuthorize(dir.id)}
-                    className={`min-h-[38px] px-4 rounded-xl text-xs font-black flex items-center gap-2 transition-all duration-200 shadow-sm cursor-pointer ${
+                    className={`min-h-[38px] px-4 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 shadow-sm cursor-pointer ${
                       isExecuted
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
-                        : "bg-slate-950 hover:bg-black text-white hover:scale-[1.03] active:scale-[0.98] shadow-md border border-slate-800"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-[#f8fafc] shadow-emerald-600/20"
+                        : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] hover:scale-[1.02] active:scale-[0.98] shadow-sm border border-slate-700"
                     }`}
                     title={isExecuted ? "Directive Authorized and Logged" : "Click to Authorize Directive"}
                   >
                     {isExecuted ? (
                       <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#f8fafc]" />
                         <span>Executed</span>
                       </>
                     ) : (

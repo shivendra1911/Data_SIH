@@ -84,48 +84,48 @@ export default function EmergencyResponderGrid({
     <div
       className={`flex flex-col ${
         compact
-          ? "space-y-2.5 p-1 font-sans text-slate-900"
-          : "rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-900 font-sans"
+          ? "space-y-2.5 p-1 font-sans text-slate-800"
+          : "rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-800 font-sans"
       }`}
     >
       {/* Header & Multi-Agency Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#faf9f5] border border-slate-300 flex items-center justify-center text-slate-900 shrink-0">
-            <Truck className="w-4 h-4 text-slate-900" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 shrink-0">
+            <Truck className="w-4 h-4 text-slate-800" aria-hidden />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-950 font-display">
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 font-display">
                 Emergency Response Grid
               </h3>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-900 text-white font-black">
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-[#f8fafc] font-bold">
                 {responders.length} Ready
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              108 ALS Ambulances, Police Thanas & NDRF Units
+              108 ALS Ambulances, Police Thanas &amp; NDRF Units
             </p>
           </div>
         </div>
 
-        {/* Coordinated Multi-Agency Dispatch Button */}
+        {/* Coordinated Multi-Agency Dispatch Button - Neutral Dark Slate with High Contrast */}
         <button
           onClick={handleMultiAgency}
-          className={`h-[36px] px-4 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-2xs ${
+          className={`h-[36px] px-4 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs border ${
             multiAgencyDone
-              ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
-              : "bg-red-600 hover:bg-red-700 text-white"
+              ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+              : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] border-slate-700"
           }`}
         >
           {multiAgencyDone ? (
             <>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" aria-hidden />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden />
               <span>All Branches Dispatched!</span>
             </>
           ) : (
             <>
-              <AlertOctagon className="w-3.5 h-3.5" aria-hidden />
+              <AlertOctagon className="w-3.5 h-3.5 text-amber-300" aria-hidden />
               <span>Multi-Agency Mobilization</span>
             </>
           )}
@@ -133,13 +133,13 @@ export default function EmergencyResponderGrid({
       </div>
 
       {/* Agency Filter Tabs */}
-      <div className="flex items-center gap-1 bg-[#faf9f5] p-1 rounded-xl border border-slate-200 text-xs font-bold">
+      <div className="flex items-center gap-1 bg-[#f1f5f9] p-1 rounded-xl border border-slate-200 text-xs font-bold">
         <button
           onClick={() => setAgencyFilter("ALL")}
           className={`px-3 py-1 rounded-lg transition ${
             agencyFilter === "ALL"
-              ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-              : "text-slate-600 hover:text-slate-950"
+              ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+              : "text-slate-500 hover:text-slate-800"
           }`}
         >
           All ({responders.length})
@@ -148,8 +148,8 @@ export default function EmergencyResponderGrid({
           onClick={() => setAgencyFilter("AMBULANCE")}
           className={`px-3 py-1 rounded-lg transition ${
             agencyFilter === "AMBULANCE"
-              ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-              : "text-slate-600 hover:text-slate-950"
+              ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+              : "text-slate-500 hover:text-slate-800"
           }`}
         >
           108 ALS ({ambulances.length})
@@ -158,8 +158,8 @@ export default function EmergencyResponderGrid({
           onClick={() => setAgencyFilter("POLICE")}
           className={`px-3 py-1 rounded-lg transition ${
             agencyFilter === "POLICE"
-              ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-              : "text-slate-600 hover:text-slate-950"
+              ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+              : "text-slate-500 hover:text-slate-800"
           }`}
         >
           Police ({police.length})
@@ -168,8 +168,8 @@ export default function EmergencyResponderGrid({
           onClick={() => setAgencyFilter("NDRF")}
           className={`px-3 py-1 rounded-lg transition ${
             agencyFilter === "NDRF"
-              ? "bg-white text-slate-950 shadow-xs border border-slate-300 font-black"
-              : "text-slate-600 hover:text-slate-950"
+              ? "bg-white text-slate-900 shadow-xs border border-slate-300 font-bold"
+              : "text-slate-500 hover:text-slate-800"
           }`}
         >
           NDRF / SDRF ({ndrf.length})
@@ -184,7 +184,7 @@ export default function EmergencyResponderGrid({
           return (
             <div
               key={responder.id}
-              className="p-4 rounded-2xl border transition-all relative bg-[#faf9f5] border-slate-200 hover:border-slate-400 shadow-2xs text-slate-900 font-sans"
+              className="p-4 rounded-2xl border transition-all relative bg-[#f1f5f9] border-slate-200 hover:border-slate-300 shadow-2xs text-slate-800 font-sans"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5 min-w-0">
@@ -193,15 +193,15 @@ export default function EmergencyResponderGrid({
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h4 className="text-xs font-black text-slate-950 truncate font-display">
+                      <h4 className="text-xs font-bold text-slate-800 truncate font-display">
                         {responder.unit_name}
                       </h4>
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider bg-white text-slate-800 border border-slate-300">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-white text-slate-700 border border-slate-200">
                         {responder.type}
                       </span>
                     </div>
 
-                    <div className="text-[11px] text-slate-600 flex items-center gap-2 mt-1">
+                    <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-1">
                       <span>📍 Base: {responder.station_location}</span>
                       <span>&bull;</span>
                       <span>Personnel: {responder.personnel_count}</span>
@@ -210,15 +210,15 @@ export default function EmergencyResponderGrid({
                 </div>
 
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-[10px] font-mono font-black text-slate-950 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-slate-500" />
+                  <span className="text-[10px] font-mono font-bold text-slate-800 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
                     ETA: ~{responder.eta_minutes}m
                   </span>
                   <span
-                    className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                       isDispatched
-                        ? "bg-amber-50 text-amber-800 border border-amber-300"
-                        : "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                        ? "bg-amber-500/10 text-amber-700 border border-amber-500/20"
+                        : "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
                     }`}
                   >
                     {isDispatched ? "DISPATCHED" : "ON STANDBY"}
@@ -230,29 +230,29 @@ export default function EmergencyResponderGrid({
               <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-200">
                 <a
                   href={`tel:${responder.contact_number.replace(/\s+/g, "")}`}
-                  className="h-[32px] px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+                  className="h-[32px] px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
                 >
-                  <PhoneCall className="w-3 h-3 text-slate-700" />
+                  <PhoneCall className="w-3 h-3 text-slate-600" />
                   <span>{responder.contact_number}</span>
                 </a>
 
                 <button
                   onClick={() => handleUnitDispatch(responder)}
                   disabled={isDispatched}
-                  className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition ${
+                  className={`flex-1 h-[32px] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition border ${
                     isDispatched
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
-                      : "bg-slate-900 hover:bg-black text-white"
+                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                      : "bg-slate-800 hover:bg-slate-900 text-[#f8fafc] border-slate-700"
                   }`}
                 >
                   {isDispatched ? (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Mobilized</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-3 h-3" />
+                      <Send className="w-3 h-3 text-[#f8fafc]" />
                       <span>Dispatch Unit</span>
                     </>
                   )}

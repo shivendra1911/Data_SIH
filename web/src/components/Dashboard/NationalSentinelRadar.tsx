@@ -24,12 +24,12 @@ interface NationalSentinelRadarProps {
 // User-specified alert color-coding: Red >= 70%, Yellow 35-69%, Green < 35%
 function getRiskBadgeClasses(prob: number) {
   if (prob >= 70) {
-    return "bg-red-50 text-red-700 border border-red-300 font-black";
+    return "bg-red-500/10 text-red-700 border border-red-500/20 font-bold";
   }
   if (prob >= 35) {
-    return "bg-amber-50 text-amber-800 border border-amber-300 font-black";
+    return "bg-amber-500/10 text-amber-700 border border-amber-500/20 font-bold";
   }
-  return "bg-emerald-50 text-emerald-800 border border-emerald-300 font-black";
+  return "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 font-bold";
 }
 
 export default function NationalSentinelRadar({
@@ -48,15 +48,15 @@ export default function NationalSentinelRadar({
 
   if (compact) {
     return (
-      <div className="space-y-2.5 p-1 font-sans text-slate-900">
+      <div className="space-y-2.5 p-1 font-sans text-slate-800">
         {/* Compact Top Status */}
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-            <span className="font-extrabold text-slate-950 uppercase text-[11px] font-display">
+            <span className="font-bold text-slate-800 uppercase text-[11px] font-display">
               All-India River Basins
             </span>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20">
               {criticalCount} HIGH ALERT
             </span>
           </div>
@@ -64,7 +64,7 @@ export default function NationalSentinelRadar({
           <button
             onClick={onRefreshScan}
             disabled={loading}
-            className="h-[28px] px-2.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition shadow-2xs"
+            className="h-[28px] px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition shadow-2xs"
           >
             <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -82,8 +82,8 @@ export default function NationalSentinelRadar({
                 onClick={() => onSelectZoneById(zone.zone_id)}
                 className={`p-2.5 rounded-2xl border text-left transition-all flex flex-col justify-between shadow-2xs ${
                   isSelected
-                    ? "bg-white border-slate-950 ring-2 ring-slate-950/20 text-slate-950 shadow-sm"
-                    : "bg-[#faf9f5] border-slate-200 hover:border-slate-300 text-slate-900"
+                    ? "bg-white border-slate-800 ring-2 ring-slate-800/20 text-slate-900 shadow-sm"
+                    : "bg-[#f1f5f9] border-slate-200 hover:border-slate-300 text-slate-800"
                 }`}
               >
                 <div>
@@ -100,7 +100,7 @@ export default function NationalSentinelRadar({
                     </span>
                   </div>
 
-                  <div className="text-[11px] font-extrabold text-slate-950 truncate">
+                  <div className="text-[11px] font-bold text-slate-800 truncate">
                     {zone.river_basin}
                   </div>
                 </div>
@@ -119,30 +119,30 @@ export default function NationalSentinelRadar({
 
   // Full Expanded View
   return (
-    <div className="p-6 rounded-3xl glass-card text-slate-900 font-sans space-y-5">
+    <div className="p-6 rounded-3xl glass-card text-slate-800 font-sans space-y-5">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/70">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
-            <h3 className="text-base font-extrabold text-slate-950 uppercase tracking-wider font-display">
+            <h3 className="text-base font-extrabold text-slate-800 uppercase tracking-wider font-display">
               All-India 12 River Basins
             </h3>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 font-mono">
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20 font-mono">
               {criticalCount} HIGH ALERT
             </span>
-            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-mono">
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20 font-mono">
               {warningCount} WARNING
             </span>
           </div>
-          <p className="text-xs text-slate-600 font-medium">
+          <p className="text-xs text-slate-500 font-medium">
             Swipe or scroll horizontally to monitor all 12 basins and toggle live telemetry.
           </p>
         </div>
 
         {/* Action Toggles */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          {/* Autonomous SOS Toggle */}
+          {/* Autonomous SOS Toggle - neutral slate toggle avoiding loud red button */}
           <button
             onClick={onToggleAutoDispatch}
             aria-label={
@@ -150,13 +150,13 @@ export default function NationalSentinelRadar({
                 ? "Disable Autonomous SOS Dispatch"
                 : "Enable Autonomous SOS Dispatch"
             }
-            className={`h-[34px] px-3.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition shadow-2xs border ${
+            className={`h-[34px] px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs border ${
               autoDispatchEnabled
-                ? "bg-red-50 text-red-700 border-red-300"
-                : "bg-[#faf9f5] text-slate-600 border-slate-300"
+                ? "bg-slate-800 text-[#f8fafc] border-slate-700 hover:bg-slate-700"
+                : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
             }`}
           >
-            <Zap className={`w-3.5 h-3.5 ${autoDispatchEnabled ? "text-red-600" : "text-slate-400"}`} />
+            <Zap className={`w-3.5 h-3.5 ${autoDispatchEnabled ? "text-amber-300" : "text-slate-400"}`} />
             <span>Autonomous SOS: {autoDispatchEnabled ? "ENABLED" : "PAUSED"}</span>
           </button>
 
@@ -165,7 +165,7 @@ export default function NationalSentinelRadar({
             onClick={onRefreshScan}
             disabled={loading}
             aria-label="Refresh National River Basins Scan"
-            className="h-[34px] px-3.5 rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+            className="h-[34px] px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">Refresh All</span>
@@ -175,35 +175,35 @@ export default function NationalSentinelRadar({
 
       {/* Active Live Location Spotlight (when user location is active) */}
       {selectedZone.id === "live_user_location" && (
-        <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-[#f8fafc] flex items-center justify-center shrink-0 shadow-xs">
               <Navigation className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
                   📍 YOUR REAL-TIME LIVE LOCATION
                 </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-950 border border-emerald-400">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-900 border border-emerald-500/30">
                   LIVE INTERNET GPS
                 </span>
               </div>
-              <h4 className="text-sm font-extrabold text-slate-950 mt-0.5">
+              <h4 className="text-sm font-extrabold text-slate-800 mt-0.5">
                 {selectedZone.name}
               </h4>
-              <p className="text-xs text-slate-700">
+              <p className="text-xs text-slate-600">
                 Live Open-Meteo precipitation, river drainage &amp; USGS seismic signals streaming directly for your coordinates.
               </p>
             </div>
           </div>
-          <span className="text-xs font-bold text-emerald-800 self-end sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-emerald-300 shadow-2xs">
+          <span className="text-xs font-bold text-emerald-800 self-end sm:self-auto bg-white/90 px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-2xs">
             Active Focus
           </span>
         </div>
       )}
 
-      {/* 12-Basin Horizontal Scrolling Carousel (Space-Saving & Sleek) */}
+      {/* 12-Basin Horizontal Scrolling Carousel (Soft #f1f5f9 cards) */}
       <div
         className="flex overflow-x-auto scroll-snap-x mandatory gap-4 pb-2 pt-1 no-scrollbar select-none"
         style={{
@@ -223,10 +223,10 @@ export default function NationalSentinelRadar({
               key={zone.zone_id}
               onClick={() => onSelectZoneById(zone.zone_id)}
               style={{ scrollSnapAlign: "start" }}
-              className={`min-w-[210px] sm:min-w-[230px] max-w-[250px] flex-shrink-0 p-3.5 rounded-2xl text-left transition-all flex flex-col justify-between cursor-pointer ${
+              className={`min-w-[210px] sm:min-w-[230px] max-w-[250px] flex-shrink-0 p-3.5 rounded-2xl text-left transition-all flex flex-col justify-between cursor-pointer border ${
                 isSelected
-                  ? "bg-white ring-2 ring-slate-900 text-slate-950 shadow-md scale-[1.01]"
-                  : "bg-[#faf9f5]/90 hover:bg-white text-slate-900 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] hover:shadow-md"
+                  ? "bg-white border-slate-800 ring-2 ring-slate-800 text-slate-900 shadow-md scale-[1.01]"
+                  : "bg-[#f1f5f9] border-slate-200/80 hover:bg-white text-slate-800 shadow-xs hover:shadow-md"
               }`}
             >
               <div>
@@ -243,31 +243,36 @@ export default function NationalSentinelRadar({
                   </span>
                 </div>
 
-                <h4 className="text-xs font-black text-slate-950 line-clamp-1 mb-1">
+                <h4 className="text-xs font-bold text-slate-800 line-clamp-1 mb-1">
                   {zone.river_basin}
                 </h4>
 
-                <p className="text-[10px] text-slate-600 line-clamp-1 font-medium">
+                <p className="text-[10px] text-slate-500 line-clamp-1 font-medium">
                   {zone.district}
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-200/80 mt-2 flex items-center justify-between text-[10px]">
+              <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[10px]">
                 <span className="text-slate-500">Water Level</span>
-                <span className="font-mono font-bold text-slate-900">{zone.river_level_m}m</span>
+                <span className="font-mono font-bold text-slate-800">{zone.river_level_m}m</span>
               </div>
             </button>
           );
         })}
       </div>
 
-      {/* Recent Autonomous SOS Dispatches */}
+      {/* Recent Autonomous SOS Dispatches (Harmonized neutral container with muted alert tag) */}
       {recentDispatches.length > 0 && (
-        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 space-y-2">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-red-600 animate-pulse" />
-            <span className="text-xs font-black text-red-900 uppercase tracking-wider">
-              Autonomous Early Warning Dispatches Active
+        <div className="p-4 rounded-2xl bg-[#f1f5f9] border border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-red-600 animate-pulse" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Autonomous Early Warning Dispatches Active
+              </span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 border border-red-500/20">
+              CELL BROADCAST
             </span>
           </div>
 
@@ -275,15 +280,18 @@ export default function NationalSentinelRadar({
             {recentDispatches.slice(0, 2).map((d) => (
               <div
                 key={d.alert_id}
-                className="p-3 rounded-xl bg-white border border-red-200 space-y-1 shadow-2xs"
+                className="p-3 rounded-xl bg-white border border-slate-200 space-y-1 shadow-2xs"
               >
-                <div className="flex items-center justify-between text-red-900 font-bold">
-                  <span>🚨 {d.zone_name}</span>
+                <div className="flex items-center justify-between text-slate-800 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                    <span>{d.zone_name}</span>
+                  </span>
                   <span className="font-mono text-[10px] text-slate-500">
                     {new Date(d.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-700 font-medium line-clamp-2">
+                <p className="text-[11px] text-slate-600 font-medium line-clamp-2">
                   {d.message}
                 </p>
               </div>

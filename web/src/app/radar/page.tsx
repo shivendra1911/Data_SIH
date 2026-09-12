@@ -254,25 +254,23 @@ export default function TacticalRadarPage() {
           connectedMobileCount={citizens.length}
         />
 
-        {/* Live status strip — informational only. Zone Broadcast and Citizen
-            SOS are already one tap away via the nav tabs / floating command
-            menu, so they no longer need a second, duplicate row of buttons here. */}
-        <div className="bg-white/85 backdrop-blur-xl border-b border-white/20 px-4 lg:px-6 py-3 shadow-xs font-sans text-slate-900">
+        {/* Secondary Alert / Live status strip in Deep Muted Neutral Palette */}
+        <div className="bg-[#1e293b] text-[#f8fafc] border-b border-slate-700 px-4 lg:px-6 py-3 shadow-sm font-sans">
           <div className="flex flex-wrap items-center gap-3 max-w-[1800px] mx-auto w-full text-xs">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
-            <span className="font-extrabold text-slate-950 uppercase tracking-[1.5px] text-[11px] font-display">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="font-bold text-[#f8fafc] uppercase tracking-[1.5px] text-[11px] font-display">
               LIVE FLOOD RADAR MAP:
             </span>
-            <span className="font-bold text-slate-900 bg-[#faf9f5] px-3 py-0.5 rounded-full border border-slate-300">
+            <span className="font-bold text-[#f8fafc] bg-slate-800 px-3 py-0.5 rounded-full border border-slate-700">
               {selectedZone.name} ({selectedZone.district})
             </span>
-            <span className="text-slate-500 font-medium">
+            <span className="text-slate-300 font-medium">
               &bull; Danger Mark: {selectedZone.dangerMarkM}m &bull; Slope: {selectedZone.telemetry.slope_deg}&deg;
             </span>
             {citizens.filter((c) => c.status === "SOS").length > 0 && (
               <Link
                 href="/rescue"
-                className="ml-auto h-[32px] px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs animate-pulse"
+                className="ml-auto h-[32px] px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-[#f8fafc] font-bold text-xs flex items-center gap-1.5 transition shadow-xs animate-pulse"
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>{citizens.filter((c) => c.status === "SOS").length} Active SOS &bull; Open Rescue Hub</span>
@@ -355,22 +353,22 @@ export default function TacticalRadarPage() {
                   {activeSafeRoutes.map((route, idx) => (
                     <div
                       key={route.id}
-                      className="p-4 rounded-2xl bg-[#faf9f5] border border-slate-200 shadow-2xs hover:border-slate-400 transition space-y-3 text-slate-900"
+                      className="p-4 rounded-2xl bg-[#f1f5f9] border border-slate-200/80 shadow-2xs hover:border-slate-300 transition space-y-3 text-slate-800"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-xs font-extrabold text-slate-950 flex items-center gap-2 font-display">
-                            <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] flex items-center justify-center font-bold">
+                          <div className="text-xs font-bold text-slate-800 flex items-center gap-2 font-display">
+                            <span className="w-5 h-5 rounded-full bg-slate-800 text-[#f8fafc] text-[10px] flex items-center justify-center font-bold">
                               {idx + 1}
                             </span>
                             <span>{route.route_name}</span>
                           </div>
-                          <div className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-1">
-                            <MapPin className="w-3 h-3 text-slate-500" />
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
+                            <MapPin className="w-3 h-3 text-slate-400" />
                             <span>Destination: {route.assembly_point_name}</span>
                           </div>
                         </div>
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0 uppercase tracking-wider">
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 shrink-0 uppercase tracking-wider">
                           +{route.elevation_gain_m}m Gain
                         </span>
                       </div>
@@ -378,24 +376,24 @@ export default function TacticalRadarPage() {
                       <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white border border-slate-200 text-[10px] text-slate-700">
                         <div>
                           <span className="text-slate-500 block uppercase text-[9px] font-semibold">Distance</span>
-                          <span className="font-bold text-slate-950">{route.distance_km} km</span>
+                          <span className="font-bold text-slate-800">{route.distance_km} km</span>
                         </div>
                         <div>
                           <span className="text-slate-500 block uppercase text-[9px] font-semibold">Walking ETA</span>
-                          <span className="font-bold text-slate-950">{route.walk_time_minutes} mins</span>
+                          <span className="font-bold text-slate-800">{route.walk_time_minutes} mins</span>
                         </div>
                         <div>
                           <span className="text-slate-500 block uppercase text-[9px] font-semibold">Capacity</span>
-                          <span className="font-bold text-slate-950">{route.shelter_capacity} Pax</span>
+                          <span className="font-bold text-slate-800">{route.shelter_capacity} Pax</span>
                         </div>
                       </div>
 
                       <div className="pt-1">
                         <button
                           onClick={() => handleFocusRoute(route)}
-                          className="w-full h-[36px] rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
+                          className="w-full h-[36px] rounded-xl bg-slate-800 hover:bg-slate-900 text-[#f8fafc] text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs border border-slate-700"
                         >
-                          <Compass className="w-3.5 h-3.5" />
+                          <Compass className="w-3.5 h-3.5 text-[#f8fafc]" />
                           <span>Track Path on Map</span>
                         </button>
                       </div>
@@ -405,39 +403,39 @@ export default function TacticalRadarPage() {
 
                 <button
                   onClick={() => setIsGuidelineModalOpen(true)}
-                  className="w-full h-[40px] rounded-xl bg-[#faf9f5] hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition shadow-2xs"
+                  className="w-full h-[40px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition shadow-2xs"
                 >
                   <Send className="w-3.5 h-3.5 text-slate-700" />
                   <span>Broadcast Routes &amp; Guidelines</span>
                 </button>
               </div>
 
-              {/* Civil Defense Hotlines Card in White Theme */}
-              <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3 text-xs text-slate-900">
-                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-900">
+              {/* Civil Defense Hotlines Card */}
+              <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3 text-xs text-slate-800">
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-800">
                   <ShieldAlert className="w-4 h-4 text-slate-700" />
                   <span>CIVIL DEFENSE HOTLINES</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2.5 text-center pt-1 font-sans">
                   <a
                     href="tel:1078"
-                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
+                    className="p-3 rounded-2xl bg-[#f1f5f9] border border-slate-200 hover:border-slate-300 transition block text-slate-800 shadow-2xs"
                   >
-                    <div className="font-black text-sm text-slate-950 font-display">1078</div>
+                    <div className="font-black text-sm text-slate-800 font-display">1078</div>
                     <div className="text-[10px] text-slate-500 mt-0.5 font-medium">NDRF Control</div>
                   </a>
                   <a
                     href="tel:1070"
-                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
+                    className="p-3 rounded-2xl bg-[#f1f5f9] border border-slate-200 hover:border-slate-300 transition block text-slate-800 shadow-2xs"
                   >
-                    <div className="font-black text-sm text-slate-950 font-display">1070</div>
+                    <div className="font-black text-sm text-slate-800 font-display">1070</div>
                     <div className="text-[10px] text-slate-500 mt-0.5 font-medium">State SDMA</div>
                   </a>
                   <a
                     href="tel:108"
-                    className="p-3 rounded-2xl bg-[#faf9f5] border border-slate-200 hover:bg-slate-100 transition block text-slate-900 shadow-2xs"
+                    className="p-3 rounded-2xl bg-[#f1f5f9] border border-slate-200 hover:border-slate-300 transition block text-slate-800 shadow-2xs"
                   >
-                    <div className="font-black text-sm text-slate-950 font-display">108</div>
+                    <div className="font-black text-sm text-slate-800 font-display">108</div>
                     <div className="text-[10px] text-slate-500 mt-0.5 font-medium">ALS Ambulance</div>
                   </a>
                 </div>
@@ -445,6 +443,21 @@ export default function TacticalRadarPage() {
             </div>
           </div>
         </main>
+
+        {/* Footer in Deep Muted Neutral Palette */}
+        <footer className="border-t border-slate-800 bg-[#0f172a]/95 backdrop-blur-xl px-6 py-5 text-center text-xs text-slate-300 flex flex-col sm:flex-row items-center justify-between gap-3 mt-10 font-sans shadow-lg">
+          <div className="font-bold text-[#f8fafc]">
+            NeerNetra &bull; India Flash Flood Early Warning System &bull; SIH 2026
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block live-dot-green" />
+              12 Basins Online
+            </span>
+            <span className="text-slate-700">|</span>
+            <span className="text-slate-400 font-normal">Emergency Hotlines: NDRF 1078 &bull; SDMA 1070 &bull; Ambulance 108</span>
+          </div>
+        </footer>
       </div>
 
       {/* Modals */}
