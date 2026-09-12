@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { HazardZone } from "@/lib/types";
 import { INDIA_FLOOD_ZONES } from "@/lib/constants";
 import {
@@ -102,6 +102,7 @@ export default function Header({
   connectedMobileCount,
 }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [currentTime, setCurrentTime] = useState<string>("");
   const [isAddButtonModalOpen, setIsAddButtonModalOpen] = useState(false);
   const [customButtons, setCustomButtons] = useState<CustomActionButton[]>([]);
@@ -315,19 +316,13 @@ export default function Header({
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-sm tracking-tight border border-slate-900 shadow-sm transition group-hover:bg-black">
               <ShieldAlert className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm sm:text-base tracking-tight text-slate-950">
-                  NEERNETRA
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300">
-                  GOVT OF INDIA
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                <span>NDRF / SDMA Disaster Command Network</span>
-              </div>
+            <div className="flex flex-col">
+              <span className="font-black text-sm sm:text-base tracking-tight text-slate-950 leading-tight">
+                NEERNETRA
+              </span>
+              <span className="text-[10px] font-extrabold text-slate-600 tracking-wider uppercase leading-none mt-0.5">
+                Govt of India
+              </span>
             </div>
           </Link>
 
@@ -369,44 +364,37 @@ export default function Header({
           </span>
         </div>
 
-        {/* CENTER: Main Navigation Tabs */}
-        <nav aria-label="Main Navigation" className="flex items-center gap-1 p-1 rounded-xl bg-[#faf9f5] border border-slate-200 text-xs font-bold self-center">
-          <Link
-            href="/"
-            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
-              pathname === "/"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
-                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
-            }`}
-          >
-            <Satellite className="w-3.5 h-3.5" />
-            <span>Basin Monitor</span>
-          </Link>
-
-          <Link
-            href="/radar"
-            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
-              pathname === "/radar"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
-                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" />
-            <span>Live Map</span>
-          </Link>
-
-          <Link
-            href="/rescue"
-            className={`px-4 py-1.5 rounded-lg transition flex items-center gap-2 uppercase tracking-[1.5px] text-[11px] font-extrabold ${
-              pathname === "/rescue"
-                ? "bg-white text-slate-950 shadow-xs border border-slate-300"
-                : "text-slate-600 hover:text-slate-950 hover:bg-white/60"
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Citizen SOS</span>
-          </Link>
-        </nav>
+        {/* CENTER: Screen Navigation Dropdown Box */}
+        <div className="relative flex items-center self-center">
+          <div className="relative flex items-center bg-[#faf9f5] hover:bg-slate-100 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 transition shadow-2xs group focus-within:ring-2 focus-within:ring-slate-900 min-h-[44px]">
+            {pathname === "/radar" ? (
+              <Compass className="w-4 h-4 text-slate-800 shrink-0 mr-2" aria-hidden />
+            ) : pathname === "/rescue" ? (
+              <Users className="w-4 h-4 text-slate-800 shrink-0 mr-2" aria-hidden />
+            ) : (
+              <Satellite className="w-4 h-4 text-slate-800 shrink-0 mr-2" aria-hidden />
+            )}
+            <select
+              aria-label="Select screen"
+              value={pathname === "/radar" ? "/radar" : pathname === "/rescue" ? "/rescue" : "/"}
+              onChange={(e) => {
+                router.push(e.target.value);
+              }}
+              className="bg-transparent text-slate-950 text-xs font-extrabold uppercase tracking-[1.2px] focus:outline-none cursor-pointer pr-7 appearance-none"
+            >
+              <option value="/" className="bg-white text-slate-950 font-bold py-1.5">
+                Basin Monitor
+              </option>
+              <option value="/radar" className="bg-white text-slate-950 font-bold py-1.5">
+                Live Map
+              </option>
+              <option value="/rescue" className="bg-white text-slate-950 font-bold py-1.5">
+                Citizen SOS
+              </option>
+            </select>
+            <ChevronDown className="w-4 h-4 text-slate-600 absolute right-2.5 pointer-events-none transition group-hover:text-slate-900" aria-hidden />
+          </div>
+        </div>
 
         {/* RIGHT: Only the one action that must never be hidden behind a menu
             on a disaster-alert government platform — the national helpline.

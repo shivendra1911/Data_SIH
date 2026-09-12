@@ -517,56 +517,7 @@ export default function NationalSentinelPage() {
             />
           </section>
 
-          {/* Section 3: Navigation Cards to Map and Rescue in White & Vanilla Theme */}
-          <section aria-label="Quick Hub Navigation" className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Link
-              href="/radar"
-              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
-                  <Compass className="w-6 h-6 text-slate-900" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
-                    <span>Live Flood Radar Map</span>
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 uppercase tracking-wider">
-                      LIVE GIS
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                    View satellite imagery, real river heights, and verified safe evacuation shelters
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
-            </Link>
-
-            <Link
-              href="/rescue"
-              className="p-5 rounded-3xl border border-slate-200 hover:border-slate-400 bg-white hover:bg-[#faf9f5] transition flex items-center justify-between group shadow-xs text-slate-900"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#faf9f5] text-slate-950 border border-slate-300 flex items-center justify-center group-hover:scale-105 transition shadow-2xs">
-                  <Users className="w-6 h-6 text-slate-900" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-2 font-display">
-                    <span>Citizen Rescue &amp; SOS Hub</span>
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-300 uppercase tracking-wider">
-                      LIVE SOS
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                    Live mobile distress beacons, medical emergencies, and local rescue team dispatch
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition" />
-            </Link>
-          </section>
-
-          {/* Section 4: Secondary Operations & Directives in White & Vanilla Theme */}
+          {/* Section 3: Secondary Operations & Directives in White & Vanilla Theme */}
           <section aria-label="Safety Directives" className="space-y-4">
             <PreventiveDirectivesPanel activeZone={selectedZone} />
           </section>

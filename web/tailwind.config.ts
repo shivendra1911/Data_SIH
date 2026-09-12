@@ -12,9 +12,9 @@ const config: Config = {
       // Corwdy Service Effect Design Tokens
       fontFamily: {
         sans: ["var(--font-montserrat)", "Montserrat", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
-        display: ["var(--font-syne)", "var(--font-montserrat)", "Montserrat", "sans-serif"],
+        display: ["var(--font-montserrat)", "Montserrat", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
         montserrat: ["var(--font-montserrat)", "Montserrat", "sans-serif"],
-        syne: ["var(--font-syne)", "Syne", "sans-serif"],
+        syne: ["var(--font-montserrat)", "Montserrat", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "Menlo", "monospace"],
       },
       colors: {
