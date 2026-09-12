@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { HazardZone } from "@/lib/types";
 import { INDIA_FLOOD_ZONES } from "@/lib/constants";
 import {
-  ShieldAlert,
   MapPin,
   Radio,
   Satellite,
@@ -85,8 +84,8 @@ export default function Header({
             className="flex items-center gap-2 sm:gap-2.5 group"
             aria-label="NeerNetra Home - Early Flood Warning"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-800 text-[#f8fafc] flex items-center justify-center font-black text-sm tracking-tight border border-slate-700 shadow-sm transition group-hover:bg-slate-700">
-              <ShieldAlert className="w-5 h-5 text-slate-200" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-800 text-[#f8fafc] flex items-center justify-center font-black text-sm tracking-tight border border-slate-700 shadow-sm transition group-hover:bg-slate-700 overflow-hidden p-1.5">
+              <img src="/neernetra-icon.png" alt="NeerNetra Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <span className="font-black text-sm sm:text-base tracking-tight text-[#f8fafc] leading-tight font-display">

@@ -130,8 +130,8 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         {/* 4) Hero Top Navbar */}
         <nav className="absolute top-0 left-0 right-0 z-40 px-5 sm:px-10 pt-6 pb-4 flex items-center justify-between pointer-events-auto">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-xl shadow-lg">
-              <ShieldAlert className="w-5 h-5 text-white" aria-hidden />
+            <div className="w-10 h-10 rounded-full bg-slate-900/60 border border-white/20 flex items-center justify-center backdrop-blur-xl shadow-lg overflow-hidden p-1.5">
+              <img src="/neernetra-icon.png" alt="NeerNetra Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <span className="text-base font-bold text-white tracking-wider uppercase font-display">

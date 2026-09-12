@@ -14,6 +14,11 @@ import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
+import CommandFAB, { FabAction } from "@/components/Dashboard/CommandFAB";
+import AddButtonModal, {
+  CustomActionButton,
+  getStoredCustomButtons,
+} from "@/components/Dashboard/AddButtonModal";
 import { INDIA_FLOOD_ZONES, getSafeRoutesForZone, getRespondersForZone } from "@/lib/constants";
 import {
   HazardZone,
@@ -43,6 +48,11 @@ import {
   Smartphone,
   CheckCircle2,
   AlertTriangle,
+  Phone,
+  ExternalLink,
+  Megaphone,
+  Shield,
+  Plus,
 } from "lucide-react";
 
 const DEFAULT_USER_ZONE: HazardZone = {
@@ -67,6 +77,42 @@ const DEFAULT_USER_ZONE: HazardZone = {
   preventiveDirectives: [],
   infrastructure: [],
 };
+
+function getCustomIcon(name: string) {
+  switch (name) {
+    case "Phone":
+      return <Phone className="w-3.5 h-3.5" />;
+    case "AlertTriangle":
+      return <AlertTriangle className="w-3.5 h-3.5" />;
+    case "Radio":
+      return <Radio className="w-3.5 h-3.5" />;
+    case "Megaphone":
+      return <Megaphone className="w-3.5 h-3.5" />;
+    case "Shield":
+      return <Shield className="w-3.5 h-3.5" />;
+    case "Zap":
+      return <Zap className="w-3.5 h-3.5" />;
+    case "ExternalLink":
+    default:
+      return <ExternalLink className="w-3.5 h-3.5" />;
+  }
+}
+
+function customColorToTone(color: string): FabAction["tone"] {
+  switch (color) {
+    case "red":
+      return "danger";
+    case "emerald":
+      return "success";
+    case "blue":
+      return "blue";
+    case "amber":
+      return "amber";
+    case "slate":
+    default:
+      return "dark";
+  }
+}
 
 export default function NationalSentinelPage() {
   useRabtoTilt();
@@ -154,6 +200,77 @@ export default function NationalSentinelPage() {
       console.error("SOS dispatch error:", err);
     }
   }, [selectedZone]);
+
+  const [isAddButtonModalOpen, setIsAddButtonModalOpen] = useState(false);
+  const [customButtons, setCustomButtons] = useState<CustomActionButton[]>([]);
+
+  useEffect(() => {
+    setCustomButtons(getStoredCustomButtons());
+    const handleButtonsChanged = () => {
+      setCustomButtons(getStoredCustomButtons());
+    };
+    window.addEventListener("custom_action_buttons_changed", handleButtonsChanged);
+    return () => {
+      window.removeEventListener("custom_action_buttons_changed", handleButtonsChanged);
+    };
+  }, []);
+
+  const handleExecuteCustomButton = (btn: CustomActionButton) => {
+    if (btn.actionType === "LINK") {
+      let url = btn.value.trim();
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://" + url;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else if (btn.actionType === "CALL") {
+      window.location.href = `tel:${btn.value.replace(/[^0-9+]/g, "")}`;
+    } else if (btn.actionType === "ALERT") {
+      showToast(btn.value);
+    }
+  };
+
+  const fabActions: FabAction[] = [
+    {
+      id: "regional-alert",
+      label: "Broadcast Alert to App",
+      icon: <Radio className="w-3.5 h-3.5" />,
+      onClick: () => setIsRegionalModalOpen(true),
+      tone: "danger",
+      title: "Broadcast alert notification to citizen devices",
+    },
+    {
+      id: "test-alert",
+      label: "Test Alert Sound",
+      icon: <Zap className="w-3.5 h-3.5" />,
+      onClick: handleTriggerSOS,
+      tone: "amber",
+      title: "Simulate test alert sound",
+    },
+    {
+      id: "connect-device",
+      label: "Connect Mobile Phone",
+      icon: <Smartphone className="w-3.5 h-3.5" />,
+      onClick: () => setIsMobileModalOpen(true),
+      tone: "dark",
+      title: "Connect field mobile node",
+    },
+    ...customButtons.map((btn) => ({
+      id: btn.id,
+      label: btn.label,
+      icon: getCustomIcon(btn.iconName),
+      onClick: () => handleExecuteCustomButton(btn),
+      tone: customColorToTone(btn.color),
+      title: `${btn.actionType}: ${btn.value}`,
+    })),
+    {
+      id: "add-button",
+      label: "Add Button",
+      icon: <Plus className="w-3.5 h-3.5" />,
+      onClick: () => setIsAddButtonModalOpen(true),
+      tone: "default",
+      title: "Add custom action button",
+    },
+  ];
 
   const runNationalScan = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
@@ -587,6 +704,18 @@ export default function NationalSentinelPage() {
         safeRoutes={activeSafeRoutes}
         onBroadcastGuidelines={() => {
           showToast("Safe guidelines broadcasted across regional edge network.");
+        }}
+      />
+
+      {/* Floating Command Menu '+' at Bottom-Right with Full Functionality */}
+      <CommandFAB actions={fabActions} menuLabel="Command Actions" />
+
+      {/* Add Custom Button Modal */}
+      <AddButtonModal
+        isOpen={isAddButtonModalOpen}
+        onClose={() => setIsAddButtonModalOpen(false)}
+        onButtonAdded={() => {
+          setCustomButtons(getStoredCustomButtons());
         }}
       />
 

@@ -8,14 +8,12 @@ import {
   Compass,
   Zap,
   Activity,
-  ShieldAlert,
   Smartphone,
   CheckCircle2,
   RefreshCw,
   Navigation,
   Layers,
   ChevronRight,
-  Plus,
 } from "lucide-react";
 
 export interface Breadcrumb {
@@ -47,7 +45,6 @@ export default function DisasterLocationStream() {
   const [loading, setLoading] = useState<boolean>(true);
   const [lastSynced, setLastSynced] = useState<string>("Connecting...");
   const [selectedNodeId, setSelectedNodeId] = useState<string | "ALL">("PRIMARY");
-  const [extraSimulatedNodes, setExtraSimulatedNodes] = useState<NodeDevice[]>([]);
 
   const fetchStream = async () => {
     try {
@@ -72,7 +69,7 @@ export default function DisasterLocationStream() {
     return () => clearInterval(interval);
   }, []);
 
-  // Group breadcrumbs by device_uuid
+  // Group breadcrumbs strictly by real connected device_uuid
   const detectedNodes = useMemo(() => {
     const map = new Map<string, { model: string; points: Breadcrumb[] }>();
     breadcrumbs.forEach((b) => {
@@ -89,131 +86,15 @@ export default function DisasterLocationStream() {
         node_name: `Node ${idx}: ${val.model}`,
         phone_model: val.model,
         is_live: true,
-        battery_pct: 88 - (idx * 6),
+        battery_pct: 88,
         latestPoint: val.points[0],
         breadcrumbs: val.points,
       });
       idx++;
     });
 
-    // If only 1 real phone is connected right now, provide default companion nodes
-    // so the user can immediately experience switching to other field nodes!
-    if (nodes.length <= 1) {
-      const baseLat = nodes[0]?.latestPoint.lat || 30.5582;
-      const baseLng = nodes[0]?.latestPoint.lng || 79.5651;
-
-      const companionNode2: NodeDevice = {
-        device_uuid: "pixel8-field-sar-02",
-        node_name: `Node ${nodes.length + 1}: Pixel 8 Pro (Rescue Team)`,
-        phone_model: "Pixel 8 Pro",
-        is_live: true,
-        battery_pct: 92,
-        latestPoint: {
-          id: "comp-2-latest",
-          device_uuid: "pixel8-field-sar-02",
-          phone_model: "Pixel 8 Pro (Rescue Team)",
-          lat: baseLat + 0.0032,
-          lng: baseLng - 0.0041,
-          altitude: 195,
-          accuracy: 6,
-          speed: 1.2,
-          status: "SOS_STREAM",
-          sos_type: "PATROL_TRACKER",
-          timestamp: new Date(Date.now() - 3000).toISOString(),
-        },
-        breadcrumbs: [
-          {
-            id: "comp-2-latest",
-            device_uuid: "pixel8-field-sar-02",
-            phone_model: "Pixel 8 Pro",
-            lat: baseLat + 0.0032,
-            lng: baseLng - 0.0041,
-            altitude: 195,
-            accuracy: 6,
-            speed: 1.2,
-            status: "SOS_STREAM",
-            timestamp: new Date(Date.now() - 3000).toISOString(),
-          },
-          {
-            id: "comp-2-p1",
-            device_uuid: "pixel8-field-sar-02",
-            phone_model: "Pixel 8 Pro",
-            lat: baseLat + 0.0028,
-            lng: baseLng - 0.0039,
-            altitude: 194,
-            accuracy: 7,
-            speed: 1.4,
-            status: "SOS_STREAM",
-            timestamp: new Date(Date.now() - 8000).toISOString(),
-          },
-          {
-            id: "comp-2-p2",
-            device_uuid: "pixel8-field-sar-02",
-            phone_model: "Pixel 8 Pro",
-            lat: baseLat + 0.0022,
-            lng: baseLng - 0.0035,
-            altitude: 193,
-            accuracy: 8,
-            speed: 1.1,
-            status: "SOS_STREAM",
-            timestamp: new Date(Date.now() - 13000).toISOString(),
-          },
-        ],
-      };
-
-      const companionNode3: NodeDevice = {
-        device_uuid: "galaxy-s24-mesh-03",
-        node_name: `Node ${nodes.length + 2}: Galaxy S24 (Relief Relay)`,
-        phone_model: "Galaxy S24",
-        is_live: true,
-        battery_pct: 76,
-        latestPoint: {
-          id: "comp-3-latest",
-          device_uuid: "galaxy-s24-mesh-03",
-          phone_model: "Galaxy S24 (Relief Relay)",
-          lat: baseLat - 0.0025,
-          lng: baseLng + 0.0038,
-          altitude: 178,
-          accuracy: 8,
-          speed: 0.4,
-          status: "SOS_STREAM",
-          sos_type: "MESH_HOP_RELAY",
-          timestamp: new Date(Date.now() - 5000).toISOString(),
-        },
-        breadcrumbs: [
-          {
-            id: "comp-3-latest",
-            device_uuid: "galaxy-s24-mesh-03",
-            phone_model: "Galaxy S24",
-            lat: baseLat - 0.0025,
-            lng: baseLng + 0.0038,
-            altitude: 178,
-            accuracy: 8,
-            speed: 0.4,
-            status: "SOS_STREAM",
-            timestamp: new Date(Date.now() - 5000).toISOString(),
-          },
-          {
-            id: "comp-3-p1",
-            device_uuid: "galaxy-s24-mesh-03",
-            phone_model: "Galaxy S24",
-            lat: baseLat - 0.0027,
-            lng: baseLng + 0.0035,
-            altitude: 177,
-            accuracy: 9,
-            speed: 0.6,
-            status: "SOS_STREAM",
-            timestamp: new Date(Date.now() - 10000).toISOString(),
-          },
-        ],
-      };
-
-      nodes.push(companionNode2, companionNode3);
-    }
-
-    // Merge any extra nodes dynamically created by user
-    return [...nodes, ...extraSimulatedNodes];
-  }, [breadcrumbs, extraSimulatedNodes]);
+    return nodes;
+  }, [breadcrumbs]);
 
   // Current active node
   const activeNode = useMemo(() => {
@@ -233,50 +114,6 @@ export default function DisasterLocationStream() {
     }
     return breadcrumbs;
   }, [selectedNodeId, activeNode, breadcrumbs]);
-
-  const handleAddVirtualNode = () => {
-    const nextIdx = detectedNodes.length + 1;
-    const baseLat = activeNode?.latestPoint.lat || 30.5582;
-    const baseLng = activeNode?.latestPoint.lng || 79.5651;
-    const newUuid = `field-node-0${nextIdx}-${Math.random().toString(36).substring(2, 7)}`;
-
-    const newNode: NodeDevice = {
-      device_uuid: newUuid,
-      node_name: `Node ${nextIdx}: Field Android Node`,
-      phone_model: `OnePlus 12 (Field Unit ${nextIdx})`,
-      is_live: true,
-      battery_pct: 95,
-      latestPoint: {
-        id: `virtual-${Date.now()}`,
-        device_uuid: newUuid,
-        phone_model: `OnePlus 12 (Field Unit ${nextIdx})`,
-        lat: baseLat + (Math.random() - 0.5) * 0.008,
-        lng: baseLng + (Math.random() - 0.5) * 0.008,
-        altitude: 180 + Math.round(Math.random() * 20),
-        accuracy: 5 + Math.round(Math.random() * 5),
-        speed: 0.8,
-        status: "SOS_STREAM",
-        timestamp: new Date().toISOString(),
-      },
-      breadcrumbs: [
-        {
-          id: `virtual-${Date.now()}`,
-          device_uuid: newUuid,
-          phone_model: `OnePlus 12 (Field Unit ${nextIdx})`,
-          lat: baseLat + (Math.random() - 0.5) * 0.008,
-          lng: baseLng + (Math.random() - 0.5) * 0.008,
-          altitude: 185,
-          accuracy: 5,
-          speed: 0.8,
-          status: "SOS_STREAM",
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    };
-
-    setExtraSimulatedNodes((prev) => [...prev, newNode]);
-    setSelectedNodeId(newUuid);
-  };
 
   const latest = activeNode?.latestPoint || breadcrumbs[0] || null;
 
@@ -321,61 +158,66 @@ export default function DisasterLocationStream() {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 mr-1">
             <Smartphone className="w-3.5 h-3.5 text-slate-300" />
-            <span>Switch Phone Node ({detectedNodes.length} Online):</span>
+            <span>Connected Phone Nodes ({detectedNodes.length} Active):</span>
           </span>
 
-          {detectedNodes.map((node, i) => {
-            const isSelected =
-              selectedNodeId === node.device_uuid ||
-              (selectedNodeId === "PRIMARY" && i === 0);
+          {detectedNodes.length === 0 ? (
+            <span className="text-slate-400 text-xs italic">
+              Waiting for live phone telemetry connection...
+            </span>
+          ) : (
+            detectedNodes.map((node, i) => {
+              const isSelected =
+                selectedNodeId === node.device_uuid ||
+                (selectedNodeId === "PRIMARY" && i === 0);
 
-            return (
-              <button
-                key={node.device_uuid}
-                type="button"
-                onClick={() => setSelectedNodeId(node.device_uuid)}
-                className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer active:scale-95 border ${
-                  isSelected
-                    ? "bg-slate-800 text-[#f8fafc] border-slate-600 shadow-md ring-2 ring-slate-500/50"
-                    : "bg-[#1e293b] text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80"
-                }`}
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                </span>
-                <span>Node {i + 1}: {node.phone_model.split(" ")[0]}</span>
-                <span className="text-[10px] font-mono text-slate-400 font-normal">
-                  ({node.device_uuid.slice(0, 5)})
-                </span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={node.device_uuid}
+                  type="button"
+                  onClick={() => setSelectedNodeId(node.device_uuid)}
+                  className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer active:scale-95 border ${
+                    isSelected
+                      ? "bg-slate-800 text-[#f8fafc] border-slate-600 shadow-md ring-2 ring-slate-500/50"
+                      : "bg-[#1e293b] text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700/80"
+                  }`}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  </span>
+                  <span>Node {i + 1}: {node.phone_model}</span>
+                  <span className="text-[10px] font-mono text-slate-400 font-normal">
+                    ({node.device_uuid.slice(0, 8)})
+                  </span>
+                </button>
+              );
+            })
+          )}
 
-          <button
-            type="button"
-            onClick={() => setSelectedNodeId("ALL")}
-            className={`h-9 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
-              selectedNodeId === "ALL"
-                ? "bg-slate-800 text-[#f8fafc] border-slate-600 shadow-md ring-2 ring-slate-500/50"
-                : "bg-[#1e293b] text-slate-400 hover:bg-slate-800 hover:text-white border-slate-700/80"
-            }`}
-          >
-            <Layers className="w-3 h-3 text-slate-400" />
-            <span>All Nodes ({breadcrumbs.length} Pings)</span>
-          </button>
+          {detectedNodes.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setSelectedNodeId("ALL")}
+              className={`h-9 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
+                selectedNodeId === "ALL"
+                  ? "bg-slate-800 text-[#f8fafc] border-slate-600 shadow-md ring-2 ring-slate-500/50"
+                  : "bg-[#1e293b] text-slate-400 hover:bg-slate-800 hover:text-white border-slate-700/80"
+              }`}
+            >
+              <Layers className="w-3 h-3 text-slate-400" />
+              <span>All Nodes ({breadcrumbs.length} Pings)</span>
+            </button>
+          )}
         </div>
 
-        {/* Quick Add Node Trigger */}
-        <button
-          type="button"
-          onClick={handleAddVirtualNode}
-          className="h-8 px-2.5 rounded-lg text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-1 transition cursor-pointer"
-          title="Simulate an additional field node joining the telemetry stream"
-        >
-          <Plus className="w-3 h-3 text-slate-400" />
-          <span>+ Connect Node {detectedNodes.length + 1}</span>
-        </button>
+        {/* Live Device Status Indicator */}
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Real-Time Devices: {detectedNodes.length} Online</span>
+          </span>
+        </div>
       </div>
 
       {/* Main Content Grid */}
