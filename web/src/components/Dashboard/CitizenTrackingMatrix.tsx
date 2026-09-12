@@ -44,13 +44,14 @@ export default function CitizenTrackingMatrix({
       : citizens;
 
   const handleDispatch = (cit: CitizenLocation) => {
+    const key = cit.id || cit.device_uuid;
     if (onDispatchToCitizen) {
       onDispatchToCitizen(cit);
     }
-    setComingSoonId(cit.id);
+    setComingSoonId(key);
     setTimeout(() => {
-      setComingSoonId((prev) => (prev === cit.id ? null : prev));
-    }, 3500);
+      setComingSoonId((prev) => (prev === key ? null : prev));
+    }, 4000);
   };
 
   return (
@@ -135,7 +136,9 @@ export default function CitizenTrackingMatrix({
           </div>
         ) : (
           filteredList.map((citizen) => {
-            const isComingSoon = comingSoonId === citizen.id;
+            const isComingSoon =
+              comingSoonId === citizen.id ||
+              (citizen.device_uuid && comingSoonId === citizen.device_uuid);
 
             return (
               <div
