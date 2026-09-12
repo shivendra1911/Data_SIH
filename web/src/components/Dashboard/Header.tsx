@@ -103,28 +103,9 @@ export default function Header({
 }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentTime, setCurrentTime] = useState<string>("");
   const [isAddButtonModalOpen, setIsAddButtonModalOpen] = useState(false);
   const [customButtons, setCustomButtons] = useState<CustomActionButton[]>([]);
   const [activeScreenAlert, setActiveScreenAlert] = useState<string | null>(null);
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString("en-IN", {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          timeZone: "Asia/Kolkata",
-        })
-      );
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Load and listen for custom buttons
   useEffect(() => {
@@ -284,24 +265,6 @@ export default function Header({
         </div>
       )}
 
-      {/* Top Telemetry Ticker (IST Time + Nationwide Alert Status + Active Basin) */}
-      <div className="bg-[#faf9f5] border-b border-slate-200 px-4 py-1 text-[11px] text-slate-700 flex justify-between items-center font-mono">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-700 animate-pulse shrink-0" />
-          <span className="font-semibold text-slate-900 tracking-wide truncate">
-            NEERNETRA CWC-NDMA EARLY WARNING NETWORK
-          </span>
-          <span className="hidden md:inline text-slate-400 shrink-0">|</span>
-          <span className="hidden md:inline text-slate-700 truncate">
-            Active Basin: <strong>{selectedZone.name}</strong> ({selectedZone.district})
-          </span>
-        </div>
-        <div className="flex items-center gap-3 font-semibold shrink-0">
-          <span className="text-slate-800">IST: {currentTime || "--:--:--"}</span>
-          <span className="text-slate-400 hidden sm:inline">|</span>
-          <span className="text-emerald-800 hidden sm:inline">SAT-TELEMETRY: OPTIMAL</span>
-        </div>
-      </div>
 
       {/* Main Command Bar */}
       <div className="px-3 sm:px-6 py-2.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white">
