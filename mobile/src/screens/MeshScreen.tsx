@@ -33,6 +33,8 @@ import { fetchNearbyCitizens, NearbyCitizen } from '../services/api';
 interface MeshScreenProps {
   peers: MeshPeer[];
   isDisasterConfirmed?: boolean;
+  networkMode?: any;
+  onInitiateCall?: (peer: any) => void;
 }
 
 const maskPhone = (phone?: string) => {

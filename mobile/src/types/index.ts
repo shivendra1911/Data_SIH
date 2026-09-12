@@ -11,7 +11,15 @@ export interface ZonePrediction {
 
 export type SOSStatus = 'SOS' | 'SAFE' | 'HELPING';
 
-export type SOSType = 'TRAPPED' | 'MEDICAL' | 'EVACUATION' | 'FOOD_WATER' | 'GENERAL';
+export type SOSType =
+  | 'TRAPPED'
+  | 'MEDICAL'
+  | 'EVACUATION'
+  | 'FOOD_WATER'
+  | 'GENERAL'
+  | 'LOCATION_TRACKING'
+  | 'TOUCH_FREE_MOTION_SAFE'
+  | 'CHECKIN';
 
 export interface SOSPayload {
   device_uuid: string;

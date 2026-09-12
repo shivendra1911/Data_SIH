@@ -9,9 +9,19 @@ import * as Notifications from 'expo-notifications';
 
 interface StatusScreenProps {
   prediction: ZonePrediction | null;
+  isRedZone?: boolean;
+  onSOSTrigger?: (type: any) => void;
+  networkMode?: string;
+  onRefresh?: () => void;
 }
 
-export const StatusScreen: React.FC<StatusScreenProps> = ({ prediction }) => {
+export const StatusScreen: React.FC<StatusScreenProps> = ({
+  prediction,
+  isRedZone = false,
+  onSOSTrigger,
+  networkMode = 'ONLINE',
+  onRefresh,
+}) => {
   const [safetyStatus, setSafetyStatus] = useState<'UNKNOWN' | 'SAFE' | 'DANGER'>('UNKNOWN');
   const timerRef = useRef<any>(null);
 
@@ -33,12 +43,13 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({ prediction }) => {
   };
 
   useEffect(() => {
-    if (prediction?.alert_color === 'RED' && safetyStatus === 'UNKNOWN') {
+    // Only trigger auto-danger & notification when citizen is in a verified RED danger zone
+    if (isRedZone && safetyStatus === 'UNKNOWN') {
       // Prompt user to mark safe
       Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Emergency: Are you safe?',
-          body: 'You are in a RED zone. Please open the app and mark yourself as SAFE, or rescue teams will be dispatched.',
+          title: '🚨 Emergency: Are you safe?',
+          body: 'You are in a RED Hazard Zone. Please open the app and mark yourself as SAFE, or rescue teams will be dispatched.',
           sound: true,
         },
         trigger: null,
@@ -56,7 +67,7 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({ prediction }) => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [prediction?.alert_color, safetyStatus]);
+  }, [isRedZone, safetyStatus]);
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>

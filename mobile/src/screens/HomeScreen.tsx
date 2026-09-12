@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Activity, Radio, Map as MapIcon, ShieldAlert } from 'lucide-react-native';
@@ -25,6 +26,7 @@ import {
   flushOfflineSOSQueue,
   sendSOSPayload,
   getNearestSafeRoute,
+  getDeviceModelName,
 } from '../services/api';
 import {
   getLastKnownLocation,
@@ -58,6 +60,7 @@ const isUserInsideHazardZone = (userLat?: number, userLng?: number, zoneLat?: nu
 };
 
 export const HomeScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const [deviceUuid, setDeviceUuid] = useState<string>('local_device');
   const [prediction, setPrediction] = useState<ZonePrediction | null>(null);
   const [networkMode, setNetworkMode] = useState<NetworkMode>('ONLINE');
@@ -142,23 +145,23 @@ export const HomeScreen: React.FC = () => {
       setLastLocation(cachedLoc);
 
       // Initialize mesh engine listeners
-      meshEngine.onPeerDiscovered = (peer: MeshPeer) => {
+      (meshEngine as any).onPeerDiscovered = (peer: MeshPeer) => {
         setPeerCount(meshEngine.getConnectedPeers().length);
       };
-      meshEngine.onSOSRelayed = async () => {
+      (meshEngine as any).onSOSRelayed = async () => {
         checkOfflineQueue();
       };
 
       // Lazy-init Bluetooth on native Android/iOS
       if (Platform.OS !== 'web') {
-        await bleEngine.init();
-        bleEngine.onCallReceived = (callerId, callerName) => {
+        await (bleEngine as any).init();
+        (bleEngine as any).onCallReceived = (callerId: string, callerName: string) => {
           setActiveCallPeer({ id: callerId, name: callerName, hopCount: 1 });
         };
-        bleEngine.onCallEnded = () => {
+        (bleEngine as any).onCallEnded = () => {
           setActiveCallPeer(null);
         };
-        bleEngine.onStateChange = (state) => {
+        (bleEngine as any).onStateChange = (state: string) => {
           if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
         };
       }
@@ -263,7 +266,7 @@ export const HomeScreen: React.FC = () => {
     };
 
     if (networkMode === 'BLE_MESH') {
-      meshEngine.broadcastSOS(payload);
+      (meshEngine as any).broadcastSOS(payload);
     }
     await sendSOSPayload(payload);
     await checkOfflineQueue();
@@ -271,18 +274,18 @@ export const HomeScreen: React.FC = () => {
 
   const handleEndActiveCall = () => {
     if (activeCallPeer) {
-      bleEngine.endCall(activeCallPeer.id);
+      (bleEngine as any).endCall(activeCallPeer.id);
       setActiveCallPeer(null);
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Header with App Logo, Tab Selectors, and Network Status */}
+      {/* Top Header with App Logo, Phone Model, and Network Status */}
       <TopPillNav
-        activeTab={currentTab}
-        onTabChange={(tab) => setCurrentTab(tab)}
         networkMode={networkMode}
+        topInset={insets.top}
+        phoneModel={getDeviceModelName()}
       />
 
       {/* Acoustic Forced Siren Banner */}
@@ -313,18 +316,21 @@ export const HomeScreen: React.FC = () => {
         </View>
       )}
 
-      <MeshStatusBadge
-        mode={networkMode}
-        peerCount={peerCount}
-        queuedCount={queuedCount}
-        onSyncPress={async () => {
-          setSyncing(true);
-          await flushOfflineSOSQueue();
-          await checkOfflineQueue();
-          setSyncing(false);
-        }}
-        syncing={syncing}
-      />
+      {/* Connectivity badge only when in mesh/offline mode or unsynced queue exists */}
+      {(networkMode !== 'ONLINE' || queuedCount > 0) && (
+        <MeshStatusBadge
+          mode={networkMode}
+          peerCount={peerCount}
+          queuedCount={queuedCount}
+          onSyncPress={async () => {
+            setSyncing(true);
+            await flushOfflineSOSQueue();
+            await checkOfflineQueue();
+            setSyncing(false);
+          }}
+          syncing={syncing}
+        />
+      )}
 
       {activeCallPeer && (
         <ActiveCallHUD
@@ -344,7 +350,13 @@ export const HomeScreen: React.FC = () => {
         <Tab.Navigator
           screenOptions={{
             headerShown: false,
-            tabBarStyle: styles.tabBar,
+            tabBarStyle: [
+              styles.tabBar,
+              {
+                height: 56 + Math.max(insets.bottom, 12),
+                paddingBottom: Math.max(insets.bottom, 8),
+              },
+            ],
             tabBarActiveTintColor: '#2563eb',
             tabBarInactiveTintColor: '#64748b',
             tabBarLabelStyle: styles.tabLabel,
@@ -393,8 +405,8 @@ export const HomeScreen: React.FC = () => {
               <MeshScreen
                 peers={meshEngine.getConnectedPeers()}
                 networkMode={networkMode}
-                onInitiateCall={(peer) => {
-                  bleEngine.initiateCall(peer.id);
+                onInitiateCall={(peer: any) => {
+                  (bleEngine as any).initiateCall(peer.id);
                   setActiveCallPeer(peer);
                 }}
               />

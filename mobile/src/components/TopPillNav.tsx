@@ -1,69 +1,70 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Activity, Radio, Map, Droplets } from 'lucide-react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Droplets, ShieldCheck, Wifi, Radio, AlertTriangle } from 'lucide-react-native';
 
-export type CitizenTab = 'status' | 'mesh' | 'map';
+export type CitizenTab = 'status' | 'mesh' | 'map' | 'directives';
 
 interface TopPillNavProps {
-  activeTab: CitizenTab;
-  onTabChange: (tab: CitizenTab) => void;
+  activeTab?: CitizenTab;
+  onTabChange?: (tab: CitizenTab) => void;
   networkMode: 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
+  topInset?: number;
+  phoneModel?: string;
 }
-
-const TABS: { id: CitizenTab; label: string; Icon: React.ComponentType<any> }[] = [
-  { id: 'status', label: 'Status', Icon: Activity },
-  { id: 'mesh', label: 'Mesh', Icon: Radio },
-  { id: 'map', label: 'Map', Icon: Map },
-];
 
 const MODE_COLOR: Record<string, string> = {
   ONLINE: '#10b981',
-  BLE_MESH: '#f59e0b',
-  OFFLINE_QUEUED: '#ef4444',
+  BLE_MESH: '#3b82f6',
+  OFFLINE_QUEUED: '#f59e0b',
+};
+
+const MODE_BG: Record<string, string> = {
+  ONLINE: 'rgba(16, 185, 129, 0.12)',
+  BLE_MESH: 'rgba(59, 130, 246, 0.12)',
+  OFFLINE_QUEUED: 'rgba(245, 158, 11, 0.12)',
 };
 
 const MODE_LABEL: Record<string, string> = {
   ONLINE: '4G Live',
   BLE_MESH: 'BLE Mesh',
-  OFFLINE_QUEUED: 'Offline',
+  OFFLINE_QUEUED: 'Offline Queue',
 };
 
 export const TopPillNav: React.FC<TopPillNavProps> = ({
-  activeTab,
-  onTabChange,
   networkMode,
+  topInset = 0,
+  phoneModel,
 }) => {
   const dotColor = MODE_COLOR[networkMode] || '#10b981';
-  const modeLabel = MODE_LABEL[networkMode] || 'Online';
+  const modeBg = MODE_BG[networkMode] || 'rgba(16, 185, 129, 0.12)';
+  const modeLabel = MODE_LABEL[networkMode] || '4G Live';
+
+  const ModeIcon =
+    networkMode === 'ONLINE' ? Wifi : networkMode === 'BLE_MESH' ? Radio : AlertTriangle;
 
   return (
-    <View style={styles.container}>
-      {/* App Logo + Network Status */}
-      <View style={styles.logoBlock}>
-        <Droplets size={18} color="#2563eb" />
-        <Text style={styles.logoText}>NeerNetra</Text>
-        <View style={[styles.netDot, { backgroundColor: dotColor }]} />
-        <Text style={[styles.netLabel, { color: dotColor }]}>{modeLabel}</Text>
+    <View style={[styles.container, { paddingTop: Math.max(topInset, 12) + 6 }]}>
+      {/* Brand & Citizen Sector */}
+      <View style={styles.brandBlock}>
+        <View style={styles.logoIcon}>
+          <Droplets size={20} color="#2563eb" />
+        </View>
+        <View>
+          <View style={styles.titleRow}>
+            <Text style={styles.brandTitle}>NeerNetra</Text>
+            <ShieldCheck size={14} color="#059669" style={styles.shieldIcon} />
+          </View>
+          <Text style={styles.brandSubtitle} numberOfLines={1}>
+            {phoneModel ? `${phoneModel} • Civil Defense` : 'Disaster Management & Rescue'}
+          </Text>
+        </View>
       </View>
 
-      {/* Tab Pills */}
-      <View style={styles.tabContainer}>
-        {TABS.map(({ id, label, Icon }) => {
-          const isActive = activeTab === id;
-          return (
-            <TouchableOpacity
-              key={id}
-              style={[styles.pillTab, isActive && styles.pillTabActive]}
-              onPress={() => onTabChange(id)}
-              activeOpacity={0.8}
-            >
-              <Icon size={14} color={isActive ? '#0f172a' : '#64748b'} />
-              <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Network Connectivity Pill */}
+      <View style={[styles.statusPill, { backgroundColor: modeBg, borderColor: dotColor + '40' }]}>
+        <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+        <ModeIcon size={12} color={dotColor} style={styles.statusIcon} />
+        <Text style={[styles.statusText, { color: dotColor }]}>{modeLabel}</Text>
       </View>
     </View>
   );
@@ -75,61 +76,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'transparent',
+    paddingBottom: 10,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  logoBlock: {
+  brandBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 10,
+    flex: 1,
   },
-  logoText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.3,
+  logoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  netDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginLeft: 4,
-  },
-  netLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 24,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.06)',
-  },
-  pillTab: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
   },
-  pillTabActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  pillTextActive: {
+  brandTitle: {
+    fontSize: 17,
+    fontWeight: '800',
     color: '#0f172a',
+    letterSpacing: -0.4,
+  },
+  shieldIcon: {
+    marginLeft: 2,
+  },
+  brandSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748b',
+    marginTop: 1,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusIcon: {
+    marginRight: 2,
+  },
+  statusText: {
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

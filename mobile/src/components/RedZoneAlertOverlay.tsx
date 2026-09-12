@@ -5,9 +5,13 @@ import { AlertOctagon, ShieldAlert, Navigation, Phone } from 'lucide-react-nativ
 
 interface RedZoneAlertOverlayProps {
   visible: boolean;
-  prediction: ZonePrediction | null;
-  lastLocation: LocationSyncPayload | null;
-  onTriggerSOS: () => void;
+  prediction?: ZonePrediction | null;
+  lastLocation?: LocationSyncPayload | null;
+  zoneName?: string;
+  floodProbability?: number;
+  triggerReason?: string;
+  onTriggerSOS?: () => void;
+  onConfirmSafe?: () => void;
   onDismiss: () => void;
 }
 
@@ -15,14 +19,22 @@ export const RedZoneAlertOverlay: React.FC<RedZoneAlertOverlayProps> = ({
   visible,
   prediction,
   lastLocation,
-  onTriggerSOS,
+  zoneName,
+  floodProbability,
+  triggerReason,
+  onTriggerSOS = () => {},
+  onConfirmSafe,
   onDismiss,
 }) => {
   if (!visible) return null;
 
-  const displayZone = prediction?.zone_id ? prediction.zone_id.toUpperCase() : 'CIVIL DEFENSE CRITICAL ZONE';
-  const displayRisk = prediction?.flood_probability_percent !== undefined ? prediction.flood_probability_percent.toFixed(1) : '94.5';
-  const displayTrigger = prediction?.primary_trigger || 'Civil Defense Emergency Siren Dispatched by NDRF / SDMA Web Command';
+  const displayZone = (zoneName || prediction?.zone_id || 'CIVIL DEFENSE CRITICAL ZONE').toUpperCase();
+  const displayRisk = floodProbability !== undefined
+    ? floodProbability.toFixed(1)
+    : prediction?.flood_probability_percent !== undefined
+    ? prediction.flood_probability_percent.toFixed(1)
+    : '94.5';
+  const displayTrigger = triggerReason || prediction?.primary_trigger || 'Civil Defense Emergency Siren Dispatched by NDRF / SDMA Web Command';
 
   return (
     <Modal visible={visible} transparent animationType="fade">
