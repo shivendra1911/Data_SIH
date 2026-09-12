@@ -138,7 +138,7 @@ export default function HydrographPanel({ activeZone }: HydrographPanelProps) {
       </div>
 
       <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col justify-between relative z-10">
-        {/* Quick Metric Bar */}
+          {/* Quick Metric Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 rounded-xl bg-[#faf9f5] border border-slate-200 shadow-2xs">
             <span className="text-[10px] font-bold uppercase text-slate-500 block">
@@ -147,43 +147,43 @@ export default function HydrographPanel({ activeZone }: HydrographPanelProps) {
             <span className="text-lg font-black text-slate-950 mt-0.5 block font-display">
               {currentPoint.level_m.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-white/60 font-medium">
+            <span className="text-[10px] text-slate-500 font-medium">
               Baseline Channel: ~3.0m
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#161a20]/80 border border-white/10 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-white/50 block">
+          <div className="p-3 rounded-xl bg-[#faf9f5] border border-slate-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase text-slate-500 block">
               Peak Surge
             </span>
-            <span className="text-lg font-black text-white mt-0.5 block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <span className="text-lg font-black text-slate-950 mt-0.5 block font-display">
               {peakPoint.level_m.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-white/60 font-medium">
+            <span className="text-[10px] text-slate-500 font-medium">
               +{peakPoint.time} ({peakPoint.discharge_cumecs.toLocaleString("en-IN")} m³/s)
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#161a20]/80 border border-white/10 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-white/50 block">
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase text-amber-700 block">
               Warning Mark
             </span>
-            <span className="text-lg font-black text-white mt-0.5 block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <span className="text-lg font-black text-slate-950 mt-0.5 block font-display">
               {activeZone.warningMarkM.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-white/60 font-medium">
+            <span className="text-[10px] text-amber-700 font-medium">
               Bankfull Inundation
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#161a20]/80 border border-white/10 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-white/50 block">
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 shadow-2xs">
+            <span className="text-[10px] font-bold uppercase text-red-700 block">
               Danger Mark
             </span>
-            <span className="text-lg font-black text-white mt-0.5 block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <span className="text-lg font-black text-slate-950 mt-0.5 block font-display">
               {activeZone.dangerMarkM.toFixed(1)} m
             </span>
-            <span className="text-[10px] text-white font-bold">
+            <span className="text-[10px] text-red-700 font-bold">
               Breach Threshold
             </span>
           </div>

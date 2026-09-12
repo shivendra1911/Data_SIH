@@ -27,7 +27,7 @@ export default function ClusterTriagePanel({
             <Users className="w-4 h-4 text-white" aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-white uppercase tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wide font-display">
               Autonomous Rescue Clusters
             </h2>
             <p className="text-[11px] font-semibold text-white/60">
@@ -69,7 +69,7 @@ export default function ClusterTriagePanel({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <span className="font-bold text-sm text-white font-display">
                         Cluster #{cluster.cluster_id}
                       </span>
                       <span

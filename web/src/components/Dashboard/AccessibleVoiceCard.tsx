@@ -15,6 +15,7 @@ interface AccessibleVoiceCardProps {
 export default function AccessibleVoiceCard({ activeZone, riskPercent }: AccessibleVoiceCardProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isHotlinesOpen, setIsHotlinesOpen] = useState(false);
 
   const handleSpeak = () => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -83,23 +84,41 @@ export default function AccessibleVoiceCard({ activeZone, riskPercent }: Accessi
           </div>
         </div>
 
-        {/* Right: Solid Action Hotlines & Toggle */}
+        {/* Right: Hotlines Group + Checklist Toggle */}
         <div className="flex flex-wrap items-center gap-2">
-          <a href="tel:1078" aria-label="Call NDRF emergency 1078"
-            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
-            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
-            <span>NDRF 1078</span>
-          </a>
-          <a href="tel:1070" aria-label="Call SDMA emergency 1070"
-            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
-            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
-            <span>SDMA 1070</span>
-          </a>
-          <a href="tel:108" aria-label="Call ambulance 108"
-            className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]">
-            <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
-            <span>Ambulance 108</span>
-          </a>
+          {/* Expandable Hotlines Group */}
+          <div className="relative">
+            <button
+              onClick={() => setIsHotlinesOpen((prev) => !prev)}
+              aria-expanded={isHotlinesOpen}
+              aria-label={isHotlinesOpen ? "Hide emergency hotlines" : "Show emergency hotlines"}
+              className="btn-solid-dark px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition min-h-[38px]"
+            >
+              <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
+              <span>Emergency Hotlines</span>
+              {isHotlinesOpen ? <ChevronUp className="w-3 h-3 text-white/70" aria-hidden /> : <ChevronDown className="w-3 h-3 text-white/70" aria-hidden />}
+            </button>
+            {isHotlinesOpen && (
+              <div className="absolute bottom-full mb-2 left-0 flex flex-col gap-1.5 bg-[#1b2027] border border-white/15 rounded-2xl p-2 shadow-xl z-50 min-w-[160px]">
+                <a href="tel:1078" aria-label="Call NDRF emergency 1078"
+                  className="btn-solid-dark px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition min-h-[36px]">
+                  <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
+                  <span>NDRF — 1078</span>
+                </a>
+                <a href="tel:1070" aria-label="Call SDMA emergency 1070"
+                  className="btn-solid-dark px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition min-h-[36px]">
+                  <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
+                  <span>SDMA — 1070</span>
+                </a>
+                <a href="tel:108" aria-label="Call ambulance 108"
+                  className="btn-solid-dark px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition min-h-[36px]">
+                  <PhoneCall className="w-3.5 h-3.5 text-white/70" aria-hidden />
+                  <span>Ambulance — 108</span>
+                </a>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => setIsExpanded((prev) => !prev)}
             aria-expanded={isExpanded}

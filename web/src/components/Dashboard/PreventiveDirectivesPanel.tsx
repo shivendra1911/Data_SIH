@@ -223,7 +223,7 @@ export default function PreventiveDirectivesPanel({
                     <div className="flex items-center gap-2">
                       <h4 className="text-xs font-bold text-slate-950">{dir.title}</h4>
                       <span
-                        className={`text-[9px] font-black px-2 py-0.2 rounded-full uppercase tracking-wider ${
+                        className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
                           isImmediate
                             ? "bg-red-50 text-red-700 border border-red-200"
                             : "bg-amber-50 text-amber-800 border border-amber-200"

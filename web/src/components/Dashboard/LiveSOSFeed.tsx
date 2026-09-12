@@ -80,7 +80,7 @@ export default function LiveSOSFeed({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
             </span>
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider font-display">
               Live Citizen Triage Feed
             </h2>
           </div>
@@ -188,7 +188,7 @@ export default function LiveSOSFeed({
                       )}
                     </span>
                     <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5 font-display">
                         <span>{isSOS ? "SOS EMERGENCY" : event.status}</span>
                         {event.is_live ? (
                           <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white text-[#161a20]">

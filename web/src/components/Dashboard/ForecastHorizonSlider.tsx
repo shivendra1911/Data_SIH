@@ -33,7 +33,7 @@ export default function ForecastHorizonSlider({
           <FastForward className="w-4 h-4 text-white" aria-hidden />
         </div>
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-white block" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <span className="text-xs font-bold uppercase tracking-wider text-white block font-display">
             Multi-Horizon Surge Forecast Simulation
           </span>
           <span className="text-[11px] font-semibold text-white/60">
