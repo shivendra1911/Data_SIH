@@ -169,22 +169,22 @@ export default function Header({
           </div>
         </div>
 
-        {/* RIGHT: Government Mobile Alert Broadcast, Connected Mobile Devices, and Emergency Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5 self-center flex-wrap">
+        {/* RIGHT: Government Mobile Alert Broadcast, Connected Mobile Devices, and Helpline */}
+        <div className="flex items-center gap-2 sm:gap-2.5 self-center flex-wrap sm:flex-nowrap">
           {/* Government Alert Broadcast Button - Primary operational button to send emergency alerts to connected mobile devices */}
           {onOpenRegionalBroadcast && (
             <button
               type="button"
               onClick={onOpenRegionalBroadcast}
               aria-label="Broadcast Emergency Alert Notification to Citizen Mobile App"
-              className="h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 text-[#f8fafc] font-bold text-xs flex items-center gap-2 shadow-md shadow-red-950/40 border border-red-500/80 transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+              className="h-10 sm:h-11 min-h-[44px] px-3.5 sm:px-4 rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 text-[#f8fafc] font-bold text-xs flex items-center gap-2 shadow-md shadow-red-950/40 border border-red-500/80 transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               title="Broadcast Geo-Fenced Push Alert Notification to Connected Citizen Mobile App"
             >
               <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
               </span>
-              <Radio className="w-4 h-4 text-[#f8fafc] shrink-0" aria-hidden="true" />
+              <Radio className="w-3.5 h-3.5 text-[#f8fafc] shrink-0" aria-hidden="true" />
               <span className="font-extrabold tracking-wide uppercase text-[11px] sm:text-xs whitespace-nowrap">
                 Broadcast Alert to App
               </span>
@@ -196,11 +196,11 @@ export default function Header({
             type="button"
             onClick={onOpenMobileModal}
             aria-label="Citizen & Responder Mobile APK Sync"
-            className="h-11 min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-[#f8fafc] border border-slate-700 text-xs font-semibold flex items-center gap-2 shadow-sm transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="h-10 sm:h-11 min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-[#f8fafc] border border-slate-700 text-xs font-semibold flex items-center gap-2 shadow-sm transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             title="Connected Citizen Mobile APKs & Offline Mesh Network"
           >
-            <Smartphone className="w-4 h-4 text-slate-300 shrink-0" aria-hidden="true" />
-            <span className="hidden md:inline font-medium">Mobile APKs</span>
+            <Smartphone className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />
+            <span className="hidden sm:inline font-medium whitespace-nowrap">Mobile APKs</span>
             {connectedMobileCount !== undefined && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-slate-800 text-emerald-300 border border-slate-600">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse" />
@@ -209,60 +209,11 @@ export default function Header({
             )}
           </button>
 
-          {/* Mobile Siren Toggle / Status (if supported) */}
-          {onToggleMobileSiren && (
-            <button
-              type="button"
-              onClick={onToggleMobileSiren}
-              aria-label={isMobileSirenActive ? "Halt siren on mobile devices" : "Broadcast Emergency Siren to Citizen Mobile Devices"}
-              className={`h-11 min-h-[44px] px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition duration-200 ease-out cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
-                isMobileSirenActive
-                  ? "bg-red-600 hover:bg-red-500 text-white animate-pulse border border-red-400 focus-visible:ring-red-400"
-                  : "bg-[#1e293b] hover:bg-slate-800 text-slate-300 border border-slate-700 focus-visible:ring-slate-400"
-              }`}
-              title={isMobileSirenActive ? "Siren Active on Citizen APKs - Click to Halt" : "Broadcast Emergency Acoustic Siren to Citizen Mobile Phones"}
-            >
-              <BellRing className={`w-3.5 h-3.5 ${isMobileSirenActive ? "text-white" : "text-amber-400"}`} aria-hidden="true" />
-              <span className="hidden xl:inline">{isMobileSirenActive ? "Halt Siren" : "Force Siren"}</span>
-            </button>
-          )}
-
-          {/* Safe Shelters quick access if provided */}
-          {onOpenSafeRoutesGuidelines && (
-            <button
-              type="button"
-              onClick={onOpenSafeRoutesGuidelines}
-              aria-label="View verified safe evacuation shelters and guidelines"
-              className="h-11 min-h-[44px] px-3 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-slate-300 border border-slate-700 text-xs font-medium hidden 2xl:flex items-center gap-1.5 shadow-sm transition duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-              title="Verified Evacuation Shelters & Routes"
-            >
-              <Compass className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-              <span>Safe Shelters</span>
-            </button>
-          )}
-
-          {/* Sound Toggle if provided */}
-          {onToggleSound && (
-            <button
-              type="button"
-              onClick={onToggleSound}
-              aria-label={soundEnabled ? "Mute dashboard audio alerts" : "Unmute dashboard audio alerts"}
-              className="h-11 min-h-[44px] px-3 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-slate-300 border border-slate-700 text-xs font-medium hidden 2xl:flex items-center gap-1.5 shadow-sm transition duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-              title={soundEnabled ? "Mute Alert Sound" : "Enable Alert Sound"}
-            >
-              {soundEnabled === false ? (
-                <VolumeX className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-              ) : (
-                <Volume2 className="w-3.5 h-3.5 text-slate-300" aria-hidden="true" />
-              )}
-            </button>
-          )}
-
           {/* Indian Disaster Helpline */}
           <a
             href="tel:1078"
             aria-label="Call National Disaster Helpline 1078"
-            className="h-11 min-h-[44px] px-3.5 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-[#f8fafc] border border-slate-700 text-xs font-medium flex items-center gap-1.5 shadow-sm transition duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="h-10 sm:h-11 min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-[#1e293b] hover:bg-slate-800 active:bg-slate-900 text-[#f8fafc] border border-slate-700 text-xs font-medium flex items-center gap-1.5 shadow-sm transition duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 whitespace-nowrap"
             title="NDRF Emergency Helpline: 1078"
           >
             <span>📞 Helpline 1078</span>
