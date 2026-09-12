@@ -314,7 +314,8 @@ class MobileSirenListener {
                 const isUniversal =
                   noteObj.action === 'BROADCAST_ALL' ||
                   noteObj.zone_id === 'all_sectors' ||
-                  noteObj.is_universal === true;
+                  noteObj.is_universal === true ||
+                  latest.device_id === 'ADMIN_SIREN_DISPATCH';
 
                 if (distKm > 40 && !isUniversal) {
                   // The siren is in another district / valley. Citizen in safe zone should not receive false alarms.

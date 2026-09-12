@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
           notes: JSON.stringify({
             zone_id: newAlert.zone_id,
             zone_name: newAlert.title,
-            action: "ACTIVATE",
+            action: "BROADCAST_ALL",
+            is_universal: true,
             authorized_by: "Zone Broadcast Command",
             message: newAlert.message,
             dispatched_at: newAlert.dispatched_at,

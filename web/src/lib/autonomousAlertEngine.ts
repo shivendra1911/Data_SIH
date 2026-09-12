@@ -142,7 +142,8 @@ class AutonomousAlertEngine {
             notes: JSON.stringify({
               zone_id: zoneId,
               zone_name: zoneName,
-              action: "ACTIVATE",
+              action: "BROADCAST_ALL",
+              is_universal: true,
               flood_pct: floodProbabilityPct,
               authorized_by: "NDRF / SDMA National Command Authority",
               message: `🚨 CRITICAL FLOOD WARNING (${floodProbabilityPct.toFixed(0)}%): Civic evacuation siren sounding on all mobile devices. Evacuate immediately uphill away from riverbeds.`,
@@ -214,7 +215,8 @@ class AutonomousAlertEngine {
   }
 
   /**
-   * Autonomous evaluation: when flood forecast >= 70%, automatically dispatch siren to mobile APKs
+   * Autonomous evaluation: Disabled by default to prevent simulated spam loops.
+   * Emergency sirens are dispatched when the NDRF / SDMA operator explicitly authorizes it.
    */
   public async evaluateAndDispatchAutonomousAlert(
     zoneId: string,
@@ -222,29 +224,7 @@ class AutonomousAlertEngine {
     floodProbabilityPct: number,
     coords: [number, number]
   ): Promise<boolean> {
-    const isCriticalRisk = floodProbabilityPct >= 70;
-
-    if (!isCriticalRisk) {
-      if (this.isDispatchedToMobile && !this.isManuallyHalted) {
-        this.haltMobileSiren(zoneId);
-      }
-      return false;
-    }
-
-    if (this.isManuallyHalted) {
-      // If government officer explicitly halted the siren, respect manual override
-      return false;
-    }
-
-    const now = Date.now();
-    const lastDispatched = this.dispatchedZones.get(zoneId) || 0;
-    const cooldownMs = 3 * 60 * 1000; // 3 min cooldown
-
-    if (!this.isDispatchedToMobile || now - lastDispatched > cooldownMs) {
-      this.dispatchedZones.set(zoneId, now);
-      return this.dispatchMobileSiren(zoneId, zoneName, floodProbabilityPct, coords);
-    }
-
+    // Disabled automated background spam. Sirens only fire on explicit administrative dispatch.
     return false;
   }
 }

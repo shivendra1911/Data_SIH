@@ -132,7 +132,7 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
 
         try {
             if (name != null && !name.isEmpty()) {
-                String safeName = name.length() > 24 ? name.substring(0, 24) : name;
+                String safeName = name.length() > 14 ? name.substring(0, 14) : name;
                 bluetoothAdapter.setName(safeName);
             }
         } catch (Exception e) {
@@ -140,26 +140,38 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         }
 
         AdvertiseSettings settings = new AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
             .setConnectable(true)
             .setTimeout(0) // never stop
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .build();
 
-        // 1. Primary advertisement packet: contains 128-bit Service UUID (18 bytes <= 31 bytes)
+        // 1. Primary advertisement packet: contains ONLY 128-bit Service UUID (21 bytes with flags <= 31 bytes)
         AdvertiseData data = new AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
             .build();
 
-        // 2. Scan response packet: carries device name without overflowing 31-byte advertising limit
-        AdvertiseData scanResponse = new AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .build();
+        // 2. Scan response packet: carries Manufacturer Data with NeerNetra signature (8 bytes <= 31 bytes)
+        AdvertiseData.Builder scanBuilder = new AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .setIncludeTxPowerLevel(false);
+        try {
+            scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'e', 'e', 'r' });
+        } catch (Exception ignored) {}
+        AdvertiseData scanResponse = scanBuilder.build();
 
-        advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback);
-        Log.d(TAG, "BLE advertising started — discoverable to other NeerNetra phones (UUID + ScanResponse)");
+        try {
+            advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback);
+            Log.d(TAG, "BLE advertising started (UUID + ScanResponse MFR)");
+        } catch (Exception e) {
+            Log.w(TAG, "startAdvertising call exception, falling back: " + e.getMessage());
+            try {
+                advertiser.startAdvertising(settings, data, advertiseCallback);
+            } catch (Exception ex) {
+                Log.e(TAG, "Fallback advertising error: " + ex.getMessage());
+            }
+        }
     }
 
     // ── Send data to ALL currently connected central devices ─────────────────
@@ -184,6 +196,16 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
 
         Log.d(TAG, "Notified " + notified + " connected centrals");
         promise.resolve(notified);
+    }
+
+    @ReactMethod
+    public void addListener(String eventName) {
+        // Required for React Native NativeEventEmitter
+    }
+
+    @ReactMethod
+    public void removeListeners(Integer count) {
+        // Required for React Native NativeEventEmitter
     }
 
     // ── Stop GATT Server + Advertising ───────────────────────────────────────

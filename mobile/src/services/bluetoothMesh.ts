@@ -279,27 +279,37 @@ class NeerNetraBLEMesh {
           if (!device) return;
 
           // Check if device is a NeerNetra emergency node:
-          // 1. Name contains 'neer' or 'citizen'
-          // 2. Service UUIDs match NEERNETRA_SERVICE_UUID
+          // 1. Name or localName contains 'neer' or 'citizen'
+          // 2. Service UUIDs match NEERNETRA_SERVICE_UUID (with or without dashes)
           // 3. Manufacturer data contains NeerNetra signature
-          const devName = (device.name || '').toLowerCase();
-          const devUuids = (device.serviceUUIDs || []).map((u: string) => u.toLowerCase());
-          const targetUuid = NEERNETRA_SERVICE_UUID.toLowerCase();
+          // 4. Service data contains NeerNetra signature
+          const devName = (device.name || (device as any).localName || '').toLowerCase();
+          const devUuids = (device.serviceUUIDs || []).map((u: string) => u.toLowerCase().replace(/-/g, ''));
+          const targetUuid = NEERNETRA_SERVICE_UUID.toLowerCase().replace(/-/g, '');
 
           const hasNeerName = devName.includes('neer') || devName.includes('citizen');
-          const hasNeerUuid = devUuids.includes(targetUuid);
+          const hasNeerUuid = devUuids.some((u: string) => u === targetUuid || u.includes('4e656572'));
           const hasNeerMfr = Boolean(
             device.manufacturerData && (
               device.manufacturerData.includes('TmVlcg') || // 'Neer' in base64
+              device.manufacturerData.includes('RU5O') ||   // 0x4E65 + 'N'
+              device.manufacturerData.includes('//9O') ||   // 0xFFFF + 'N'
               (device.manufacturerData.length > 0 && hasNeerName)
             )
           );
+          const hasNeerServiceData = Boolean(
+            device.serviceData &&
+            Object.keys(device.serviceData).some((k) => k.toLowerCase().replace(/-/g, '').includes('4e656572'))
+          );
 
-          const isNeerDevice = hasNeerName || hasNeerUuid || hasNeerMfr;
+          const isNeerDevice = hasNeerName || hasNeerUuid || hasNeerMfr || hasNeerServiceData;
           if (!isNeerDevice) return;
 
           const peerRssi = device.rssi || -68;
-          const peerName = device.name || `Citizen_${device.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`;
+          const rawName = device.name || (device as any).localName;
+          const peerName = rawName && rawName.trim().length > 0
+            ? rawName
+            : `Citizen_${device.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`;
           const existingPeer = this.activePeers.get(device.id);
 
           const peer: MeshPeer = {

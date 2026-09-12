@@ -81,7 +81,7 @@ export default function NationalSentinelPage() {
   const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState<boolean>(false);
   const [sentinelScan, setSentinelScan] = useState<NationalSentinelScan | null>(null);
   const [loadingScan, setLoadingScan] = useState<boolean>(false);
-  const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(true);
+  const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Government Mobile Siren State (Dispatched exclusively to mobile APKs in danger zone)
@@ -313,9 +313,10 @@ export default function NationalSentinelPage() {
   if (forecastHorizon === "+12H") displayedRisk = displayedRisk * 0.85;
   if (forecastHorizon === "+24H") displayedRisk = displayedRisk * 0.45;
 
-  // Autonomous Mobile Siren Dispatch: automatically sent to mobile APKs in danger zone when risk >= 70%
+  // Autonomous Mobile Siren Dispatch: Disabled by default to prevent false alarm loops.
+  // Sirens are only dispatched when the emergency authority explicitly triggers them from the dashboard.
   useEffect(() => {
-    if (autoDispatchEnabled && displayedRisk >= 70) {
+    if (autoDispatchEnabled && displayedRisk >= 75) {
       autonomousAlertEngine.evaluateAndDispatchAutonomousAlert(
         selectedZone.id,
         selectedZone.name,

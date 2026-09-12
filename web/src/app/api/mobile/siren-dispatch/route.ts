@@ -172,7 +172,8 @@ export async function POST(req: NextRequest) {
           notes: JSON.stringify({
             zone_id: zoneId,
             zone_name: zoneName,
-            action: "ACTIVATE",
+            action: "BROADCAST_ALL",
+            is_universal: true,
             authorized_by: authorizedBy,
             message: record.emergency_message,
             dispatched_at: record.dispatched_at,
