@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
 import { SecurityGaugeCard } from '../components/SecurityGaugeCard';
 import { NearbyVictimsHelpCard } from '../components/NearbyVictimsHelpCard';
+import { SOSBigButton } from '../components/SOSBigButton';
+import { ShieldAlert, Radio } from 'lucide-react-native';
 import { ZonePrediction } from '../types';
 import { updateSafetyStatus } from '../services/api';
 import Constants from 'expo-constants';
@@ -91,6 +93,26 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
         </TouchableOpacity>
       </View>
 
+      
+      {/* Dedicated Emergency SOS Distress Trigger */}
+      <View style={styles.sosCard}>
+        <View style={styles.sosHeaderRow}>
+          <ShieldAlert size={20} color="#dc2626" />
+          <Text style={styles.sosCardTitle}>Emergency Distress Controls</Text>
+        </View>
+        <Text style={styles.sosCardDesc}>
+          Tap below to broadcast instant distress beacon with your live GPS location.
+        </Text>
+        <SOSBigButton
+          onSOSTrigger={(type) => {
+            setSafetyStatus('DANGER');
+            if (onSOSTrigger) onSOSTrigger(type);
+          }}
+          onConfirmSafe={markAsSafe}
+          currentStatus={safetyStatus === 'SAFE' ? 'SAFE' : safetyStatus === 'DANGER' ? 'SOS' : null}
+        />
+      </View>
+
       <NearbyVictimsHelpCard />
       <View style={styles.bottomPadding} />
     </ScrollView>
@@ -103,6 +125,38 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 60, // Space for the FAB
+  },
+  
+  sosCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderColor: '#fecaca',
+    borderWidth: 1.5,
+    elevation: 3,
+    shadowColor: '#dc2626',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  sosHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sosCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#991b1b',
+  },
+  sosCardDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 17,
+    marginBottom: 10,
   },
   safetyCard: {
     marginHorizontal: 16,

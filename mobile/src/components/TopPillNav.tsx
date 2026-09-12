@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Droplets, ShieldCheck, Wifi, Radio, AlertTriangle } from 'lucide-react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import { ShieldCheck, Wifi, Radio, AlertTriangle } from 'lucide-react-native';
 
 export type CitizenTab = 'status' | 'mesh' | 'map' | 'directives';
 
@@ -47,7 +47,11 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
       {/* Brand & Citizen Sector */}
       <View style={styles.brandBlock}>
         <View style={styles.logoIcon}>
-          <Droplets size={20} color="#2563eb" />
+          <Image
+            source={require('../../assets/logo_emblem.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
         <View>
           <View style={styles.titleRow}>
@@ -88,12 +92,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logoIcon: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 10,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f0f9ff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e0f2fe',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 32,
+    height: 32,
   },
   titleRow: {
     flexDirection: 'row',

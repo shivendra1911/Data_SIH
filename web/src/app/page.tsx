@@ -6,6 +6,7 @@ import Header from "@/components/Dashboard/Header";
 import TelemetryStrip from "@/components/Dashboard/TelemetryStrip";
 import PredictionPanel from "@/components/Dashboard/PredictionPanel";
 import PreventiveDirectivesPanel from "@/components/Dashboard/PreventiveDirectivesPanel";
+import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
 import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar";
 import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
@@ -519,6 +520,8 @@ export default function NationalSentinelPage() {
 
           {/* Section 3: Secondary Operations & Directives in White & Vanilla Theme */}
           <section aria-label="Safety Directives" className="space-y-4">
+            <DisasterLocationStream />
+
             <PreventiveDirectivesPanel activeZone={selectedZone} />
           </section>
 

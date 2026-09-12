@@ -94,3 +94,38 @@ export interface MapClusterMarker {
   active: boolean;
   label: string;
 }
+
+export type LanguageMode = 'en' | 'hi';
+
+export interface CWCGaugeInfo {
+  gauge_station: string;
+  river: string;
+  warning_level_m: number;
+  danger_level_m: number;
+  hfl_record_m: number;
+  hfl_date?: string;
+  current_stage_m?: number;
+  status?: string;
+  severity?: string;
+  freeboard_to_danger_m?: number;
+}
+
+export interface EvacuationShelter {
+  id: string;
+  name: string;
+  name_hi?: string;
+  zone_id: string;
+  lat: number;
+  lng: number;
+  elevation_m: number;
+  capacity: number;
+  medical_support: boolean;
+  food_water_stocked: boolean;
+  status: string;
+  contact_phone?: string;
+  distance_km?: number;
+  distance_m?: number;
+  bearing_deg?: number;
+  bearing_compass?: string;
+  elevation_gain_m?: number;
+}

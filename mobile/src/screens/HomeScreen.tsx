@@ -14,6 +14,7 @@ import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
 import { ActiveCallHUD } from '../components/ActiveCallHUD';
 import { TopPillNav, CitizenTab } from '../components/TopPillNav';
+import { SOSFAB } from '../components/SOSFAB';
 import {
   ZonePrediction,
   LocationSyncPayload,
@@ -31,6 +32,8 @@ import {
 import {
   getLastKnownLocation,
   start5MinPeriodicLocationTracker,
+  start5SecDisasterLocationStream,
+  stop5SecDisasterLocationStream,
 } from '../services/locationTracker';
 import { getOfflineSOSQueue } from '../services/offlineStorage';
 import {
@@ -217,6 +220,7 @@ export const HomeScreen: React.FC = () => {
     await markUserAsSafeConfirmed(deviceUuid);
     setRemainingCountdown(null);
     stopDangerTimer();
+    stop5SecDisasterLocationStream();
     setSosStatus('SAFE');
     let lat = lastLocation?.lat;
     let lng = lastLocation?.lng;
@@ -269,6 +273,7 @@ export const HomeScreen: React.FC = () => {
       (meshEngine as any).broadcastSOS(payload);
     }
     await sendSOSPayload(payload);
+    start5SecDisasterLocationStream(deviceUuid);
     await checkOfflineQueue();
   };
 
@@ -448,6 +453,15 @@ export const HomeScreen: React.FC = () => {
           setShowRedAlertOverlay(false);
         }}
       />
+    
+      {/* Floating Emergency SOS Button across all tabs */}
+      <SOSFAB
+        onSOSTrigger={handleSOSTrigger}
+        onConfirmSafe={() => handleConfirmSafe(false)}
+        currentStatus={sosStatus}
+        bottomOffset={60 + Math.max(insets.bottom, 12) + 16}
+      />
+
     </View>
   );
 };

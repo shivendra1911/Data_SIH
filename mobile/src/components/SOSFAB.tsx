@@ -16,12 +16,14 @@ interface SOSFABProps {
   onSOSTrigger: (type: SOSType) => void;
   onConfirmSafe: () => void;
   currentStatus: 'SOS' | 'SAFE' | 'HELPING' | null;
+  bottomOffset?: number;
 }
 
 export const SOSFAB: React.FC<SOSFABProps> = ({
   onSOSTrigger,
   onConfirmSafe,
   currentStatus,
+  bottomOffset = 85,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -52,19 +54,22 @@ export const SOSFAB: React.FC<SOSFABProps> = ({
 
   return (
     <>
-      {/* 
-        FIX: bottom is now 70 (above the 60px tab bar) so SOS button
-        does NOT overlap the Map/Mesh/Status tab bar buttons.
-        The tab bar is 60px tall, so we position 70px from bottom.
-      */}
-      <Animated.View style={[styles.fabContainer, { transform: [{ scale: pulseAnim }] }]}>
+      <Animated.View
+        style={[
+          styles.fabContainer,
+          {
+            bottom: bottomOffset,
+            transform: [{ scale: pulseAnim }],
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.fab, currentStatus === 'SOS' && styles.fabActive]}
           activeOpacity={0.8}
           onPress={() => setModalVisible(true)}
         >
-          <ShieldAlert color="#fff" size={28} />
-          <Text style={styles.fabLabel}>SOS</Text>
+          <ShieldAlert color="#fff" size={26} />
+          <Text style={styles.fabLabel}>{currentStatus === 'SOS' ? 'ACTIVE' : 'SOS'}</Text>
         </TouchableOpacity>
       </Animated.View>
 
@@ -98,15 +103,13 @@ export const SOSFAB: React.FC<SOSFABProps> = ({
 const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
-    // FIXED: 70px from bottom so it sits ABOVE the 60px tab bar
-    bottom: 70,
-    alignSelf: 'center',
+    right: 18,
     zIndex: 9999,
-    elevation: 10,
+    elevation: 12,
     shadowColor: '#dc2626',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
   },
   fab: {
     width: 64,

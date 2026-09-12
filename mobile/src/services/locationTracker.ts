@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { LocationSyncPayload } from '../types';
-import { getDeviceModelName } from './api';
+import { getDeviceModelName, sendHighFrequencyTelemetry } from './api';
 
 const LAST_KNOWN_LOCATION_KEY = '@neernetra_last_known_location_v1';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
@@ -144,5 +144,63 @@ export const stopPeriodicLocationTracker = () => {
   if (locationIntervalTimer) {
     clearInterval(locationIntervalTimer);
     locationIntervalTimer = null;
+  }
+};
+
+let highFrequencyDisasterTimer: any = null;
+
+export const start5SecDisasterLocationStream = (deviceUuid: string) => {
+  if (highFrequencyDisasterTimer) return;
+  console.log('[LocationTracker] 🔴 Starting 5-Second Disaster GPS Telemetry Stream...');
+  
+  const pushLocationBreadcrumb = async () => {
+    try {
+      let lat = 27.6015;
+      let lng = 77.5975;
+      let altitude: number | null = 184;
+      let accuracy: number | null = 5.0;
+      let speed: number | null = 0;
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const currentPos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        lat = currentPos.coords.latitude;
+        lng = currentPos.coords.longitude;
+        altitude = currentPos.coords.altitude;
+        accuracy = currentPos.coords.accuracy;
+        speed = currentPos.coords.speed;
+      }
+
+      const phoneModel = getDeviceModelName();
+
+      await sendHighFrequencyTelemetry({
+        device_uuid: deviceUuid,
+        lat,
+        lng,
+        altitude,
+        accuracy,
+        speed,
+        phone_model: phoneModel,
+        status: 'SOS_STREAM',
+        sos_type: 'LOCATION_TRACKING',
+        timestamp: new Date().toISOString(),
+      });
+      console.log('[LocationTracker] 📍 5s Breadcrumb sent:', lat, lng, 'Accuracy:', accuracy);
+    } catch (err) {
+      console.debug('[LocationTracker] 5s stream cycle error:', err);
+    }
+  };
+
+  pushLocationBreadcrumb();
+  highFrequencyDisasterTimer = setInterval(pushLocationBreadcrumb, 5000);
+};
+
+export const stop5SecDisasterLocationStream = () => {
+  if (highFrequencyDisasterTimer) {
+    clearInterval(highFrequencyDisasterTimer);
+    highFrequencyDisasterTimer = null;
+    console.log('[LocationTracker] 5-Second Disaster GPS Telemetry Stream stopped.');
   }
 };

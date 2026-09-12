@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Header from "@/components/Dashboard/Header";
 import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
+import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
@@ -287,6 +288,8 @@ export default function RescueCitizenGridPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* Left 7 Cols: Real-Time Citizen Tracking Matrix */}
             <div className="lg:col-span-7 flex flex-col space-y-4">
+              <DisasterLocationStream />
+
               <CitizenTrackingMatrix
                 citizens={citizens}
                 onFocusCoordinates={(coords) => {

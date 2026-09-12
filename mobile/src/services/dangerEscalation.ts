@@ -9,13 +9,14 @@ const SAFE_CONFIRMED_KEY = '@neernetra_safe_confirmed_v1';
 const DANGER_TIMER_KEY = '@neernetra_danger_timer_start_v1';
 
 let countdownInterval: any = null;
+let recurringCheckTimeout: any = null;
 
 export const markUserAsSafeConfirmed = async (deviceUuid: string): Promise<void> => {
   try {
     await AsyncStorage.setItem(SAFE_CONFIRMED_KEY, new Date().toISOString());
     await AsyncStorage.removeItem(DANGER_TIMER_KEY);
     stopDangerTimer();
-    console.log('[DangerEscalation] Citizen confirmed SAFE. Automatic danger escalation cancelled.');
+    console.log('[DangerEscalation] Citizen confirmed SAFE ("YES I AM OKAY"). Next safety check in 1 minute.');
   } catch (err) {
     console.error('[DangerEscalation] Error saving safe status:', err);
   }
@@ -25,10 +26,10 @@ export const isUserSafeConfirmed = async (): Promise<boolean> => {
   try {
     const data = await AsyncStorage.getItem(SAFE_CONFIRMED_KEY);
     if (!data) return false;
-    // Safe confirmation valid for 6 hours
+    // Safe confirmation valid for 60 seconds during active disaster check
     const confirmedTime = new Date(data).getTime();
     const now = new Date().getTime();
-    return now - confirmedTime < 6 * 60 * 60 * 1000;
+    return now - confirmedTime < 60 * 1000;
   } catch {
     return false;
   }
@@ -36,7 +37,7 @@ export const isUserSafeConfirmed = async (): Promise<boolean> => {
 
 export const startRedZoneDangerTimer = async (
   deviceUuid: string,
-  timeoutSeconds: number = 300, // 5-minute timeout
+  timeoutSeconds: number = 60, // 1-minute (60 seconds) recurring safety check
   onTick?: (remainingSeconds: number) => void,
   onAutoEscalate?: () => void,
   onMotionSafeConfirmed?: () => void,
@@ -45,25 +46,33 @@ export const startRedZoneDangerTimer = async (
   if (!force) {
     const isSafe = await isUserSafeConfirmed();
     if (isSafe) {
-      console.log('[DangerEscalation] User already confirmed SAFE. Skipping danger countdown.');
+      console.log('[DangerEscalation] User recently confirmed SAFE. Scheduling next 1-minute check.');
+      if (recurringCheckTimeout) clearTimeout(recurringCheckTimeout);
+      recurringCheckTimeout = setTimeout(() => {
+        startRedZoneDangerTimer(deviceUuid, 60, onTick, onAutoEscalate, onMotionSafeConfirmed, true);
+      }, 60000);
       return;
     }
   } else {
-    // Clear prior safe confirmation when force triggered by Command Siren
     await AsyncStorage.removeItem(SAFE_CONFIRMED_KEY);
   }
 
-  // Trigger loud audio immediately when Red Zone is detected!
+  // Trigger audio cue when Red Zone check activates
   triggerEmergencyVoiceAudio();
 
-  // Start touch-free motion & gyroscope monitoring for damaged/submerged screens
+  // Start touch-free motion & gyroscope monitoring
   motionSafetyDetector.startMonitoring({
     onMotionConfirmed: async () => {
-      console.log('[DangerEscalation] Motion safety detector triggered touch-free safe confirmation!');
+      console.log('[DangerEscalation] Gyro/Motion sensor detected device move/shake — Auto-confirming "YES, I AM OKAY"!');
       await markUserAsSafeConfirmed(deviceUuid);
       if (onMotionSafeConfirmed) {
         onMotionSafeConfirmed();
       }
+      // Re-schedule next check after 60 seconds if danger continues
+      if (recurringCheckTimeout) clearTimeout(recurringCheckTimeout);
+      recurringCheckTimeout = setTimeout(() => {
+        startRedZoneDangerTimer(deviceUuid, 60, onTick, onAutoEscalate, onMotionSafeConfirmed, true);
+      }, 60000);
     },
   });
 
@@ -82,9 +91,8 @@ export const startRedZoneDangerTimer = async (
       clearInterval(countdownInterval);
       countdownInterval = null;
 
-      console.warn('[DangerEscalation] 🚨 5-MINUTE UNRESPONSIVE TIMEOUT ELAPSED! Escalating to CRITICAL DANGER SOS!');
+      console.warn('[DangerEscalation] 🚨 1-MINUTE UNRESPONSIVE TIMEOUT ELAPSED! Escalating to CRITICAL DANGER SOS!');
 
-      // Get last known location
       const lastLoc = await getLastKnownLocation();
       const lat = lastLoc ? lastLoc.lat : 27.6015;
       const lng = lastLoc ? lastLoc.lng : 77.5975;
@@ -96,12 +104,13 @@ export const startRedZoneDangerTimer = async (
         status: 'SOS' as const,
         sos_type: 'TRAPPED' as const,
         is_mesh_relayed: true,
-        notes: 'AUTOMATIC DANGER ESCALATION: Citizen unresponsive after 5 min RED ZONE alert.',
+        notes: 'AUTOMATIC DANGER ESCALATION: Citizen unresponsive after 1-min RED ZONE safety check.',
         timestamp: new Date().toISOString(),
       };
 
-      // Broadcast over BLE Mesh & direct HTTP
-      await meshEngine.broadcastMultiHopSOS(autoSosPayload);
+      try {
+        await (meshEngine as any).broadcastSOS(autoSosPayload);
+      } catch {}
       await sendSOSPayload(autoSosPayload);
 
       if (onAutoEscalate) onAutoEscalate();
@@ -113,6 +122,10 @@ export const stopDangerTimer = () => {
   if (countdownInterval) {
     clearInterval(countdownInterval);
     countdownInterval = null;
+  }
+  if (recurringCheckTimeout) {
+    clearTimeout(recurringCheckTimeout);
+    recurringCheckTimeout = null;
   }
   stopEmergencyVoiceAudio();
   motionSafetyDetector.stopMonitoring();
