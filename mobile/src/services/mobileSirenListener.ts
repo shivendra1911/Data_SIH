@@ -1,7 +1,6 @@
 import { Vibration, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
-import { Audio } from 'expo-av';
 
 const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
 const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
@@ -9,7 +8,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
 // Only treat sirens issued within the last 10 minutes as "active"
 const SIREN_RECENCY_MS = 10 * 60 * 1000;
 
-let sirenSound: Audio.Sound | null = null;
 let sirenNotificationId: string | null = null;
 let webAudioCtx: any = null;
 let webOscillator: any = null;
@@ -163,43 +161,16 @@ async function startSirenSound() {
     startWebSiren();
     return;
   }
-  try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: false,
-      playThroughEarpieceAndroid: false,
-    });
-
-    if (sirenSound) {
-      try { await sirenSound.stopAsync(); await sirenSound.unloadAsync(); } catch {}
-      sirenSound = null;
-    }
-
-    const { sound } = await Audio.Sound.createAsync(
-      require('../../assets/emergency_siren.wav'),
-      { shouldPlay: true, isLooping: true, volume: 1.0 }
-    );
-    sirenSound = sound;
-    console.log('[MobileSirenListener] expo-av WAV siren playing!');
-  } catch (err) {
-    console.warn('[MobileSirenListener] expo-av siren error:', err);
-  }
+  // On native Android/iOS:
+  // The emergency sound is blasted through the system ALARM stream via the Notification Channel
+  // (AndroidAudioUsage.ALARM bypasses DnD and silent switches) and Speech TTS synthesis.
+  console.log('[MobileSirenListener] Native alarm audio active via ALARM channel + Speech!');
 }
 
 async function stopSirenSound() {
   if (Platform.OS === 'web') {
     stopWebSiren();
     return;
-  }
-  try {
-    if (sirenSound) {
-      await sirenSound.stopAsync();
-      await sirenSound.unloadAsync();
-      sirenSound = null;
-    }
-  } catch (err) {
-    console.warn('[MobileSirenListener] expo-av stop error:', err);
   }
 }
 
