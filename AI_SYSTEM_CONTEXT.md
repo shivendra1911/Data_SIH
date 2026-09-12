@@ -10,7 +10,7 @@ The NeerNetra system is decoupled into 4 distinct micro-environments:
 
 1.  **`/ai_model` (The Brain):** Offline Python environment. Generates Hybrid Training Data (NASA POWER 10-year historical baseline + Synthetic GLOF/Cloudburst Data Augmentation), trains a `RandomForestClassifier` using `scikit-learn`, and serializes the model to `../backend/neernetra_model.pkl`.
 2.  **`/backend` (The Nervous System):** Python FastAPI server running on `localhost:8000`. It is the central router. Loads the `.pkl` model, fetches external APIs, calculates predictions, and exposes REST endpoints.
-3.  **`/web` (The Command Center):** Next.js 14 frontend running on `localhost:3000`. Used by NDRF/Govt. Fetches data from Backend and streams live Supabase updates.
+3.  **`/web` (The Command Center):** Next.js 14 frontend running on `localhost:3000`. Used by NDRF/Govt. Consumes unified live dashboard telemetry and tactical geospatial radar from the backend.
 4.  **`/mobile` (The Edge Node):** React Native Expo app running on `localhost:8081`. Used by citizens. Receives alerts, triggers SOS, and runs the Bluetooth offline mesh.
 
 ---
@@ -20,7 +20,7 @@ The NeerNetra system is decoupled into 4 distinct micro-environments:
 ### Phase 1: Prediction & Alerting
 1.  **Fetch:** Every 15 minutes, the `backend` (via APScheduler/Celery) calls Tomorrow.io (Rain), AgroMonitoring (Soil), USGS (Seismic), and Open-Elevation (Slope).
 2.  **Predict:** `backend` passes this 5-factor array into `neernetra_model.predict_proba()`.
-3.  **Threshold:** If flood probability > 55% (ORANGE) or > 75% (RED), `backend` updates the `zones` table in Supabase.
+3.  **Threshold:** If flood probability > 55% (ORANGE) or > 75% (RED), `backend` updates sector state and persists live alerts to Google Cloud Firestore.
 4.  **Broadcast:** `backend` triggers a Firebase Cloud Messaging (FCM) push notification to the `mobile` app topic (e.g., `zone_chamoli_01`).
 
 ### Phase 2: Citizen Response & Offline Mesh
@@ -30,10 +30,10 @@ The NeerNetra system is decoupled into 4 distinct micro-environments:
 8.  **Upload:** Once internet is available, `mobile` sends a `POST /api/sos/trigger` to the `backend`.
 
 ### Phase 3: Dashboard Triage & Rescue
-9.  **Ingest:** `backend` receives the SOS, validates the JWT, and inserts it into the Supabase `sos_events` table with PostGIS geospatial coordinates.
-10. **Stream:** Supabase Realtime pushes the new row instantly to the `web` dashboard.
-11. **Visualize:** Next.js `web` plots a pulsing Red Marker on the Leaflet map.
-12. **Cluster:** If >50 SOS events occur, `web` calls `GET /api/sos/clusters`. The `backend` runs PostGIS `ST_ClusterKMeans` and returns grouped rescue zones.
+9.  **Ingest:** `backend` receives the SOS, validates coordinates, updates the thread-safe in-memory cache, and asynchronously writes to Google Cloud Firestore (`sos_events` collection).
+10. **Stream:** Fast REST overview updates stream live GPS beacons and active distress events to the `web` command dashboard.
+11. **Visualize:** Next.js `web` plots pulsing markers on the Tactical Geospatial Radar.
+12. **Cluster:** The `backend` runs real-time spatial proximity clustering (~5.5km grouping) via `GET /api/sos/clusters` and returns prioritized NDRF rescue targets.
 
 ---
 
@@ -91,23 +91,38 @@ The `backend` must expose these exact routes. The `mobile` and `web` must consum
 
 ---
 
-## 4. DATABASE SCHEMA (Supabase PostgreSQL)
+## 4. DATABASE ARCHITECTURE (Google Cloud Firestore + Thread-Safe In-Memory Cache)
 
-**Table: `sensor_readings`**
-*   `id` (uuid)
-*   `zone_id` (text)
-*   `rainfall_mm` (float)
-*   `seismic_mag` (float)
-*   `flood_prob` (float)
-*   `created_at` (timestamp)
+**Firestore Collection: `citizen_locations`**
+*   `device_uuid` (string, document ID)
+*   `lat`, `lng` (float, WGS84 coordinates)
+*   `altitude` (float, meters)
+*   `accuracy` (float)
+*   `battery_level` (int)
+*   `status` (string: "ACTIVE", "SOS", "SAFE", "HELPING")
+*   `zone_id` (string: e.g. "chamoli_01")
+*   `last_synced_at` (ISO timestamp)
+*   `server_received_at` (ISO timestamp)
 
-**Table: `sos_events`**
-*   `id` (uuid)
-*   `device_uuid` (text)
-*   `location` (geometry Point 4326)
-*   `status` (text)
-*   `created_at` (timestamp)
-*   *(Note: Requires PostGIS extension enabled in Supabase)*
+**Firestore Collection: `sos_events`**
+*   `id` (string, document ID)
+*   `device_uuid` (string)
+*   `lat`, `lng` (float)
+*   `status` (string)
+*   `sos_type` (string: "TRAPPED", "MEDICAL", "EVACUATION", "FOOD_WATER")
+*   `is_mesh_relayed` (boolean)
+*   `received_at` (ISO timestamp)
+*   `notes` (string)
+
+**Firestore Collection: `dispatched_rescues`**
+*   `dispatch_id` (string)
+*   `cluster_id` (int)
+*   `squad_type` (string: "HELICOPTER", "BOAT", "MEDICAL", "GROUND")
+*   `zone_id` (string)
+*   `assigned_unit` (string)
+*   `status` (string: "EN_ROUTE", "ON_SITE", "COMPLETED")
+*   `eta_minutes` (int)
+*   `dispatched_at` (ISO timestamp)
 
 ---
 
@@ -115,18 +130,19 @@ The `backend` must expose these exact routes. The `mobile` and `web` must consum
 
 **If you are generating code in `/mobile`:**
 *   Use React Native + Expo + TypeScript.
-*   Assume the backend is available at `EXPO_PUBLIC_API_URL` (usually localhost:8000).
-*   Prioritize offline-first behavior (AsyncStorage / SQLite for queued SOS).
+*   Assume the backend is available at `EXPO_PUBLIC_API_URL` (with active venue LAN IP fallback for physical phones).
+*   Prioritize offline-first behavior (AsyncStorage for queued SOS, multi-hop BLE mesh relay).
 
 **If you are generating code in `/web`:**
-*   Use Next.js 14 App Router + Tailwind + Shadcn UI.
-*   Use `react-leaflet` for maps. Do NOT use Google Maps (costs money, Leaflet is free).
-*   Disable SSR for the map component (`next/dynamic` with `ssr: false`).
+*   Use Next.js 14 App Router + Lucide Icons.
+*   Use lightweight, bandwidth-efficient Tactical Himalayan Vector Radar for offline mission resilience.
+*   Use adaptive visibility polling with AbortControllers.
 
 **If you are generating code in `/backend`:**
 *   Use FastAPI + Pydantic v2.
-*   Use `@supabase/supabase-js` or `httpx` to write to the DB.
-*   Always include `CORS` middleware allowing `localhost:3000` and `localhost:8081`.
+*   Use Google Cloud Firestore via `firebase-admin` for persistent cloud synchronization.
+*   Maintain thread safety using `threading.RLock()` across in-memory real-time state.
+*   Always include `CORS` middleware allowing `localhost:3000` and mobile clients.
 
 **If you are generating code in `/ai_model`:**
 *   Use `pandas` and `scikit-learn`.

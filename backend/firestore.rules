@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // NeerNetra Permanent Production Disaster Security Rules (SIH26192)
+    
+    // Citizen GPS tracking nodes: Citizens update their own location coordinates
+    match /citizen_locations/{deviceId} {
+      allow read: if true;
+      allow write: if request.resource.data.device_uuid != null
+                   && request.resource.data.lat >= -90.0 && request.resource.data.lat <= 90.0
+                   && request.resource.data.lng >= -180.0 && request.resource.data.lng <= 180.0;
+    }
+    
+    // Emergency SOS Beacons: Immutable disaster incident audit logs
+    match /sos_events/{eventId} {
+      allow read: if true;
+      allow create: if request.resource.data.status in ['SOS', 'SAFE', 'HELPING']
+                   && request.resource.data.lat >= -90.0 && request.resource.data.lat <= 90.0
+                   && request.resource.data.lng >= -180.0 && request.resource.data.lng <= 180.0;
+      allow update, delete: if false;
+    }
+    
+    // Tactical Rescue Squads & Dispatches (Backend Admin authenticated or valid payload)
+    match /dispatched_rescues/{dispatchId} {
+      allow read: if true;
+      allow write: if request.auth != null || request.resource.data.dispatch_id != null;
+    }
+    
+    // Government Red Alert Broadcasts
+    match /active_broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if request.auth != null || request.resource.data.broadcast_id != null;
+    }
+    
+    // System Health & Latency Telemetry
+    match /system_health/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null || request.resource.data.timestamp != null;
+    }
+  }
+}

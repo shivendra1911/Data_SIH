@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Tomorrow.io Weather",
+    "status": 200,
+    "latency_ms": 1283,
+    "ok": true,
+    "sample": "{\"data\":{\"time\":\"2026-09-11T16:04:00Z\",\"values\":{\"altimeterSetting\":1023.41,\"cloudBase\":1.87,\"cloudCeiling\":null,\"cloudCover\":25.75,\"dewPoin"
+  },
+  {
+    "name": "Open-Elevation",
+    "status": 200,
+    "latency_ms": 1662,
+    "ok": true,
+    "sample": "{\"results\":[{\"latitude\":30.5573,\"longitude\":79.5642,\"elevation\":1790.0}]}"
+  },
+  {
+    "name": "USGS Earthquake",
+    "status": 200,
+    "latency_ms": 1380,
+    "ok": true,
+    "sample": "{\"type\":\"FeatureCollection\",\"metadata\":{\"generated\":1789142686000,\"url\":\"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&lat"
+  },
+  {
+    "name": "NASA POWER Climate",
+    "status": 200,
+    "latency_ms": 965,
+    "ok": true,
+    "sample": "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[79.317,30.417,3184.08]},\"properties\":{\"parameter\":{\"PRECTOTCORR\":{\"20240901\":7.0"
+  },
+  {
+    "name": "OSM Shelters & POI",
+    "status": 200,
+    "latency_ms": 1227,
+    "ok": true,
+    "sample": "[{\"place_id\":244435961,\"licence\":\"Data \u00a9 OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright\",\"osm_type\":\"node\",\"osm_id\":74799372"
+  }
+]
