@@ -531,7 +531,7 @@ export default function NationalSentinelPage() {
   return (
     <div className="relative min-h-screen flex flex-col text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
       {/* Fixed Ambient Dynamic Video Background for entire page */}
-      <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
+      <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden transform-gpu will-change-transform">
         <video
           src="/download.mp4"
           autoPlay
@@ -539,7 +539,7 @@ export default function NationalSentinelPage() {
           muted
           playsInline
           preload="auto"
-          className="w-full h-full object-cover scale-105"
+          className="w-full h-full object-cover scale-105 transform-gpu pointer-events-none"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/70 via-[#161a20]/35 to-[#161a20]/75 pointer-events-none" />
       </div>

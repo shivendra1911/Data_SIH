@@ -11,14 +11,12 @@ export default function SmoothScrollProvider({ children }: { children: React.Rea
     }
 
     const lenis = new Lenis({
-      duration: 0.8,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
+      lerp: 0.1, // Responsive, silky smooth interpolation without sluggish drag
       wheelMultiplier: 1.0,
-      touchMultiplier: 1.5,
-      infinite: false,
+      touchMultiplier: 1.0,
+      smoothWheel: true,
+      syncTouch: false, // Let mobile touch gestures use native 120Hz smooth scrolling
+      autoResize: true,
     });
 
     (window as any).__lenis = lenis;

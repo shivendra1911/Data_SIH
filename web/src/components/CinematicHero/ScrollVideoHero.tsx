@@ -108,7 +108,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
         <video
           ref={videoRef}
           src={VIDEO_URL}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover transform-gpu will-change-transform pointer-events-none"
           muted
           playsInline
           preload="auto"
@@ -119,7 +119,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
           ref={canvasRef}
           width={1920}
           height={1080}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+          className={`absolute inset-0 w-full h-full object-cover transform-gpu will-change-transform pointer-events-none transition-opacity duration-300 ${
             isCanvasLive ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -172,7 +172,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
               opacity: s1Opacity,
               transform: `translate3d(0, ${s1TranslateY}px, 0)`,
               pointerEvents: s1Active ? "auto" : "none",
-              transition: "transform 0.15s ease-out, opacity 0.15s ease-out",
+              willChange: "transform, opacity",
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
@@ -229,7 +229,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
               opacity: s2Opacity,
               transform: `translate3d(0, ${s2TranslateY}px, 0)`,
               pointerEvents: s2Active ? "auto" : "none",
-              transition: "transform 0.15s ease-out, opacity 0.15s ease-out",
+              willChange: "transform, opacity",
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
@@ -286,7 +286,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
               opacity: s3Opacity,
               transform: `translate3d(0, ${s3TranslateY}px, 0)`,
               pointerEvents: s3Active ? "auto" : "none",
-              transition: "transform 0.15s ease-out, opacity 0.15s ease-out",
+              willChange: "transform, opacity",
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">

@@ -34,10 +34,8 @@ export function useScrollReveal() {
     };
 
     observeAll();
-    const interval = setInterval(observeAll, 2000);
 
     return () => {
-      clearInterval(interval);
       observer.disconnect();
     };
   }, []);

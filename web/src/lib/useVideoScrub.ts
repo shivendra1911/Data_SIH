@@ -144,12 +144,9 @@ export function useVideoScrub(videoSrc: string) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const getProgress = () => {
-      const container = containerRef.current;
-      const totalScroll = container
-        ? container.offsetHeight - window.innerHeight
-        : (document.documentElement.scrollHeight - window.innerHeight);
-      if (totalScroll <= 0) return 0;
-      return Math.min(1, Math.max(0, window.scrollY / totalScroll));
+      const span = scrollSpanRef.current;
+      if (span <= 0) return 0;
+      return Math.min(1, Math.max(0, window.scrollY / span));
     };
 
     const updateFrame = () => {
@@ -176,8 +173,12 @@ export function useVideoScrub(videoSrc: string) {
           const video = videoRef.current;
           if (video) {
             if (!video.seeking) {
-              if (Math.abs(video.currentTime - currentRef.current) > 0.02) {
-                video.currentTime = currentRef.current;
+              if (Math.abs(video.currentTime - currentRef.current) > 0.03) {
+                if ('fastSeek' in video && typeof (video as any).fastSeek === 'function') {
+                  (video as any).fastSeek(currentRef.current);
+                } else {
+                  video.currentTime = currentRef.current;
+                }
               }
             } else {
               pendingSeekTimeRef.current = currentRef.current;
@@ -192,26 +193,20 @@ export function useVideoScrub(videoSrc: string) {
       lastTime = now;
       const dt = Math.min(0.1, deltaSeconds);
 
-      const p = getProgress();
-      if (Math.abs(p - lastPRef.current) > 0.001) {
-        lastPRef.current = p;
-        setScrollProgress(p);
-      }
-
       const dur = durRef.current;
       if (dur > 0) {
-        targetRef.current = p * dur;
-
-        if (prefersReducedMotion) {
-          currentRef.current = targetRef.current;
-        } else {
-          currentRef.current += (targetRef.current - currentRef.current) * (1 - Math.exp(-dt * LERP_TAU));
-          if (Math.abs(targetRef.current - currentRef.current) < SNAP) {
+        const diff = targetRef.current - currentRef.current;
+        if (Math.abs(diff) > 0.0002) {
+          if (prefersReducedMotion) {
             currentRef.current = targetRef.current;
+          } else {
+            currentRef.current += diff * (1 - Math.exp(-dt * LERP_TAU));
+            if (Math.abs(targetRef.current - currentRef.current) < SNAP) {
+              currentRef.current = targetRef.current;
+            }
           }
+          updateFrame();
         }
-
-        updateFrame();
       }
 
       animationFrameId = requestAnimationFrame(tick);
@@ -219,20 +214,17 @@ export function useVideoScrub(videoSrc: string) {
 
     const onScroll = () => {
       const p = getProgress();
-      if (Math.abs(p - lastPRef.current) > 0.001) {
-        lastPRef.current = p;
-        setScrollProgress(p);
-      }
       const dur = durRef.current;
       if (dur > 0) {
         targetRef.current = p * dur;
         if (prefersReducedMotion) {
           currentRef.current = targetRef.current;
-        } else {
-          // Immediately advance smoothly on scroll event for instant 60fps responsiveness
-          currentRef.current += (targetRef.current - currentRef.current) * 0.65;
+          updateFrame();
         }
-        updateFrame();
+      }
+      if (Math.abs(p - lastPRef.current) > 0.003) {
+        lastPRef.current = p;
+        setScrollProgress(p);
       }
     };
 
