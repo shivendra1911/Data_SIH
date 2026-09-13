@@ -44,6 +44,7 @@ import {
   Activity,
   ChevronDown,
   BellRing,
+  Volume2,
   VolumeX,
   Smartphone,
   CheckCircle2,
@@ -53,6 +54,7 @@ import {
   Megaphone,
   Shield,
   Plus,
+  Navigation,
 } from "lucide-react";
 
 const DEFAULT_USER_ZONE: HazardZone = {
@@ -171,13 +173,38 @@ export default function NationalSentinelPage() {
   const activeSafeRoutes: SafeEvacuationRoute[] = getSafeRoutesForZone(selectedZone);
   const activeResponders: EmergencyResponder[] = getRespondersForZone(selectedZone);
 
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
   // Non-blocking toast notification helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4500);
   };
 
+  const handleToggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      showToast(next ? "🔊 Alert Audio: Enabled" : "🔇 Alert Audio: Muted");
+      return next;
+    });
+  }, []);
+
   const handleTriggerSOS = useCallback(async () => {
+    if (soundEnabled) {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(950, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+      } catch {}
+    }
     try {
       const res = await fetch("/api/citizen/locations", {
         method: "POST",
@@ -199,7 +226,7 @@ export default function NationalSentinelPage() {
     } catch (err) {
       console.error("SOS dispatch error:", err);
     }
-  }, [selectedZone]);
+  }, [selectedZone, soundEnabled]);
 
   const [isAddButtonModalOpen, setIsAddButtonModalOpen] = useState(false);
   const [customButtons, setCustomButtons] = useState<CustomActionButton[]>([]);
@@ -228,49 +255,6 @@ export default function NationalSentinelPage() {
       showToast(btn.value);
     }
   };
-
-  const fabActions: FabAction[] = [
-    {
-      id: "regional-alert",
-      label: "Broadcast Alert to App",
-      icon: <Radio className="w-3.5 h-3.5" />,
-      onClick: () => setIsRegionalModalOpen(true),
-      tone: "danger",
-      title: "Broadcast alert notification to citizen devices",
-    },
-    {
-      id: "test-alert",
-      label: "Test Alert Sound",
-      icon: <Zap className="w-3.5 h-3.5" />,
-      onClick: handleTriggerSOS,
-      tone: "amber",
-      title: "Simulate test alert sound",
-    },
-    {
-      id: "connect-device",
-      label: "Connect Mobile Phone",
-      icon: <Smartphone className="w-3.5 h-3.5" />,
-      onClick: () => setIsMobileModalOpen(true),
-      tone: "dark",
-      title: "Connect field mobile node",
-    },
-    ...customButtons.map((btn) => ({
-      id: btn.id,
-      label: btn.label,
-      icon: getCustomIcon(btn.iconName),
-      onClick: () => handleExecuteCustomButton(btn),
-      tone: customColorToTone(btn.color),
-      title: `${btn.actionType}: ${btn.value}`,
-    })),
-    {
-      id: "add-button",
-      label: "Add Button",
-      icon: <Plus className="w-3.5 h-3.5" />,
-      onClick: () => setIsAddButtonModalOpen(true),
-      tone: "default",
-      title: "Add custom action button",
-    },
-  ];
 
   const runNationalScan = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
@@ -443,6 +427,104 @@ export default function NationalSentinelPage() {
     }
   }, [displayedRisk, selectedZone, autoDispatchEnabled]);
 
+  const handleToggleMobileSiren = useCallback(() => {
+    if (sirenState.isDispatchedToMobile) {
+      autonomousAlertEngine.haltMobileSiren(selectedZone.id);
+      showToast("Mobile siren halted across danger zone devices.");
+    } else {
+      autonomousAlertEngine.dispatchMobileSiren(
+        selectedZone.id,
+        selectedZone.name,
+        displayedRisk,
+        selectedZone.center
+      );
+      showToast(
+        `Emergency siren transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`
+      );
+    }
+  }, [sirenState.isDispatchedToMobile, sirenState.targetDevicesCount, selectedZone, displayedRisk]);
+
+  const fabActions: FabAction[] = [
+    {
+      id: "zone-broadcast",
+      label: "Zone Broadcast",
+      icon: <Radio className="w-3.5 h-3.5" />,
+      onClick: () => setIsRegionalModalOpen(true),
+      tone: "danger",
+      title: "Broadcast alert notification to citizen devices",
+    },
+    {
+      id: "safe-shelters",
+      label: "Safe Shelters",
+      icon: <Compass className="w-3.5 h-3.5" />,
+      onClick: () => setIsGuidelineModalOpen(true),
+      tone: "default",
+      title: "View verified safe evacuation routes & shelters",
+    },
+    {
+      id: "mobile-apks",
+      label: "Mobile APKs",
+      icon: <Smartphone className="w-3.5 h-3.5" />,
+      onClick: () => setIsMobileModalOpen(true),
+      tone: "default",
+      badge: connectedMobileCount > 0 ? connectedMobileCount : undefined,
+      title: "Connect & manage field mobile nodes",
+    },
+    {
+      id: "use-my-location",
+      label: "Use My Location",
+      icon: <Navigation className="w-3.5 h-3.5" />,
+      onClick: detectLiveLocation,
+      tone: "default",
+      title: "Detect live GPS & meteorological location",
+    },
+    {
+      id: "toggle-sound",
+      label: soundEnabled === false ? "Alert Sound: Off" : "Alert Sound: On",
+      icon:
+        soundEnabled === false ? (
+          <VolumeX className="w-3.5 h-3.5" />
+        ) : (
+          <Volume2 className="w-3.5 h-3.5" />
+        ),
+      onClick: handleToggleSound,
+      tone: "default",
+      title: soundEnabled ? "Mute alert audio" : "Enable alert audio",
+    },
+    {
+      id: "mobile-siren",
+      label: sirenState.isDispatchedToMobile ? "Mobile Siren Active" : "Mobile Siren Standby",
+      icon: <BellRing className="w-3.5 h-3.5" />,
+      onClick: handleToggleMobileSiren,
+      tone: sirenState.isDispatchedToMobile ? "danger" : "dark",
+      title: sirenState.isDispatchedToMobile ? "Siren Active on Citizen APKs" : "Arm Mobile Siren Dispatch",
+    },
+    {
+      id: "simulate-sos",
+      label: "Test Alert Sound",
+      icon: <Zap className="w-3.5 h-3.5" />,
+      onClick: handleTriggerSOS,
+      tone: "amber",
+      title: "Simulate test alert sound & SOS beacon",
+    },
+    ...customButtons.map((btn) => ({
+      id: btn.id,
+      label: btn.label,
+      icon: getCustomIcon(btn.iconName),
+      onClick: () => handleExecuteCustomButton(btn),
+      tone: customColorToTone(btn.color),
+      title: `${btn.actionType}: ${btn.value}`,
+    })),
+    {
+      id: "add-button",
+      label: "Add Button",
+      icon: <Plus className="w-3.5 h-3.5" />,
+      onClick: () => setIsAddButtonModalOpen(true),
+      tone: "default",
+      title: "Add custom action button",
+    },
+  ];
+
   const isSirenBroadcasting = sirenState.isDispatchedToMobile;
   const isSirenHalted = sirenState.isManuallyHalted;
 
@@ -494,22 +576,11 @@ export default function NationalSentinelPage() {
           onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
           onDetectLiveLocation={detectLiveLocation}
           floodRiskPercent={displayedRisk}
+          soundEnabled={soundEnabled}
+          onToggleSound={handleToggleSound}
           isMobileSirenActive={sirenState.isDispatchedToMobile}
           connectedMobileCount={connectedMobileCount}
-          onToggleMobileSiren={() => {
-            if (sirenState.isDispatchedToMobile) {
-              autonomousAlertEngine.haltMobileSiren(selectedZone.id);
-              showToast("Mobile siren halted across danger zone devices.");
-            } else {
-              autonomousAlertEngine.dispatchMobileSiren(
-                selectedZone.id,
-                selectedZone.name,
-                displayedRisk,
-                selectedZone.center
-              );
-              showToast(`Emergency siren transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`);
-            }
-          }}
+          onToggleMobileSiren={handleToggleMobileSiren}
         />
 
         {/* GOVERNMENT EMERGENCY MOBILE SIREN DISPATCH CONSOLE

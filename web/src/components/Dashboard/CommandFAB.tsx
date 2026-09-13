@@ -74,7 +74,7 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
     >
       {/* Expanded action list */}
       <div
-        className={`flex flex-col items-end gap-2 transition-all duration-200 ease-out motion-reduce:transition-none ${
+        className={`flex flex-col items-end gap-2 max-h-[calc(100vh-100px)] overflow-y-auto py-1 pr-1 transition-all duration-200 ease-out motion-reduce:transition-none scrollbar-thin ${
           open
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 translate-y-2 pointer-events-none"
