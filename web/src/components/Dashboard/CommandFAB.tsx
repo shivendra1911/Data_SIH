@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import {
+  Plus,
+  X,
+  Phone,
+  AlertTriangle,
+  Radio,
+  Megaphone,
+  Shield,
+  Zap,
+  ExternalLink,
+} from "lucide-react";
 
 export interface FabAction {
   id: string;
@@ -11,6 +21,42 @@ export interface FabAction {
   tone?: "default" | "danger" | "success" | "dark" | "amber" | "blue";
   badge?: string | number;
   title?: string;
+}
+
+export function getCustomIcon(name: string) {
+  switch (name) {
+    case "Phone":
+      return <Phone className="w-3.5 h-3.5" />;
+    case "AlertTriangle":
+      return <AlertTriangle className="w-3.5 h-3.5" />;
+    case "Radio":
+      return <Radio className="w-3.5 h-3.5" />;
+    case "Megaphone":
+      return <Megaphone className="w-3.5 h-3.5" />;
+    case "Shield":
+      return <Shield className="w-3.5 h-3.5" />;
+    case "Zap":
+      return <Zap className="w-3.5 h-3.5" />;
+    case "ExternalLink":
+    default:
+      return <ExternalLink className="w-3.5 h-3.5" />;
+  }
+}
+
+export function customColorToTone(color: string): FabAction["tone"] {
+  switch (color) {
+    case "red":
+      return "danger";
+    case "emerald":
+      return "success";
+    case "blue":
+      return "blue";
+    case "amber":
+      return "amber";
+    case "slate":
+    default:
+      return "dark";
+  }
 }
 
 interface CommandFABProps {

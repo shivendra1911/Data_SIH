@@ -35,7 +35,25 @@ import {
   Footprints,
   PhoneCall,
   Volume2,
+  VolumeX,
+  Radio,
+  Smartphone,
+  Navigation,
+  BellRing,
+  Zap,
+  Plus,
+  CheckCircle2,
 } from "lucide-react";
+import CommandFAB, {
+  FabAction,
+  getCustomIcon,
+  customColorToTone,
+} from "@/components/Dashboard/CommandFAB";
+import AddButtonModal, {
+  CustomActionButton,
+  getStoredCustomButtons,
+} from "@/components/Dashboard/AddButtonModal";
+import { autonomousAlertEngine, MobileSirenState } from "@/lib/autonomousAlertEngine";
 
 // Dynamically import Leaflet MapWrapper to prevent SSR window issues
 const MapWrapper = dynamic(() => import("@/components/Map/MapWrapper"), {
@@ -186,6 +204,98 @@ export default function TacticalRadarPage() {
     setMapZoom(14);
   };
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  const [sirenState, setSirenState] = useState<MobileSirenState>(autonomousAlertEngine.getState());
+  useEffect(() => {
+    const unsub = autonomousAlertEngine.subscribe((state) => {
+      setSirenState(state);
+    });
+    return () => unsub();
+  }, []);
+
+  const [isAddButtonModalOpen, setIsAddButtonModalOpen] = useState(false);
+  const [customButtons, setCustomButtons] = useState<CustomActionButton[]>([]);
+
+  useEffect(() => {
+    setCustomButtons(getStoredCustomButtons());
+    const handleButtonsChanged = () => {
+      setCustomButtons(getStoredCustomButtons());
+    };
+    window.addEventListener("custom_action_buttons_changed", handleButtonsChanged);
+    return () => {
+      window.removeEventListener("custom_action_buttons_changed", handleButtonsChanged);
+    };
+  }, []);
+
+  const handleExecuteCustomButton = (btn: CustomActionButton) => {
+    if (btn.actionType === "LINK") {
+      let url = btn.value.trim();
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://" + url;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else if (btn.actionType === "CALL") {
+      window.location.href = `tel:${btn.value.replace(/[^0-9+]/g, "")}`;
+    } else if (btn.actionType === "ALERT") {
+      showToast(btn.value);
+    }
+  };
+
+  const handleToggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      showToast(next ? "🔊 Alert Audio: Enabled" : "🔇 Alert Audio: Muted");
+      return next;
+    });
+  }, []);
+
+  const handleToggleMobileSiren = useCallback(() => {
+    if (sirenState.isDispatchedToMobile) {
+      autonomousAlertEngine.haltMobileSiren(selectedZone.id);
+      showToast("Mobile siren halted across danger zone devices.");
+    } else {
+      autonomousAlertEngine.dispatchMobileSiren(
+        selectedZone.id,
+        selectedZone.name,
+        selectedZone.currentRisk,
+        selectedZone.center
+      );
+      showToast(
+        `Emergency siren transmitted to ${sirenState.targetDevicesCount.toLocaleString()} mobile devices.`
+      );
+    }
+  }, [sirenState.isDispatchedToMobile, sirenState.targetDevicesCount, selectedZone]);
+
+  const handleTriggerSOS = useCallback(async () => {
+    if (soundEnabled) playAlertSound();
+    try {
+      const res = await fetch("/api/citizen/sos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Emergency Citizen SOS (${selectedZone.name.split("(")[0].trim()})`,
+          phone: "+91 98765 43210",
+          lat: selectedZone.center[0],
+          lng: selectedZone.center[1],
+          zone_id: selectedZone.id,
+          status: "SOS",
+          medical_distress: "HIGH_WATER_EVACUATION",
+          sos_type: "CITIZEN 1-TAP DISTRESS BEACON",
+        }),
+      });
+      if (res.ok) {
+        showToast("🚨 Emergency SOS signal registered! Rescue teams and NDRF hotline 1078 dispatched.");
+      }
+    } catch (err) {
+      console.error("SOS dispatch error:", err);
+    }
+  }, [selectedZone, soundEnabled, playAlertSound]);
+
   const detectLiveLocation = useCallback(async () => {
     try {
       const res = await fetch("/api/geolocation");
@@ -214,12 +324,109 @@ export default function TacticalRadarPage() {
           };
           setSelectedZone(userZone);
           setMapCenter([data.lat, data.lng]);
+          setMapZoom(14);
+          showToast(`📍 Live Location Active: ${locName}`);
         }
       }
     } catch (e) {
       console.warn("Radar geolocation error:", e);
     }
+
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setMapCenter([lat, lng]);
+          setMapZoom(15);
+          showToast(`📍 Centered Map on GPS: ${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E`);
+        },
+        () => {},
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    }
   }, []);
+
+  const fabActions: FabAction[] = [
+    {
+      id: "zone-broadcast",
+      label: "Zone Broadcast",
+      icon: <Radio className="w-3.5 h-3.5" />,
+      onClick: () => setIsRegionalModalOpen(true),
+      tone: "danger",
+      title: "Broadcast alert notification to citizen devices",
+    },
+    {
+      id: "safe-shelters",
+      label: "Safe Shelters",
+      icon: <Compass className="w-3.5 h-3.5" />,
+      onClick: () => setIsGuidelineModalOpen(true),
+      tone: "default",
+      title: "View verified safe evacuation routes & shelters",
+    },
+    {
+      id: "mobile-apks",
+      label: "Mobile APKs",
+      icon: <Smartphone className="w-3.5 h-3.5" />,
+      onClick: () => setIsMobileModalOpen(true),
+      tone: "default",
+      badge: citizens.length > 0 ? citizens.length : undefined,
+      title: "Connect & manage field mobile nodes",
+    },
+    {
+      id: "use-my-location",
+      label: "Use My Location",
+      icon: <Navigation className="w-3.5 h-3.5" />,
+      onClick: detectLiveLocation,
+      tone: "default",
+      title: "Detect live GPS & meteorological location",
+    },
+    {
+      id: "toggle-sound",
+      label: soundEnabled === false ? "Alert Sound: Off" : "Alert Sound: On",
+      icon:
+        soundEnabled === false ? (
+          <VolumeX className="w-3.5 h-3.5" />
+        ) : (
+          <Volume2 className="w-3.5 h-3.5" />
+        ),
+      onClick: handleToggleSound,
+      tone: "default",
+      title: soundEnabled ? "Mute alert audio" : "Enable alert audio",
+    },
+    {
+      id: "mobile-siren",
+      label: sirenState.isDispatchedToMobile ? "Mobile Siren Active" : "Mobile Siren Standby",
+      icon: <BellRing className="w-3.5 h-3.5" />,
+      onClick: handleToggleMobileSiren,
+      tone: sirenState.isDispatchedToMobile ? "danger" : "dark",
+      title: sirenState.isDispatchedToMobile ? "Siren Active on Citizen APKs" : "Arm Mobile Siren Dispatch",
+    },
+    {
+      id: "simulate-sos",
+      label: "Test Alert Sound",
+      icon: <Zap className="w-3.5 h-3.5" />,
+      onClick: handleTriggerSOS,
+      tone: "amber",
+      title: "Simulate test alert sound & SOS beacon",
+    },
+    ...customButtons.map((btn) => ({
+      id: btn.id,
+      label: btn.label,
+      icon: getCustomIcon(btn.iconName),
+      onClick: () => handleExecuteCustomButton(btn),
+      tone: customColorToTone(btn.color),
+      title: `${btn.actionType}: ${btn.value}`,
+    })),
+    {
+      id: "add-button",
+      label: "Add Button",
+      icon: <Plus className="w-3.5 h-3.5" />,
+      onClick: () => setIsAddButtonModalOpen(true),
+      tone: "default",
+      title: "Add a custom quick action button (Call, Link, or Alert)",
+    },
+  ];
 
   return (
     <div className="relative min-h-screen flex flex-col text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
@@ -237,20 +444,28 @@ export default function TacticalRadarPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#161a20]/70 via-[#161a20]/35 to-[#161a20]/75 pointer-events-none" />
       </div>
 
+      {/* Floating System Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-6 z-[70] bg-[#0f172a]/95 text-white border border-slate-700 shadow-2xl rounded-2xl px-5 py-3.5 flex items-center gap-3 backdrop-blur-xl animate-fade-in font-sans">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
+        </div>
+      )}
+
       <div className="relative z-10 min-h-screen flex flex-col bg-transparent">
         <Header
           selectedZone={selectedZone}
           onSelectZone={handleSelectZone}
-          onSimulateSOS={() => {
-            if (soundEnabled) playAlertSound();
-          }}
+          onSimulateSOS={handleTriggerSOS}
           onOpenMobileModal={() => setIsMobileModalOpen(true)}
           onOpenRegionalBroadcast={() => setIsRegionalModalOpen(true)}
           onOpenSafeRoutesGuidelines={() => setIsGuidelineModalOpen(true)}
           onDetectLiveLocation={detectLiveLocation}
           floodRiskPercent={selectedZone.currentRisk}
           soundEnabled={soundEnabled}
-          onToggleSound={() => setSoundEnabled((p) => !p)}
+          onToggleSound={handleToggleSound}
+          isMobileSirenActive={sirenState.isDispatchedToMobile}
+          onToggleMobileSiren={handleToggleMobileSiren}
           connectedMobileCount={citizens.length}
         />
 
@@ -483,6 +698,18 @@ export default function TacticalRadarPage() {
         safeRoutes={activeSafeRoutes}
         onBroadcastGuidelines={() => {
           if (soundEnabled) playAlertSound();
+        }}
+      />
+
+      {/* Floating Command Menu '+' at Bottom-Right */}
+      <CommandFAB actions={fabActions} menuLabel="Command Actions" />
+
+      {/* Add Custom Button Modal */}
+      <AddButtonModal
+        isOpen={isAddButtonModalOpen}
+        onClose={() => setIsAddButtonModalOpen(false)}
+        onButtonAdded={() => {
+          setCustomButtons(getStoredCustomButtons());
         }}
       />
     </div>
