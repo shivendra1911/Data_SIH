@@ -238,7 +238,6 @@ public class NeerNetraNativeMeshManager {
         try {
             byte[] data = android.util.Base64.decode(base64Data.trim(), android.util.Base64.NO_WRAP);
             int notified = 0;
-            List<BluetoothDevice> deadDevices = new ArrayList<>();
 
             synchronized (connectedCentrals) {
                 for (BluetoothDevice device : connectedCentrals) {
@@ -255,18 +254,9 @@ public class NeerNetraNativeMeshManager {
 
                         if (sent) {
                             notified++;
-                        } else {
-                            deadDevices.add(device);
                         }
                     } catch (Throwable t) {
-                        deadDevices.add(device);
-                    }
-                }
-
-                if (!deadDevices.isEmpty()) {
-                    connectedCentrals.removeAll(deadDevices);
-                    for (BluetoothDevice dead : deadDevices) {
-                        deviceMtus.remove(dead.getAddress());
+                        Log.w(TAG, "Notification write error to " + device.getAddress() + ": " + t.getMessage());
                     }
                 }
             }
@@ -378,6 +368,27 @@ public class NeerNetraNativeMeshManager {
             if (responseNeeded) {
                 gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null);
             }
+        }
+
+        @Override
+        public void onDescriptorWriteRequest(BluetoothDevice device, int requestId,
+                BluetoothGattDescriptor descriptor, boolean preparedWrite,
+                boolean responseNeeded, int offset, byte[] value) {
+            Log.i(TAG, "onDescriptorWriteRequest from " + device.getAddress() + " uuid=" + descriptor.getUuid());
+            if (CLIENT_CONFIG_UUID.equals(descriptor.getUuid())) {
+                descriptor.setValue(value);
+                Log.i(TAG, "Client subscribed to CCCD notifications: " + device.getAddress());
+            }
+            if (responseNeeded) {
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value);
+            }
+        }
+
+        @Override
+        public void onDescriptorReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattDescriptor descriptor) {
+            byte[] val = descriptor.getValue();
+            if (val == null) val = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE;
+            gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, val);
         }
 
         @Override
@@ -522,8 +533,8 @@ public class NeerNetraNativeMeshManager {
                     b
                 );
             }
-            // ── Incoming Offline Chat Message (t: 1) ──
-            else if (decodedJson.contains("\"t\":1") || decodedJson.contains("\"t\": 1")) {
+            // ── Incoming Offline Chat Message (t: 2 = CHAT) ──
+            else if (decodedJson.contains("\"t\":2") || decodedJson.contains("\"t\": 2")) {
                 String senderName = "Nearby Citizen";
                 String chatText = "New mesh message";
                 try {

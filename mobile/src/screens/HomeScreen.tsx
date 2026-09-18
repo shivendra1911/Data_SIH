@@ -364,16 +364,18 @@ export const HomeScreen: React.FC = () => {
     setIncomingCaller(null);
   };
 
-  const handleDeclineIncomingCall = async () => {
+  const handleDeclineIncomingCall = () => {
     if (!incomingCaller) return;
-    await (meshEngine as any).declineCall(incomingCaller.id);
+    const callerId = incomingCaller.id;
     setIncomingCaller(null);
+    (meshEngine as any).declineCall(callerId).catch(() => {});
   };
 
-  const handleEndActiveCall = async () => {
+  const handleEndActiveCall = () => {
     if (activeCallPeer) {
-      await (meshEngine as any).endCall(activeCallPeer.id);
+      const peerId = activeCallPeer.id;
       setActiveCallPeer(null);
+      (meshEngine as any).endCall(peerId).catch(() => {});
     }
   };
 

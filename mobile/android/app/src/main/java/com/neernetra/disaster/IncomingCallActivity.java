@@ -440,6 +440,11 @@ public class IncomingCallActivity extends Activity {
 
     private void dismissCall() {
         stopRinging();
+        NeerNetraMeshService.stopEmergencyAlarm();
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NeerNetraMeshService.EMERGENCY_NOTIFICATION_ID);
+        } catch (Exception ignored) {}
         finish();
     }
 

@@ -74,9 +74,9 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
 
   const handleStartWalkieTalkie = async (peer: MeshPeer) => {
     if (isCalling && activePeerName === peer.name) {
-      await meshEngine.endCall(peer.id);
       setIsCalling(false);
       setActivePeerName(null);
+      meshEngine.endCall(peer.id).catch(() => {});
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);

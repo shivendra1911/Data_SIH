@@ -442,6 +442,16 @@ class NeerNetraBLEMesh {
           };
 
           this.activePeers.set(device.id, peer);
+          // Periodic cleanup: prune stale disconnected peers older than 60s
+          const nowMs = Date.now();
+          this.activePeers.forEach((p, id) => {
+            if (!this.connectedDevices.has(id) && !this.peripheralClients.has(id)) {
+              if (p.lastSeen && (nowMs - p.lastSeen.getTime() > 60000)) {
+                this.activePeers.delete(id);
+              }
+            }
+          });
+
           this.emitPeersUpdate();
 
           // Connect in background if not already connected and not currently in progress
@@ -460,11 +470,13 @@ class NeerNetraBLEMesh {
     // Refresh scan every 25 seconds
     if (this.scanTimer) clearInterval(this.scanTimer);
     this.scanTimer = setInterval(() => {
-      try {
-        this.manager?.stopDeviceScan();
-      } catch {}
-      this.isScanning = false;
-      setTimeout(() => this.startScanning(), 1500);
+      if (this.manager && this.isScanning) {
+        try {
+          this.manager.stopDeviceScan();
+          this.isScanning = false;
+        } catch {}
+        setTimeout(() => this.startScanning(), 1500);
+      }
     }, 25000);
   }
 
@@ -497,31 +509,26 @@ class NeerNetraBLEMesh {
       return;
     }
 
+    this.connectingDevices.add(devId);
+
     // Anti-collision jitter: prevent simultaneous connection collision (GATT 133)
     const jitter = ((devId.charCodeAt(devId.length - 1) || 0) % 4) * 350;
     if (jitter > 0) {
       await new Promise((r) => setTimeout(r, jitter));
     }
     if (this.connectedDevices.has(devId)) {
+      this.connectingDevices.delete(devId);
       return;
     }
-
-    this.connectingDevices.add(devId);
 
     try {
       console.log(`[BLE Mesh] Handshaking connection to ${devId}...`);
 
-      // Briefly pause scan to ensure rock-solid connection stability
-      try {
-        this.manager?.stopDeviceScan();
-        this.isScanning = false;
-      } catch {}
-
       let connected: Device;
       if (typeof deviceOrId === 'string') {
-        connected = await this.manager.connectToDevice(deviceOrId, { autoConnect: false, timeout: 8000 });
+        connected = await this.manager.connectToDevice(deviceOrId, { autoConnect: false, timeout: 6000 });
       } else {
-        connected = await deviceOrId.connect({ timeout: 8000 });
+        connected = await deviceOrId.connect({ timeout: 6000 });
       }
 
       // Request MTU 512 for large packet & audio throughput
@@ -543,26 +550,9 @@ class NeerNetraBLEMesh {
       );
 
       if (!neerNetraService) {
-        // Service not found yet — peer GATT server may still be starting.
-        // Retry once after a short delay before giving up.
-        console.log(`[BLE Mesh] NeerNetra service not found on ${devId}, retrying in 2s...`);
-        await new Promise((r) => setTimeout(r, 2000));
-        try {
-          const discovered2 = await connected.discoverAllServicesAndCharacteristics();
-          const services2 = await discovered2.services();
-          const service2 = services2.find(
-            (s: any) => s.uuid.toLowerCase().replace(/-/g, '') === targetUuid
-          );
-          if (!service2) {
-            console.log(`[BLE Mesh] Device ${devId} confirmed non-NeerNetra after retry — cancelling.`);
-            await connected.cancelConnection();
-            return;
-          }
-        } catch {
-          console.log(`[BLE Mesh] Device ${devId} retry discovery failed — keeping notify path.`);
-          // Don't cancel — peripheral→central notify still works even without Central→peripheral writes
-          this.connectedDevices.set(devId, connected);
-        }
+        console.log(`[BLE Mesh] Device ${devId} is not NeerNetra service — cancelling.`);
+        await connected.cancelConnection();
+        return;
       }
 
       this.connectedDevices.set(devId, connected);
@@ -593,21 +583,30 @@ class NeerNetraBLEMesh {
       connected.onDisconnected(() => {
         console.log(`[BLE Mesh] Peer disconnected: ${devId}`);
         this.connectedDevices.delete(devId);
-        // Keep in activePeers so notify path still works if they reconnect as Central
-        // Trigger re-scan to reconnect
-        setTimeout(() => {
-          if (!this.isScanning) this.startScanning();
-        }, 3000);
         this.emitPeersUpdate();
       });
 
     } catch (err: any) {
-      console.log(`[BLE Mesh] Connection to ${devId} notice:`, err?.message);
+      const errMsg = (err?.message || '').toLowerCase();
+      if (errMsg.includes('already connected')) {
+        console.log(`[BLE Mesh] Device ${devId} is already connected at OS level — adopting.`);
+        try {
+          const knownDevices = await this.manager.devices([devId]);
+          if (knownDevices && knownDevices.length > 0) {
+            const dev = knownDevices[0];
+            await dev.discoverAllServicesAndCharacteristics();
+            await this.subscribeToNotifications(dev);
+            this.connectedDevices.set(devId, dev);
+            console.log(`[BLE Mesh] ✅ Adopted connected device: ${devId}`);
+          }
+        } catch (adoptErr: any) {
+          console.warn('[BLE Mesh] Failed to adopt connected device:', adoptErr?.message);
+        }
+      } else {
+        console.log(`[BLE Mesh] Connection to ${devId} notice:`, err?.message);
+      }
     } finally {
       this.connectingDevices.delete(devId);
-      setTimeout(() => {
-        if (!this.isScanning) this.startScanning();
-      }, 1000);
     }
   }
 
@@ -652,11 +651,15 @@ class NeerNetraBLEMesh {
 
       if (rawLen <= maxAttr) {
         // Fits within single packet (zero slicing with MTU 512)
-        await device.writeCharacteristicWithoutResponseForService(
+        const writePromise = device.writeCharacteristicWithoutResponseForService(
           NEERNETRA_SERVICE_UUID,
           WRITE_CHAR_UUID,
           packet
         );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('BLE write timeout')), 1000)
+        );
+        await Promise.race([writePromise, timeoutPromise]);
       } else {
         // Exceeds safe MTU: slice into MTU-safe chunks
         const headerSize = 4;
@@ -671,11 +674,15 @@ class NeerNetraBLEMesh {
           const chunkBase64 = btoa(chunkRaw);
 
           try {
-            await device.writeCharacteristicWithoutResponseForService(
+            const chunkWritePromise = device.writeCharacteristicWithoutResponseForService(
               NEERNETRA_SERVICE_UUID,
               WRITE_CHAR_UUID,
               chunkBase64
             );
+            const chunkTimeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Chunk write timeout')), 600)
+            );
+            await Promise.race([chunkWritePromise, chunkTimeoutPromise]);
           } catch (writeErr) {
             try {
               await new Promise((r) => setTimeout(r, 32));
@@ -986,28 +993,13 @@ class NeerNetraBLEMesh {
 
       const isGroup = Boolean(data.isGroupCall || data.targetId === 'GROUP_CALL' || data.targetId === 'BROADCAST');
 
-      if (!isGroup) {
-        // Robust 1-to-1 targeting:
-        const isDirectIdMatch =
-          data.targetNodeId === this.myDeviceId ||
-          data.targetId === this.myDeviceId ||
-          (this.macToNodeId.get(data.targetId) === this.myDeviceId) ||
-          (this.peerNodeIdToMac.get(data.targetNodeId) === this.myDeviceId);
-
-        const isNameMatch = Boolean(
-          this.myName && data.targetName &&
-          (this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase() ||
-           data.targetName.toLowerCase().includes(this.myDeviceId.slice(-4).toLowerCase()) ||
-           (this.myName.includes('[') && data.targetName.includes(this.myName.split('[')[1]?.replace(']', ''))))
-        );
-
-        const isIntendedRecipient = isDirectIdMatch || isNameMatch || (
-          // Direct 1-hop link where the target is not another known device in our mesh
-          ttl >= 6 && (!data.targetId || !this.activePeers.has(data.targetId) || this.connectedDevices.has(senderId) || this.peripheralClients.has(senderId))
-        );
-
-        if (!isIntendedRecipient) {
-          console.log(`[BLE Mesh] 📞 Ignoring private 1-to-1 call from ${data.callerName || senderId} (intended for ${data.targetName || data.targetId})`);
+      // Only skip if this is an explicit 1-to-1 call directed to a third device that is NOT us
+      if (!isGroup && data.targetId && data.targetId !== 'GROUP_CALL' && data.targetId !== 'BROADCAST') {
+        const isForAnotherDevice = this.activePeers.has(data.targetId) &&
+                                   data.targetId !== this.myDeviceId &&
+                                   data.targetNodeId !== this.myDeviceId;
+        if (isForAnotherDevice) {
+          console.log(`[BLE Mesh] 📞 Ignoring private call for another peer: ${data.targetId}`);
           return;
         }
       }
