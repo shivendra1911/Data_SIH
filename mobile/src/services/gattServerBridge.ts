@@ -259,3 +259,12 @@ export const subscribeToEmergencyWakeUp = (
   return () => sub.remove();
 };
 
+export const showNativeChatNotification = async (senderName: string, messageText: string): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.showChatNotification) return false;
+  try {
+    return await NeerNetraGatt.showChatNotification(senderName, messageText);
+  } catch {
+    return false;
+  }
+};
+

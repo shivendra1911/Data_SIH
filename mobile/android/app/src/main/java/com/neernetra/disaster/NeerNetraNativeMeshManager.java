@@ -550,11 +550,21 @@ public class NeerNetraNativeMeshManager {
                 String chatText = "New mesh message";
                 try {
                     JSONObject jo = new JSONObject(decodedJson);
-                    if (jo.has("p")) {
-                        String pStr = jo.getString("p");
-                        JSONObject p = new JSONObject(pStr);
-                        if (p.has("senderName")) senderName = p.getString("senderName");
-                        if (p.has("text")) chatText = p.getString("text");
+                    JSONObject p = null;
+                    if (jo.optJSONObject("p") != null) {
+                        p = jo.optJSONObject("p");
+                    } else if (jo.has("p")) {
+                        try {
+                            p = new JSONObject(jo.getString("p"));
+                        } catch (Exception ignored) {}
+                    }
+                    if (p != null) {
+                        if (p.has("senderName") && !p.getString("senderName").isEmpty()) {
+                            senderName = p.getString("senderName");
+                        }
+                        if (p.has("text") && !p.getString("text").isEmpty()) {
+                            chatText = p.getString("text");
+                        }
                     }
                 } catch (Exception ignored) {}
 

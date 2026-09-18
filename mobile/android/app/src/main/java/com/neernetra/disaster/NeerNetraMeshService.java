@@ -363,8 +363,38 @@ public class NeerNetraMeshService extends Service {
      */
     public static void showChatNotification(Context context, String senderName, String messageText) {
         try {
+            // 1. Wake physical screen so the message is visible on the lock screen
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                @SuppressWarnings("deprecation")
+                PowerManager.WakeLock screenLock = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK |
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                    PowerManager.ON_AFTER_RELEASE,
+                    "NeerNetra:ChatWakeUpLock"
+                );
+                screenLock.acquire(4000); // 4 seconds to illuminate lock screen
+            }
+
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
+
+            // Ensure Notification Channel has IMPORTANCE_HIGH and VISIBILITY_PUBLIC on Android 8+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel chatChan = new NotificationChannel(
+                    CHANNEL_CHAT_ID,
+                    "NeerNetra Mesh Messages",
+                    NotificationManager.IMPORTANCE_HIGH
+                );
+                chatChan.setDescription("Incoming chat messages from nearby mesh citizens");
+                chatChan.enableLights(true);
+                chatChan.setLightColor(Color.CYAN);
+                chatChan.enableVibration(true);
+                chatChan.setVibrationPattern(new long[]{0, 250, 150, 250});
+                chatChan.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+                chatChan.setBypassDnd(true);
+                nm.createNotificationChannel(chatChan);
+            }
 
             Intent openAppIntent = new Intent(context, MainActivity.class);
             openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -383,20 +413,27 @@ public class NeerNetraMeshService extends Service {
 
             Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
+            String title = (senderName != null && !senderName.isEmpty()) ? senderName : "Nearby Citizen";
+            String text = (messageText != null && !messageText.isEmpty()) ? messageText : "New mesh message";
+
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_CHAT_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(senderName != null ? senderName : "Nearby Citizen")
-                .setContentText(messageText != null ? messageText : "New mesh message")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setAutoCancel(true)
                 .setSound(defaultSoundUri)
+                .setDefaults(Notification.DEFAULT_ALL)
                 .setVibrate(new long[]{0, 250, 150, 250})
+                .setColor(Color.parseColor("#0EA5E9"))
                 .setContentIntent(pendingIntent);
 
-            nm.notify(CHAT_NOTIFICATION_ID, builder.build());
-            Log.i(TAG, "💬 Showed offline chat notification for: " + senderName);
+            int notiId = CHAT_NOTIFICATION_ID + (senderName != null ? Math.abs(senderName.hashCode() % 100) : 1);
+            nm.notify(notiId, builder.build());
+            Log.i(TAG, "💬 Showed lock-screen chat notification for: " + senderName + " (" + text + ")");
         } catch (Exception e) {
             Log.w(TAG, "showChatNotification error: " + e.getMessage());
         }

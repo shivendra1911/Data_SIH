@@ -177,6 +177,17 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         }
     }
 
+    @ReactMethod
+    public void showChatNotification(String senderName, String messageText, Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            NeerNetraMeshService.showChatNotification(ctx, senderName, messageText);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
     @Override
     public String getName() {
         return "NeerNetraGatt";

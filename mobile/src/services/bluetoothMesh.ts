@@ -23,6 +23,7 @@ import {
   wakeUpScreenAndShowCall,
   triggerNativeSosAlert,
   dismissIncomingCall,
+  showNativeChatNotification,
 } from './gattServerBridge';
 import { startBLEAdvertising } from './bleAdvertiser';
 
@@ -984,6 +985,9 @@ class NeerNetraBLEMesh {
 
       // Play audio chime on receiving mesh chat message
       playPttTone('incoming').catch(() => {});
+
+      // Trigger lock-screen wake & high-priority banner notification
+      showNativeChatNotification(msg.senderName, msg.text).catch(() => {});
 
       if (this.onMessageReceived) this.onMessageReceived(msg);
       console.log(`[BLE Mesh] 💬 CHAT received from ${msg.senderName}: "${msg.text}" (hop ${msg.hopCount})`);
