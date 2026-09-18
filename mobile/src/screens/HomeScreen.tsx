@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -13,6 +13,7 @@ import { MeshStatusBadge } from '../components/MeshStatusBadge';
 import { RedZoneAlertOverlay } from '../components/RedZoneAlertOverlay';
 import { SafeConfirmationCountdown } from '../components/SafeConfirmationCountdown';
 import { ActiveCallHUD } from '../components/ActiveCallHUD';
+import { IncomingCallModal } from '../components/IncomingCallModal';
 import { TopPillNav, CitizenTab } from '../components/TopPillNav';
 import {
   ZonePrediction,
@@ -44,6 +45,11 @@ import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
 import { getCurrentDeviceLocation } from '../services/locationService';
 import { bleEngine, meshEngine } from '../services/bluetoothMesh';
 import { mobileSirenListener, MobileSirenEvent } from '../services/mobileSirenListener';
+import {
+  getPendingEmergencyIntent,
+  clearPendingEmergencyIntent,
+  subscribeToEmergencyWakeUp,
+} from '../services/gattServerBridge';
 
 const Tab = createBottomTabNavigator();
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
@@ -86,6 +92,14 @@ export const HomeScreen: React.FC = () => {
     name: string;
     distance?: number;
     hopCount?: number;
+    isGroupCall?: boolean;
+  } | null>(null);
+  const [incomingCaller, setIncomingCaller] = useState<{
+    id: string;
+    name: string;
+    distance?: number;
+    hopCount?: number;
+    isGroupCall?: boolean;
   } | null>(null);
 
   const isUserInDangerZone = Boolean(
@@ -131,8 +145,27 @@ export const HomeScreen: React.FC = () => {
       }
     });
 
+    // Emergency Wake-Up listener (Handles incoming calls & SOS alerts when phone is woken up or locked)
+    const handleWakeIntent = (data: any) => {
+      if (!data) return;
+      console.log('[HomeScreen] 🚨 Processed emergency wake-up intent from lock screen:', data);
+      if (data.emergency_type === 'CALL_REQ' || data.emergency_type === 'GROUP_CALL' || data.caller_name) {
+        setIncomingCaller({
+          id: data.caller_id || 'remote_node',
+          name: data.caller_name || 'Emergency Node',
+          hopCount: 1,
+          isGroupCall: Boolean(data.is_group_call || data.emergency_type === 'GROUP_CALL'),
+        });
+      }
+      clearPendingEmergencyIntent();
+    };
+
+    getPendingEmergencyIntent().then(handleWakeIntent);
+    const unsubscribeWake = subscribeToEmergencyWakeUp(handleWakeIntent);
+
     return () => {
       mobileSirenListener.stop();
+      unsubscribeWake();
     };
   }, []);
 
@@ -171,13 +204,25 @@ export const HomeScreen: React.FC = () => {
         setPeers([...initialPeers]);
         setPeerCount(initialPeers.length);
 
-        (bleEngine as any).onCallReceived = (callerId: string, callerName: string) => {
-          setActiveCallPeer({ id: callerId, name: callerName, hopCount: 1 });
+        (meshEngine as any).onIncomingCall = (caller: any) => {
+          console.log('[HomeScreen] 📞 Received incoming call:', caller);
+          setIncomingCaller(caller);
         };
-        (bleEngine as any).onCallEnded = () => {
+        (meshEngine as any).onCallAnswered = (peerId: string, peerName?: string) => {
+          console.log('[HomeScreen] 📞 Call answered by:', peerId);
+          setActiveCallPeer({ id: peerId, name: peerName || `Citizen [${peerId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`, hopCount: 1 });
+        };
+        (meshEngine as any).onCallDeclined = (peerId: string) => {
+          console.log('[HomeScreen] 📞 Call declined by:', peerId);
           setActiveCallPeer(null);
+          Alert.alert('Call Declined', 'The peer declined or is unavailable.');
         };
-        (bleEngine as any).onStateChange = (state: string) => {
+        (meshEngine as any).onCallEnded = (peerId: string) => {
+          console.log('[HomeScreen] 📞 Call ended with:', peerId);
+          setActiveCallPeer(null);
+          setIncomingCaller(null);
+        };
+        (meshEngine as any).onStateChange = (state: string) => {
           if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
         };
       }
@@ -290,9 +335,22 @@ export const HomeScreen: React.FC = () => {
     await checkOfflineQueue();
   };
 
-  const handleEndActiveCall = () => {
+  const handleAcceptIncomingCall = async () => {
+    if (!incomingCaller) return;
+    await (meshEngine as any).acceptCall(incomingCaller.id);
+    setActiveCallPeer(incomingCaller);
+    setIncomingCaller(null);
+  };
+
+  const handleDeclineIncomingCall = async () => {
+    if (!incomingCaller) return;
+    await (meshEngine as any).declineCall(incomingCaller.id);
+    setIncomingCaller(null);
+  };
+
+  const handleEndActiveCall = async () => {
     if (activeCallPeer) {
-      (bleEngine as any).endCall(activeCallPeer.id);
+      await (meshEngine as any).endCall(activeCallPeer.id);
       setActiveCallPeer(null);
     }
   };
@@ -359,6 +417,13 @@ export const HomeScreen: React.FC = () => {
         />
       )}
 
+      <IncomingCallModal
+        visible={Boolean(incomingCaller)}
+        caller={incomingCaller}
+        onAccept={handleAcceptIncomingCall}
+        onDecline={handleDeclineIncomingCall}
+      />
+
       {remainingCountdown !== null && remainingCountdown > 0 && (
         <SafeConfirmationCountdown
           remainingSeconds={remainingCountdown}
@@ -399,8 +464,17 @@ export const HomeScreen: React.FC = () => {
             peers={peers}
             networkMode={networkMode}
             onInitiateCall={(peer: any) => {
-              (bleEngine as any).initiateCall(peer.id);
+              (meshEngine as any).initiateCall(peer.id, peer.name);
               setActiveCallPeer(peer);
+            }}
+            onInitiateGroupCall={() => {
+              (meshEngine as any).initiateGroupCall();
+              setActiveCallPeer({
+                id: 'GROUP_CALL',
+                name: '🚨 ALL EMERGENCY NODES (GROUP CALL)',
+                hopCount: 1,
+                isGroupCall: true,
+              });
             }}
             onBack={() => setCurrentTab('status')}
           />

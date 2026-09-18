@@ -112,7 +112,7 @@ export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
             <Text style={styles.emptyText}>
               {filter === 'SOS'
                 ? 'No SOS signals detected nearby.'
-                : 'Scanning for nearby Bluetooth mesh peers...'}
+                : 'Scanning for nearby Bluetooth mesh citizens...'}
             </Text>
           </View>
         ) : (
@@ -159,7 +159,7 @@ export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
                         await meshEngine.initiateCall(peer.id, peer.name);
                         Alert.alert(
                           '📡 BLE Intercom Calling...',
-                          `Sending offline mesh call request to ${peer.name} (zero internet/cellular needed).\n\nWaiting for peer to accept on their device...`,
+                          `Sending offline mesh call request to ${peer.name} (zero internet/cellular needed).\n\nWaiting for ${peer.name} to accept on their device...`,
                           [
                             {
                               text: 'Cancel',

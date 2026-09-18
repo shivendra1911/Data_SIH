@@ -59,6 +59,10 @@ export interface MeshPeer {
   status?: SOSStatus;
   distanceMeters?: number;
   inVoiceCall?: boolean;
+  lastSeen?: Date | string;
+  batteryLevel?: number;
+  nodeId?: string;
+  isGroupCall?: boolean;
 }
 
 export interface MeshChatMessage {
@@ -69,6 +73,7 @@ export interface MeshChatMessage {
   timestamp: string;
   isMeshRelayed: boolean;
   hopCount: number;
+  timestampMs?: number;
 }
 
 export interface CitizenBeaconItem {

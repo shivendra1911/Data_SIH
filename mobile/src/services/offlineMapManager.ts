@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getNearestSafeRoute, SafeRouteResponse } from './api';
 
@@ -7,16 +7,20 @@ const OFFLINE_MAPS_READY_KEY = '@neernetra_offline_maps_ready_v1';
 const OFFLINE_MAP_METADATA_KEY = '@neernetra_offline_map_meta_v1';
 
 export const getMapCacheDir = (): string => {
-  const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+  const fs = FileSystem as any;
+  const baseDir = fs.documentDirectory || fs.cacheDirectory || (fs.Paths?.cache?.uri) || '';
   return baseDir + 'map_tiles/';
 };
 
 export const initMapCache = async (): Promise<string> => {
   const cacheDir = getMapCacheDir();
+  const fs = FileSystem as any;
   try {
-    const dirInfo = await FileSystem.getInfoAsync(cacheDir);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+    if (fs.getInfoAsync) {
+      const dirInfo = await fs.getInfoAsync(cacheDir);
+      if (!dirInfo.exists && fs.makeDirectoryAsync) {
+        await fs.makeDirectoryAsync(cacheDir, { intermediates: true });
+      }
     }
   } catch (err) {
     console.warn('[OfflineMapManager] Cache dir init error:', err);

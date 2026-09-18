@@ -35,6 +35,7 @@ interface MeshScreenProps {
   isDisasterConfirmed?: boolean;
   networkMode?: any;
   onInitiateCall?: (peer: any) => void;
+  onInitiateGroupCall?: () => void;
   onBack?: () => void;
 }
 
@@ -51,11 +52,18 @@ const maskPhone = (phone?: string) => {
 const BLEMessageModal: React.FC<{
   visible: boolean;
   peers: MeshPeer[];
+  initialPeer?: MeshPeer | null;
   onClose: () => void;
-}> = ({ visible, peers, onClose }) => {
-  const [selectedPeer, setSelectedPeer] = useState<MeshPeer | null>(null);
+}> = ({ visible, peers, initialPeer, onClose }) => {
+  const [selectedPeer, setSelectedPeer] = useState<MeshPeer | null>(initialPeer || null);
   const [message, setMessage] = useState('');
   const [sectorCitizens, setSectorCitizens] = useState<NearbyCitizen[]>([]);
+
+  useEffect(() => {
+    if (initialPeer) {
+      setSelectedPeer(initialPeer);
+    }
+  }, [initialPeer, visible]);
 
   useEffect(() => {
     fetchNearbyCitizens().then((list) => {
@@ -63,21 +71,7 @@ const BLEMessageModal: React.FC<{
     });
   }, [visible]);
 
-  const displayPeers: (MeshPeer & { phone?: string })[] =
-    peers.length > 0
-      ? peers
-      : sectorCitizens.map((c) => ({
-          id: c.id,
-          name: c.name,
-          status: (c.status === 'SOS' ? 'SOS' : 'SAFE') as any,
-          distanceMeters: c.distance_meters,
-          signalStrength: -62,
-          hopCount: 1,
-          relayedPacketsCount: 0,
-          lastSeen: new Date(),
-          batteryLevel: c.battery_level,
-          phone: c.phone,
-        }));
+  const displayPeers: (MeshPeer & { phone?: string })[] = peers;
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -217,8 +211,10 @@ const BLECallModal: React.FC<{
   visible: boolean;
   peers: MeshPeer[];
   isDisasterConfirmed?: boolean;
+  onInitiateCall?: (peer: any) => void;
+  onInitiateGroupCall?: () => void;
   onClose: () => void;
-}> = ({ visible, peers, isDisasterConfirmed = false, onClose }) => {
+}> = ({ visible, peers, isDisasterConfirmed = false, onInitiateCall, onInitiateGroupCall, onClose }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [mode, setMode] = useState<'ble' | 'phone'>('ble');
   const [callingPeer, setCallingPeer] = useState<MeshPeer | null>(null);
@@ -230,39 +226,15 @@ const BLECallModal: React.FC<{
     });
   }, [visible]);
 
-  const displayPeers: (MeshPeer & { phone?: string })[] =
-    peers.length > 0
-      ? peers
-      : sectorCitizens.map((c) => ({
-          id: c.id,
-          name: c.name,
-          status: (c.status === 'SOS' ? 'SOS' : 'SAFE') as any,
-          distanceMeters: c.distance_meters,
-          signalStrength: -62,
-          hopCount: 1,
-          relayedPacketsCount: 0,
-          lastSeen: new Date(),
-          batteryLevel: c.battery_level,
-          phone: c.phone,
-        }));
+  const displayPeers: (MeshPeer & { phone?: string })[] = peers;
 
   const handleBLECall = async (peer: MeshPeer) => {
-    setCallingPeer(peer);
-    await meshEngine.initiateCall(peer.id, peer.name);
-    Alert.alert(
-      '📡 Calling Over Mesh Intercom...',
-      `Sending BLE call request to ${peer.name} (zero internet/cellular needed).\n\nWaiting for peer to accept on their device...`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => {
-            meshEngine.endCall(peer.id);
-            setCallingPeer(null);
-          },
-        },
-      ]
-    );
+    onClose();
+    if (onInitiateCall) {
+      onInitiateCall(peer);
+    } else {
+      await meshEngine.initiateCall(peer.id, peer.name);
+    }
   };
 
   const handlePhoneCall = (targetNum?: string, isCitizen: boolean = false) => {
@@ -331,8 +303,42 @@ const BLECallModal: React.FC<{
               {/* BLE Peer List */}
               {mode === 'ble' && (
                 <>
+                  {/* Group Emergency Call Action */}
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#450a0a',
+                      borderWidth: 1.5,
+                      borderColor: '#ef4444',
+                      borderRadius: 14,
+                      padding: 12,
+                      marginBottom: 12,
+                      gap: 12,
+                    }}
+                    onPress={() => {
+                      onClose();
+                      if (onInitiateGroupCall) onInitiateGroupCall();
+                      else meshEngine.initiateGroupCall();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' }}>
+                      <Radio size={16} color="#ffffff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '800' }}>
+                        🚨 CALL ALL NEARBY NODES (GROUP)
+                      </Text>
+                      <Text style={{ color: '#fecaca', fontSize: 11 }}>
+                        Emergency broadcast ring to all {displayPeers.length} connected devices
+                      </Text>
+                    </View>
+                    <PhoneCall size={16} color="#ef4444" />
+                  </TouchableOpacity>
+
                   <Text style={modalStyles.sectionLabel}>
-                    Sector Citizens via BLE Mesh ({displayPeers.length} available):
+                    Or Call Single Peer (1-to-1 Intercom):
                   </Text>
                   {displayPeers.length === 0 ? (
                     <View style={modalStyles.emptyBox}>
@@ -463,34 +469,34 @@ const BLECallModal: React.FC<{
 // ─────────────────────────────────────────────
 // Main MeshScreen
 // ─────────────────────────────────────────────
-export const MeshScreen: React.FC<MeshScreenProps> = ({ peers: initialPeers, isDisasterConfirmed = false }) => {
+export const MeshScreen: React.FC<MeshScreenProps> = ({
+  peers: initialPeers,
+  isDisasterConfirmed = false,
+  onInitiateCall,
+  onInitiateGroupCall,
+}) => {
   const [localPeers, setLocalPeers] = useState<MeshPeer[]>(initialPeers || []);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [selectedMessagePeer, setSelectedMessagePeer] = useState<MeshPeer | null>(null);
 
   useEffect(() => {
-    if (initialPeers && initialPeers.length > 0) {
-      setLocalPeers(initialPeers);
-    } else {
-      setLocalPeers(meshEngine.getConnectedPeers());
-    }
-
-    const prevOnPeersChanged = meshEngine.onPeersChanged;
-    meshEngine.onPeersChanged = (newPeers) => {
-      setLocalPeers([...newPeers]);
-      if (prevOnPeersChanged) prevOnPeersChanged(newPeers);
-    };
+    const unsub = (meshEngine as any).subscribePeers
+      ? (meshEngine as any).subscribePeers((newPeers: MeshPeer[]) => {
+          setLocalPeers([...newPeers]);
+        })
+      : undefined;
 
     // Auto-trigger fresh scan on entering screen
     meshEngine.triggerManualScan().catch(() => {});
 
     return () => {
-      meshEngine.onPeersChanged = prevOnPeersChanged;
+      if (unsub) unsub();
     };
-  }, [initialPeers]);
+  }, []);
 
-  const livePeers = localPeers.length > 0 ? localPeers : meshEngine.getConnectedPeers();
+  const livePeers = localPeers;
 
   const handleManualScan = async () => {
     setIsScanning(true);
@@ -519,19 +525,33 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers: initialPeers, isD
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Clean Neutral Action Row (Inspiration Styling) */}
+        {/* Clean Neutral Action Row with Explicit Group Call */}
         <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#dc2626' }]}
+            onPress={() => {
+              if (onInitiateGroupCall) onInitiateGroupCall();
+              else meshEngine.initiateGroupCall();
+            }}
+            activeOpacity={0.84}
+          >
+            <Radio size={16} color="#ffffff" strokeWidth={2.2} />
+            <Text style={[styles.actionText, { color: '#ffffff', fontWeight: '800' }]}>🚨 Group Call</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnPrimary]}
             onPress={() => setShowCallModal(true)}
             activeOpacity={0.84}
           >
             <PhoneCall size={16} color="#ffffff" strokeWidth={2.2} />
-            <Text style={[styles.actionText, { color: '#ffffff' }]}>BLE Call</Text>
+            <Text style={[styles.actionText, { color: '#ffffff' }]}>1-to-1 Call</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => setShowMessageModal(true)}
+            onPress={() => {
+              setSelectedMessagePeer(null);
+              setShowMessageModal(true);
+            }}
             activeOpacity={0.84}
           >
             <MessageCircle size={16} color="#1C1F24" strokeWidth={2} />
@@ -547,8 +567,38 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers: initialPeers, isD
           </TouchableOpacity>
         </View>
 
-        <BluetoothWalkieTalkie peers={livePeers} />
-        <NearbyVictimsHelpCard isDisasterConfirmed={isDisasterConfirmed} />
+        <BluetoothWalkieTalkie
+          peers={livePeers}
+          onCallPeer={(peer) => {
+            if (onInitiateCall) onInitiateCall(peer);
+            else {
+              meshEngine.initiateCall(peer.id, peer.name);
+            }
+          }}
+          onGroupEmergencyCall={() => {
+            if (onInitiateGroupCall) onInitiateGroupCall();
+            else {
+              meshEngine.initiateGroupCall();
+            }
+          }}
+          onOpenChatWithPeer={(peer) => {
+            setSelectedMessagePeer(peer);
+            setShowMessageModal(true);
+          }}
+        />
+        <NearbyVictimsHelpCard
+          isDisasterConfirmed={isDisasterConfirmed}
+          onCallVictim={(peer) => {
+            if (onInitiateCall) onInitiateCall(peer);
+            else {
+              meshEngine.initiateCall(peer.id, peer.name);
+            }
+          }}
+          onMessageVictim={(peer) => {
+            setSelectedMessagePeer(peer);
+            setShowMessageModal(true);
+          }}
+        />
         <MeshRelayFeed peers={livePeers} />
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -557,12 +607,18 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({ peers: initialPeers, isD
       <BLEMessageModal
         visible={showMessageModal}
         peers={livePeers}
-        onClose={() => setShowMessageModal(false)}
+        initialPeer={selectedMessagePeer}
+        onClose={() => {
+          setShowMessageModal(false);
+          setSelectedMessagePeer(null);
+        }}
       />
       <BLECallModal
         visible={showCallModal}
         peers={livePeers}
         isDisasterConfirmed={isDisasterConfirmed}
+        onInitiateCall={onInitiateCall}
+        onInitiateGroupCall={onInitiateGroupCall}
         onClose={() => setShowCallModal(false)}
       />
     </>

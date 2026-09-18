@@ -29,6 +29,7 @@ import {
   fetchNearbyCitizens,
   NearbyCitizen,
 } from '../services/api';
+import { LEAFLET_JS, LEAFLET_CSS } from '../services/leafletBundle';
 
 interface MapScreenProps {
   lastLocation: LocationSyncPayload | null;
@@ -305,8 +306,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    ${LEAFLET_CSS}
+  </style>
+  <script>
+    ${LEAFLET_JS}
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; background: #0f172a; overflow: hidden; }
@@ -473,7 +478,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       attribution: 'NeerNetra Tactical Offline Navigation'
     });
 
-    var currentTileLayer = googleStreetLayer;
+    var currentTileLayer = ${isOffline ? 'offlineTileLayer' : 'googleStreetLayer'};
     currentTileLayer.addTo(map);
 
     window.switchLayer = function(layerName) {

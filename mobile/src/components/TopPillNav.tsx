@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { ShieldCheck, Wifi, Radio, AlertTriangle, ChevronDown, ChevronLeft } from 'lucide-react-native';
+import { ShieldCheck, Wifi, Radio, AlertTriangle, ChevronDown, ChevronLeft, User, Menu } from 'lucide-react-native';
 
 export type CitizenTab = 'status' | 'mesh' | 'map' | 'directives';
 
@@ -10,6 +10,8 @@ interface TopPillNavProps {
   networkMode: 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
   topInset?: number;
   phoneModel?: string;
+  onOpenSidebar?: () => void;
+  userName?: string;
 }
 
 const MODE_COLOR: Record<string, string> = {
@@ -30,6 +32,8 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
   networkMode,
   topInset = 0,
   phoneModel,
+  onOpenSidebar,
+  userName,
 }) => {
   const dotColor = MODE_COLOR[networkMode] || '#10b981';
   const modeLabel = MODE_LABEL[networkMode] || '4G Live';
@@ -39,9 +43,11 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
 
   const isHome = activeTab === 'status';
 
+  const userInitial = userName && userName.trim().length > 0 ? userName.trim().charAt(0).toUpperCase() : 'C';
+
   // Dynamic header title & subtitle depending on active tab
   let screenTitle = 'NeerNetra';
-  let screenSubtitle = phoneModel ? `${phoneModel}: Bharthia, UP` : 'Sector: Bharthia, UP';
+  let screenSubtitle = userName && !userName.startsWith('Citizen [') ? `Profile: ${userName}` : (phoneModel ? `${phoneModel}: Bharthia, UP` : 'Sector: Bharthia, UP');
 
   if (activeTab === 'map') {
     screenTitle = 'Offline GIS Map';
@@ -58,24 +64,24 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
     <View style={[styles.container, { paddingTop: Math.max(topInset, 12) + 4 }]}>
       {/* Left Circle Icon Action Buttons */}
       <View style={styles.leftGroup}>
-        {!isHome ? (
+        {/* Profile / Menu Drawer Trigger */}
+        <TouchableOpacity
+          style={[styles.circleBtn, styles.profileBtn]}
+          onPress={onOpenSidebar}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarMiniBadge}>
+            <Text style={styles.avatarMiniText}>{userInitial}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {!isHome && (
           <TouchableOpacity
             style={styles.circleBtn}
             onPress={() => onTabChange?.('status')}
             activeOpacity={0.7}
           >
             <ChevronLeft size={22} color="#1C1F24" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.circleBtn}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={require('../../assets/logo_emblem.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
           </TouchableOpacity>
         )}
 
@@ -87,6 +93,7 @@ export const TopPillNav: React.FC<TopPillNavProps> = ({
           <Radio size={18} color={activeTab === 'mesh' ? '#059669' : '#475569'} />
         </TouchableOpacity>
       </View>
+
 
       {/* Center Branding & Sector Location */}
       <View style={styles.centerBlock}>
@@ -192,5 +199,23 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+  profileBtn: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  avatarMiniBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarMiniText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
 });
+
 

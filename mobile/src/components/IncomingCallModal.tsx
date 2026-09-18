@@ -1,4 +1,4 @@
-﻿import React, { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   Modal,
   View,
@@ -16,6 +16,7 @@ interface IncomingCallModalProps {
     name: string;
     distance?: number;
     hopCount?: number;
+    isGroupCall?: boolean;
   } | null;
   onAccept: () => void;
   onDecline: () => void;
@@ -27,6 +28,8 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   onAccept,
   onDecline,
 }) => {
+  const isGroup = Boolean(caller?.isGroupCall || caller?.name?.includes('GROUP') || caller?.id === 'GROUP_CALL');
+
   useEffect(() => {
     if (visible) {
       Vibration.vibrate([0, 600, 400, 600], true);
@@ -48,23 +51,25 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
       onRequestClose={onDecline}
     >
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, isGroup && { borderColor: '#ef4444' }]}>
           {/* Top Pill */}
-          <View style={styles.headerPill}>
-            <Radio size={14} color="#10b981" />
-            <Text style={styles.headerPillText}>BLE MESH INTERCOM CALL</Text>
+          <View style={[styles.headerPill, isGroup && { backgroundColor: '#450a0a', borderColor: '#ef4444' }]}>
+            <Radio size={14} color={isGroup ? "#ef4444" : "#10b981"} />
+            <Text style={[styles.headerPillText, isGroup && { color: '#fca5a5' }]}>
+              {isGroup ? '🚨 GROUP EMERGENCY CALL' : 'BLE MESH INTERCOM CALL'}
+            </Text>
           </View>
 
           {/* Avatar / Pulse circle */}
           <View style={styles.avatarContainer}>
-            <View style={styles.pulseRing} />
-            <View style={styles.avatarInner}>
+            <View style={[styles.pulseRing, isGroup && { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.2)' }]} />
+            <View style={[styles.avatarInner, isGroup && { backgroundColor: '#dc2626' }]}>
               <Phone size={32} color="#ffffff" />
             </View>
           </View>
 
           {/* Caller Details */}
-          <Text style={styles.callerName}>{caller.name}</Text>
+          <Text style={[styles.callerName, isGroup && { color: '#fca5a5' }]}>{caller.name}</Text>
           <Text style={styles.callerMeta}>
             {caller.distance ? `~${caller.distance}m away` : 'Nearby peer node'}
             {' • '}
