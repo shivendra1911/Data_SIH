@@ -434,14 +434,45 @@ public class NeerNetraNativeMeshManager {
     private void checkAndTriggerWhatsAppCallOrAlert(String deviceAddress, byte[] data) {
         if (data == null || data.length < 5) return;
         try {
-            String raw = new String(data, StandardCharsets.UTF_8);
+            // The incoming bytes ARE the Base64-encoded JSON packet envelope.
+            // We must decode Base64 first to get the actual JSON {"t":7, "p":"...", ...}
+            String decodedJson = null;
+            try {
+                String rawUtf8 = new String(data, StandardCharsets.UTF_8).trim();
+                // Try Base64 decode first (the primary path — packets are always Base64-wrapped)
+                byte[] jsonBytes = android.util.Base64.decode(rawUtf8, android.util.Base64.NO_WRAP);
+                decodedJson = new String(jsonBytes, StandardCharsets.UTF_8);
+            } catch (Exception ignored) {
+                // If Base64 decode fails, try treating raw bytes as plain JSON (fallback)
+                decodedJson = new String(data, StandardCharsets.UTF_8);
+            }
+
+            if (decodedJson == null) return;
+
+            // ── Call End / Decline → dismiss IncomingCallActivity immediately ──
+            if (decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
+                decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9")) {
+                Log.i(TAG, "📴 Remote CALL_END/DECLINE received — dismissing IncomingCallActivity immediately");
+                // Broadcast a local intent to dismiss IncomingCallActivity if it's visible
+                Intent dismissIntent = new Intent("com.neernetra.DISMISS_INCOMING_CALL");
+                appContext.sendBroadcast(dismissIntent);
+                // Also cancel the emergency notification
+                try {
+                    android.app.NotificationManager nm =
+                        (android.app.NotificationManager) appContext.getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (nm != null) nm.cancel(NeerNetraMeshService.EMERGENCY_NOTIFICATION_ID);
+                } catch (Exception ignored) {}
+                return;
+            }
 
             // ── Incoming Call Packet (t: 7) ──
-            if (raw.contains("\"t\":7") || raw.contains("\"t\": 7")) {
+            if (decodedJson.contains("\"t\":7") || decodedJson.contains("\"t\": 7")) {
                 String callerName = "Nearby Citizen";
-                boolean isGroup = raw.contains("GROUP_CALL") || raw.contains("\"isGroupCall\":true") || raw.contains("\"isGroupCall\": true");
+                boolean isGroup = decodedJson.contains("GROUP_CALL") ||
+                                  decodedJson.contains("\"isGroupCall\":true") ||
+                                  decodedJson.contains("\"isGroupCall\": true");
                 try {
-                    JSONObject jo = new JSONObject(raw);
+                    JSONObject jo = new JSONObject(decodedJson);
                     if (jo.has("p")) {
                         String pStr = jo.getString("p");
                         JSONObject p = new JSONObject(pStr);
@@ -464,7 +495,7 @@ public class NeerNetraNativeMeshManager {
                 );
             }
             // ── Emergency SOS Distress Packet (t: 3) ──
-            else if (raw.contains("\"t\":3") || raw.contains("\"t\": 3")) {
+            else if (decodedJson.contains("\"t\":3") || decodedJson.contains("\"t\": 3")) {
                 Bundle b = new Bundle();
                 b.putString("caller_id", deviceAddress);
                 NeerNetraMeshService.wakeScreenAndShowNotification(

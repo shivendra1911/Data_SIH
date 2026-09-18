@@ -2,8 +2,10 @@ package com.neernetra.disaster;
 
 import android.app.Activity;
 import android.app.KeyguardManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -41,11 +43,14 @@ import android.widget.TextView;
 public class IncomingCallActivity extends Activity {
 
     private static final String TAG = "NeerNetraIncomingCall";
+    public static final String ACTION_DISMISS_INCOMING_CALL = "com.neernetra.DISMISS_INCOMING_CALL";
+
 
     private MediaPlayer ringtonePlayer;
     private Vibrator vibrator;
     private Handler autoTimeoutHandler;
     private Runnable autoTimeoutRunnable;
+    private BroadcastReceiver dismissReceiver;
 
     private String callerName = "Nearby Citizen";
     private String callerId = "";
@@ -69,6 +74,21 @@ public class IncomingCallActivity extends Activity {
             isGroupCall = intent.getBooleanExtra("is_group_call", false);
             emergencyType = intent.getStringExtra("emergency_type");
             if (emergencyType == null) emergencyType = isGroupCall ? "GROUP_CALL" : "CALL_REQ";
+        }
+
+        // Register remote dismiss receiver — fires when caller hangs up (CALL_END/CALL_DECLINE)
+        dismissReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                Log.i(TAG, "📴 Remote dismiss broadcast received — closing incoming call screen immediately");
+                dismissCall();
+            }
+        };
+        IntentFilter filter = new IntentFilter(ACTION_DISMISS_INCOMING_CALL);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(dismissReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(dismissReceiver, filter);
         }
 
         View callView = buildCallInterface();
@@ -426,6 +446,12 @@ public class IncomingCallActivity extends Activity {
     @Override
     protected void onDestroy() {
         stopRinging();
+        if (dismissReceiver != null) {
+            try {
+                unregisterReceiver(dismissReceiver);
+            } catch (Exception ignored) {}
+            dismissReceiver = null;
+        }
         super.onDestroy();
     }
 

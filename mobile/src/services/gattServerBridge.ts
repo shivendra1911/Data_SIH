@@ -179,6 +179,19 @@ export const stopMeshForegroundService = async (): Promise<boolean> => {
 };
 
 /**
+ * Immediately dismiss the IncomingCallActivity on this device.
+ * Call when ending or declining a call to avoid the 20-second hang-up delay.
+ */
+export const dismissIncomingCall = async (): Promise<boolean> => {
+  if (!NeerNetraGatt?.dismissIncomingCall) return false;
+  try {
+    return await NeerNetraGatt.dismissIncomingCall();
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Screen Wake-Up & Full-Screen Intent Invocation
  */
 export const wakeUpScreenAndShowCall = async (

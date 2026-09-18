@@ -152,6 +152,31 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         }
     }
 
+    /**
+     * Immediately dismiss the IncomingCallActivity on THIS device.
+     * Called when the user ends a call from the active call HUD, so the incoming
+     * screen on the remote side is closed with zero delay.
+     */
+    @ReactMethod
+    public void dismissIncomingCall(Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            android.content.Intent dismissIntent = new android.content.Intent(
+                IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL
+            );
+            ctx.sendBroadcast(dismissIntent);
+            // Also silence any alarm that's playing
+            NeerNetraMeshService.stopEmergencyAlarm();
+            // Cancel emergency notification
+            android.app.NotificationManager nm =
+                (android.app.NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NeerNetraMeshService.EMERGENCY_NOTIFICATION_ID);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
     @Override
     public String getName() {
         return "NeerNetraGatt";

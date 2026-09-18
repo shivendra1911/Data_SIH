@@ -22,6 +22,7 @@ import {
   startMeshForegroundService,
   wakeUpScreenAndShowCall,
   triggerNativeSosAlert,
+  dismissIncomingCall,
 } from './gattServerBridge';
 import { startBLEAdvertising } from './bleAdvertiser';
 
@@ -339,9 +340,28 @@ class NeerNetraBLEMesh {
             this.activePeers.set(clientAddress, peer);
             this.emitPeersUpdate();
           }
-          // Bi-directional Central connection: connect back as Central so both sides have a direct write channel
-          if (!this.connectedDevices.has(clientAddress) && !this.connectingDevices.has(clientAddress)) {
-            this.connectToPeer(clientAddress).catch(() => {});
+
+          // Immediately send a HELLO via GATT notify so the peer knows we exist
+          // even if their Central→us connection failed or is still pending.
+          setTimeout(() => {
+            const helloPayload = JSON.stringify({ name: this.myName, id: this.myDeviceId, isAck: false });
+            const helloPkt = encodePacket(BLEMsgType.HELLO, this.myDeviceId, helloPayload, 1);
+            notifyAllCentrals(helloPkt).catch(() => {});
+            console.log(`[BLE Mesh] Sent HELLO-notify to newly connected Central: ${clientAddress}`);
+          }, 500);
+
+          // Bidirectional: Connect back as Central ONLY if we haven't already AND
+          // our MAC is "lower" (prevents both sides connecting simultaneously → GATT 133).
+          // Lower MAC connects as Central; higher MAC stays as Peripheral only.
+          const myMac = this.myDeviceId;
+          const shouldWeConnect = !this.connectedDevices.has(clientAddress) &&
+                                  !this.connectingDevices.has(clientAddress) &&
+                                  myMac.toLowerCase() < clientAddress.toLowerCase();
+          if (shouldWeConnect) {
+            // Small delay to let the peer finish their connection setup
+            setTimeout(() => {
+              this.connectToPeer(clientAddress).catch(() => {});
+            }, 1200);
           }
         },
         (clientAddress) => {
@@ -499,9 +519,9 @@ class NeerNetraBLEMesh {
 
       let connected: Device;
       if (typeof deviceOrId === 'string') {
-        connected = await this.manager.connectToDevice(deviceOrId, { autoConnect: false, timeout: 6000 });
+        connected = await this.manager.connectToDevice(deviceOrId, { autoConnect: false, timeout: 8000 });
       } else {
-        connected = await deviceOrId.connect({ timeout: 6000 });
+        connected = await deviceOrId.connect({ timeout: 8000 });
       }
 
       // Request MTU 512 for large packet & audio throughput
@@ -523,16 +543,34 @@ class NeerNetraBLEMesh {
       );
 
       if (!neerNetraService) {
-        console.log(`[BLE Mesh] Device ${devId} is not NeerNetra service — cancelling.`);
-        await connected.cancelConnection();
-        return;
+        // Service not found yet — peer GATT server may still be starting.
+        // Retry once after a short delay before giving up.
+        console.log(`[BLE Mesh] NeerNetra service not found on ${devId}, retrying in 2s...`);
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const discovered2 = await connected.discoverAllServicesAndCharacteristics();
+          const services2 = await discovered2.services();
+          const service2 = services2.find(
+            (s: any) => s.uuid.toLowerCase().replace(/-/g, '') === targetUuid
+          );
+          if (!service2) {
+            console.log(`[BLE Mesh] Device ${devId} confirmed non-NeerNetra after retry — cancelling.`);
+            await connected.cancelConnection();
+            return;
+          }
+        } catch {
+          console.log(`[BLE Mesh] Device ${devId} retry discovery failed — keeping notify path.`);
+          // Don't cancel — peripheral→central notify still works even without Central→peripheral writes
+          this.connectedDevices.set(devId, connected);
+        }
       }
 
       this.connectedDevices.set(devId, connected);
 
+      const existingPeer = this.activePeers.get(devId);
       const peer: MeshPeer = {
         id: devId,
-        name: connected.name || `Peer_${devId.substring(0, 6)}`,
+        name: existingPeer?.name || connected.name || `Peer_${devId.substring(0, 6)}`,
         signalStrength: connected.rssi || -70,
         relayedPacketsCount: 0,
         role: 'Citizen Node',
@@ -555,6 +593,11 @@ class NeerNetraBLEMesh {
       connected.onDisconnected(() => {
         console.log(`[BLE Mesh] Peer disconnected: ${devId}`);
         this.connectedDevices.delete(devId);
+        // Keep in activePeers so notify path still works if they reconnect as Central
+        // Trigger re-scan to reconnect
+        setTimeout(() => {
+          if (!this.isScanning) this.startScanning();
+        }, 3000);
         this.emitPeersUpdate();
       });
 
@@ -1219,6 +1262,8 @@ class NeerNetraBLEMesh {
       status: 'DECLINED',
       timestamp: Date.now(),
     });
+    // Dismiss the IncomingCallActivity immediately on THIS device (no BLE roundtrip needed)
+    dismissIncomingCall().catch(() => {});
     await this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 1);
   }
 
@@ -1231,6 +1276,8 @@ class NeerNetraBLEMesh {
       status: 'ENDED',
       timestamp: Date.now(),
     });
+    // Dismiss IncomingCallActivity on THIS device immediately (prevents 20s hang-up)
+    dismissIncomingCall().catch(() => {});
     await this.broadcastToAll(BLEMsgType.CALL_END, payload, 1);
   }
 
