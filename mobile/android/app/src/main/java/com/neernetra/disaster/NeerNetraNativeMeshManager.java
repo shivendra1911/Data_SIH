@@ -242,7 +242,7 @@ public class NeerNetraNativeMeshManager {
             synchronized (connectedCentrals) {
                 for (BluetoothDevice device : connectedCentrals) {
                     try {
-                        int devMtu = deviceMtus.containsKey(device.getAddress()) ? deviceMtus.get(device.getAddress()) : 512;
+                        int devMtu = deviceMtus.getOrDefault(device.getAddress(), 23);
                         int maxAttrLen = Math.max(20, Math.min(509, devMtu - 3));
 
                         boolean sent;
@@ -284,7 +284,8 @@ public class NeerNetraNativeMeshManager {
 
     private boolean sendSlicedNotification(BluetoothDevice device, byte[] data, int maxAttrLen) {
         int headerSize = 4;
-        int slicePayloadSize = Math.max(64, maxAttrLen - headerSize);
+        // Never exceed actual MTU: minimum payload is 16 bytes (16 + 4 header = 20 bytes <= MTU 23)
+        int slicePayloadSize = Math.max(16, maxAttrLen - headerSize);
         int totalSlices = (int) Math.ceil((double) data.length / slicePayloadSize);
         if (totalSlices > 255) totalSlices = 255;
 
@@ -309,7 +310,7 @@ public class NeerNetraNativeMeshManager {
             if (!sent) return false;
 
             if (i < totalSlices - 1) {
-                try { Thread.sleep(32); } catch (InterruptedException ignored) {}
+                try { Thread.sleep(24); } catch (InterruptedException ignored) {}
             }
         }
         return true;
@@ -323,7 +324,6 @@ public class NeerNetraNativeMeshManager {
         public void onConnectionStateChange(BluetoothDevice device, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d(TAG, "Central connected: " + device.getAddress());
-                deviceMtus.put(device.getAddress(), 512);
                 synchronized (connectedCentrals) {
                     if (!connectedCentrals.contains(device)) {
                         connectedCentrals.add(device);
@@ -342,7 +342,8 @@ public class NeerNetraNativeMeshManager {
 
         @Override
         public void onMtuChanged(BluetoothDevice device, int mtu) {
-            deviceMtus.put(device.getAddress(), Math.max(mtu, 512));
+            Log.i(TAG, "Central MTU negotiated with " + device.getAddress() + ": " + mtu);
+            deviceMtus.put(device.getAddress(), Math.max(mtu, 23));
         }
 
         @Override
@@ -486,12 +487,19 @@ public class NeerNetraNativeMeshManager {
                     }
                 } catch (Exception ignored) {}
             }
+            if (decodedJson.contains("%7B") || decodedJson.contains("%22")) {
+                try {
+                    decodedJson = java.net.URLDecoder.decode(decodedJson, "UTF-8");
+                } catch (Exception ignored) {}
+            }
 
             if (decodedJson == null || !decodedJson.startsWith("{")) return;
 
             // ── Call End / Decline → dismiss IncomingCallActivity immediately ──
-            if (decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
-                decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9")) {
+            boolean isCallEnd = decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
+                                decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9") ||
+                                decodedJson.contains("\"t\":\"10\"") || decodedJson.contains("\"t\":\"9\"");
+            if (isCallEnd) {
                 Log.i(TAG, "📴 Remote CALL_END/DECLINE received — dismissing IncomingCallActivity immediately");
                 Intent dismissIntent = new Intent(IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL);
                 appContext.sendBroadcast(dismissIntent);
@@ -505,7 +513,9 @@ public class NeerNetraNativeMeshManager {
             }
 
             // ── Incoming Call Packet (t: 7) ──
-            if (decodedJson.contains("\"t\":7") || decodedJson.contains("\"t\": 7")) {
+            boolean isCall = decodedJson.contains("\"t\":7") || decodedJson.contains("\"t\": 7") ||
+                             decodedJson.contains("\"t\":\"7\"") || decodedJson.contains("\"t\": \"7\"");
+            if (isCall) {
                 String callerName = "Nearby Citizen";
                 boolean isGroup = decodedJson.contains("GROUP_CALL") ||
                                   decodedJson.contains("\"isGroupCall\":true") ||
@@ -534,7 +544,8 @@ public class NeerNetraNativeMeshManager {
                 );
             }
             // ── Incoming Offline Chat Message (t: 2 = CHAT) ──
-            else if (decodedJson.contains("\"t\":2") || decodedJson.contains("\"t\": 2")) {
+            else if (decodedJson.contains("\"t\":2") || decodedJson.contains("\"t\": 2") ||
+                     decodedJson.contains("\"t\":\"2\"") || decodedJson.contains("\"t\": \"2\"")) {
                 String senderName = "Nearby Citizen";
                 String chatText = "New mesh message";
                 try {
@@ -551,7 +562,8 @@ public class NeerNetraNativeMeshManager {
                 NeerNetraMeshService.showChatNotification(appContext, senderName, chatText);
             }
             // ── Emergency SOS Distress Packet (t: 3) ──
-            else if (decodedJson.contains("\"t\":3") || decodedJson.contains("\"t\": 3")) {
+            else if (decodedJson.contains("\"t\":3") || decodedJson.contains("\"t\": 3") ||
+                     decodedJson.contains("\"t\":\"3\"") || decodedJson.contains("\"t\": \"3\"")) {
                 Bundle b = new Bundle();
                 b.putString("caller_id", deviceAddress);
                 NeerNetraMeshService.wakeScreenAndShowNotification(

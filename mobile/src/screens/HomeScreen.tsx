@@ -488,17 +488,17 @@ export const HomeScreen: React.FC = () => {
             peers={peers}
             networkMode={networkMode}
             onInitiateCall={(peer: any) => {
-              (meshEngine as any).initiateCall(peer.id, peer.name);
               setActiveCallPeer(peer);
+              (meshEngine as any).initiateCall(peer.id, peer.name).catch(() => {});
             }}
             onInitiateGroupCall={() => {
-              (meshEngine as any).initiateGroupCall();
               setActiveCallPeer({
                 id: 'GROUP_CALL',
                 name: '🚨 ALL EMERGENCY NODES (GROUP CALL)',
                 hopCount: 1,
                 isGroupCall: true,
               });
+              (meshEngine as any).initiateGroupCall().catch(() => {});
             }}
             onBack={() => setCurrentTab('status')}
           />

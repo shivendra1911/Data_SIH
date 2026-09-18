@@ -454,9 +454,29 @@ class NeerNetraBLEMesh {
 
           this.emitPeersUpdate();
 
-          // Connect in background if not already connected and not currently in progress
-          if (!this.connectedDevices.has(device.id) && !this.connectingDevices.has(device.id)) {
-            this.connectToPeer(device).catch(() => {});
+          // Connect in background if not already connected in either Central or Peripheral role
+          const isAlreadyConnected = this.connectedDevices.has(device.id) ||
+                                     this.connectingDevices.has(device.id) ||
+                                     this.peripheralClients.has(device.id);
+          if (!isAlreadyConnected) {
+            // Deterministic initiator tie-breaker:
+            // Device with smaller ID connects; device with larger ID waits for incoming connection
+            const myId = (this.myDeviceId || '').toLowerCase();
+            const peerId = (device.id || '').toLowerCase();
+            const shouldInitiate = myId < peerId;
+            if (shouldInitiate) {
+              this.connectToPeer(device).catch(() => {});
+            } else {
+              setTimeout(() => {
+                if (
+                  !this.connectedDevices.has(device.id) &&
+                  !this.connectingDevices.has(device.id) &&
+                  !this.peripheralClients.has(device.id)
+                ) {
+                  this.connectToPeer(device).catch(() => {});
+                }
+              }, 3000);
+            }
           }
         }
       );
@@ -504,7 +524,8 @@ class NeerNetraBLEMesh {
     const devId = typeof deviceOrId === 'string' ? deviceOrId : deviceOrId.id;
     if (
       this.connectingDevices.has(devId) ||
-      this.connectedDevices.has(devId)
+      this.connectedDevices.has(devId) ||
+      this.peripheralClients.has(devId)
     ) {
       return;
     }
@@ -516,7 +537,7 @@ class NeerNetraBLEMesh {
     if (jitter > 0) {
       await new Promise((r) => setTimeout(r, jitter));
     }
-    if (this.connectedDevices.has(devId)) {
+    if (this.connectedDevices.has(devId) || this.peripheralClients.has(devId)) {
       this.connectingDevices.delete(devId);
       return;
     }
@@ -555,16 +576,16 @@ class NeerNetraBLEMesh {
         return;
       }
 
-      this.connectedDevices.set(devId, connected);
+      this.connectedDevices.set(devId, discovered);
 
       const existingPeer = this.activePeers.get(devId);
       const peer: MeshPeer = {
         id: devId,
-        name: existingPeer?.name || connected.name || `Peer_${devId.substring(0, 6)}`,
-        signalStrength: connected.rssi || -70,
+        name: existingPeer?.name || discovered.name || `Peer_${devId.substring(0, 6)}`,
+        signalStrength: discovered.rssi || -70,
         relayedPacketsCount: 0,
         role: 'Citizen Node',
-        distanceMeters: this.rssiToDistance(connected.rssi || -70),
+        distanceMeters: this.rssiToDistance(discovered.rssi || -70),
         status: 'SAFE',
       };
 
@@ -572,15 +593,15 @@ class NeerNetraBLEMesh {
       this.emitPeersUpdate();
 
       // Subscribe to notify characteristic
-      await this.subscribeToNotifications(connected);
+      await this.subscribeToNotifications(discovered);
 
       // Send HELLO packet to announce ourselves
-      await this.sendToPeer(connected, BLEMsgType.HELLO, JSON.stringify({
+      await this.sendToPeer(discovered, BLEMsgType.HELLO, JSON.stringify({
         name: this.myName,
         id: this.myDeviceId,
       }));
 
-      connected.onDisconnected(() => {
+      discovered.onDisconnected(() => {
         console.log(`[BLE Mesh] Peer disconnected: ${devId}`);
         this.connectedDevices.delete(devId);
         this.emitPeersUpdate();
@@ -594,9 +615,9 @@ class NeerNetraBLEMesh {
           const knownDevices = await this.manager.devices([devId]);
           if (knownDevices && knownDevices.length > 0) {
             const dev = knownDevices[0];
-            await dev.discoverAllServicesAndCharacteristics();
-            await this.subscribeToNotifications(dev);
-            this.connectedDevices.set(devId, dev);
+            const discovered = await dev.discoverAllServicesAndCharacteristics();
+            await this.subscribeToNotifications(discovered);
+            this.connectedDevices.set(devId, discovered);
             console.log(`[BLE Mesh] ✅ Adopted connected device: ${devId}`);
           }
         } catch (adoptErr: any) {
@@ -627,7 +648,58 @@ class NeerNetraBLEMesh {
     }
   }
 
-  // ── Send a packet to a single connected peer (MTU-Safe Slicing) ───────────
+  // ── Sliced Write Fallback for unnegotiated MTU (Safe 20-byte chunks for MTU 23) ──
+  private async sendSlicedWriteToPeer(device: Device, rawBase64Packet: string): Promise<boolean> {
+    try {
+      let raw = '';
+      try {
+        raw = atob(cleanBase64(rawBase64Packet));
+      } catch {
+        raw = rawBase64Packet;
+      }
+      const rawLen = raw.length;
+      const headerSize = 4;
+      const sliceSize = 16; // 16 bytes payload + 4 bytes header = 20 bytes total chunk (guaranteed <= MTU 23)
+      const totalSlices = Math.ceil(rawLen / sliceSize);
+      const pktId = Math.floor(Math.random() * 255);
+
+      for (let i = 0; i < totalSlices; i++) {
+        const start = i * sliceSize;
+        const end = Math.min(start + sliceSize, rawLen);
+        const chunkRaw = String.fromCharCode(0x53, pktId, i, totalSlices) + raw.substring(start, end);
+        const chunkBase64 = btoa(chunkRaw);
+
+        try {
+          const chunkPromise = device.writeCharacteristicWithResponseForService(
+            NEERNETRA_SERVICE_UUID,
+            WRITE_CHAR_UUID,
+            chunkBase64
+          );
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Chunk write timeout')), 600)
+          );
+          await Promise.race([chunkPromise, timeoutPromise]);
+        } catch {
+          try {
+            await device.writeCharacteristicWithoutResponseForService(
+              NEERNETRA_SERVICE_UUID,
+              WRITE_CHAR_UUID,
+              chunkBase64
+            );
+          } catch {}
+        }
+
+        if (i < totalSlices - 1) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ── Send a packet to a single connected peer (Write With Response + Fallbacks) ───────────
   private async sendToPeer(
     device: Device,
     type: BLEMsgType,
@@ -635,72 +707,44 @@ class NeerNetraBLEMesh {
     ttl: number = 7,
     msgId?: string,
     originSenderId?: string
-  ) {
+  ): Promise<boolean> {
     try {
       const sender = originSenderId || this.myDeviceId;
       const packet = encodePacket(type, sender, payload, ttl, msgId);
-      let raw = '';
-      try {
-        raw = atob(cleanBase64(packet));
-      } catch {
-        raw = packet;
-      }
-      const rawLen = raw.length;
-      const deviceMtu = (device as any).mtu || 512;
-      const maxAttr = Math.max(20, Math.min(509, deviceMtu - 3));
 
-      if (rawLen <= maxAttr) {
-        // Fits within single packet (zero slicing with MTU 512)
-        const writePromise = device.writeCharacteristicWithoutResponseForService(
+      // Primary: Write with response (Android automatically handles Prepare/Execute Write for packets > MTU)
+      try {
+        const writePromise = device.writeCharacteristicWithResponseForService(
           NEERNETRA_SERVICE_UUID,
           WRITE_CHAR_UUID,
           packet
         );
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('BLE write timeout')), 1000)
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('WriteWithResponse timeout')), 1500)
         );
         await Promise.race([writePromise, timeoutPromise]);
-      } else {
-        // Exceeds safe MTU: slice into MTU-safe chunks
-        const headerSize = 4;
-        const sliceSize = Math.max(64, maxAttr - headerSize);
-        const totalSlices = Math.ceil(rawLen / sliceSize);
-        const pktId = Math.floor(Math.random() * 255);
-
-        for (let i = 0; i < totalSlices; i++) {
-          const start = i * sliceSize;
-          const end = Math.min(start + sliceSize, rawLen);
-          const chunkRaw = String.fromCharCode(0x53, pktId, i, totalSlices) + raw.substring(start, end);
-          const chunkBase64 = btoa(chunkRaw);
-
-          try {
-            const chunkWritePromise = device.writeCharacteristicWithoutResponseForService(
-              NEERNETRA_SERVICE_UUID,
-              WRITE_CHAR_UUID,
-              chunkBase64
-            );
-            const chunkTimeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Chunk write timeout')), 600)
-            );
-            await Promise.race([chunkWritePromise, chunkTimeoutPromise]);
-          } catch (writeErr) {
-            try {
-              await new Promise((r) => setTimeout(r, 32));
-              await device.writeCharacteristicWithoutResponseForService(
-                NEERNETRA_SERVICE_UUID,
-                WRITE_CHAR_UUID,
-                chunkBase64
-              );
-            } catch {}
-          }
-
-          if (i < totalSlices - 1) {
-            await new Promise((r) => setTimeout(r, 32));
-          }
+        return true;
+      } catch (respErr) {
+        // Fallback 1: Write without response
+        try {
+          const fallbackPromise = device.writeCharacteristicWithoutResponseForService(
+            NEERNETRA_SERVICE_UUID,
+            WRITE_CHAR_UUID,
+            packet
+          );
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('WriteWithoutResponse timeout')), 1000)
+          );
+          await Promise.race([fallbackPromise, timeoutPromise]);
+          return true;
+        } catch (noRespErr) {
+          // Fallback 2: 20-byte safe slicing
+          return await this.sendSlicedWriteToPeer(device, packet);
         }
       }
     } catch (err: any) {
-      console.warn('[BLE Mesh] Send failed:', err?.message);
+      console.warn('[BLE Mesh] sendToPeer failed:', err?.message);
+      return false;
     }
   }
 
@@ -719,12 +763,19 @@ class NeerNetraBLEMesh {
     this.seenMsgIds.add(mId);
 
     const packet = encodePacket(type, sender, payload, ttl, mId);
-    const promises = Array.from(this.connectedDevices.values()).map((d) =>
-      this.sendToPeer(d, type, payload, ttl, mId, sender)
-    );
-    // Notify centrals connected to our GATT Server (Peripheral -> Central)
+
+    // 1. Notify all Centrals connected to our GATT Server (Peripheral -> Central)
     notifyAllCentrals(packet).catch(() => {});
-    await Promise.allSettled(promises);
+
+    // 2. Write to all Peripherals we connected to as Central (Central -> Peripheral)
+    const writePromises = Array.from(this.connectedDevices.values()).map((d) =>
+      this.sendToPeer(d, type, payload, ttl, mId, sender).catch(() => false)
+    );
+
+    // Hard ceiling: max 1200ms total wait so calling functions NEVER hang
+    const allWrites = Promise.allSettled(writePromises);
+    const hardCeiling = new Promise((r) => setTimeout(r, 1200));
+    await Promise.race([allWrites, hardCeiling]);
   }
 
   // ── Handle an incoming BLE packet ──────────────────────────────────────────
@@ -995,10 +1046,14 @@ class NeerNetraBLEMesh {
 
       // Only skip if this is an explicit 1-to-1 call directed to a third device that is NOT us
       if (!isGroup && data.targetId && data.targetId !== 'GROUP_CALL' && data.targetId !== 'BROADCAST') {
-        const isForAnotherDevice = this.activePeers.has(data.targetId) &&
-                                   data.targetId !== this.myDeviceId &&
-                                   data.targetNodeId !== this.myDeviceId;
-        if (isForAnotherDevice) {
+        const isTargetedToMe =
+          data.targetId === this.myDeviceId ||
+          data.targetNodeId === this.myDeviceId ||
+          (this.myName && data.targetName && this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase()) ||
+          this.peripheralClients.has(senderId);
+
+        // Only ignore if we have multiple peers and targetId matches another distinct known peer
+        if (!isTargetedToMe && this.activePeers.size > 1 && this.activePeers.has(data.targetId)) {
           console.log(`[BLE Mesh] 📞 Ignoring private call for another peer: ${data.targetId}`);
           return;
         }
@@ -1258,7 +1313,7 @@ class NeerNetraBLEMesh {
       status: 'ACCEPTED',
       timestamp: Date.now(),
     });
-    await this.broadcastToAll(BLEMsgType.CALL_ACCEPT, payload, 1);
+    this.broadcastToAll(BLEMsgType.CALL_ACCEPT, payload, 1).catch(() => {});
   }
 
   /** Decline an incoming call */
@@ -1270,9 +1325,9 @@ class NeerNetraBLEMesh {
       status: 'DECLINED',
       timestamp: Date.now(),
     });
-    // Dismiss the IncomingCallActivity immediately on THIS device (no BLE roundtrip needed)
+    // Dismiss the IncomingCallActivity immediately on THIS device in 0ms
     dismissIncomingCall().catch(() => {});
-    await this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 1);
+    this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 1).catch(() => {});
   }
 
   /** Terminate an ongoing call */
@@ -1284,9 +1339,9 @@ class NeerNetraBLEMesh {
       status: 'ENDED',
       timestamp: Date.now(),
     });
-    // Dismiss IncomingCallActivity on THIS device immediately (prevents 20s hang-up)
+    // Dismiss IncomingCallActivity on THIS device immediately (0ms)
     dismissIncomingCall().catch(() => {});
-    await this.broadcastToAll(BLEMsgType.CALL_END, payload, 1);
+    this.broadcastToAll(BLEMsgType.CALL_END, payload, 1).catch(() => {});
   }
 
   /** Send real compressed microphone audio burst across BLE mesh */

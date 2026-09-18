@@ -72,7 +72,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
     }
   };
 
-  const handleStartWalkieTalkie = async (peer: MeshPeer) => {
+  const handleStartWalkieTalkie = (peer: MeshPeer) => {
     if (isCalling && activePeerName === peer.name) {
       setIsCalling(false);
       setActivePeerName(null);
@@ -80,7 +80,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
-      await meshEngine.initiateCall(peer.id, peer.name);
+      meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
       Alert.alert(
         '📡 Mesh Intercom Request Sent',
         `Calling ${peer.name} over Bluetooth P2P Direct Mesh.\n\nWaiting for peer to accept on their device screen.`
@@ -112,7 +112,11 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
           </Text>
           <TouchableOpacity
             style={styles.endCallBtn}
-            onPress={() => setIsCalling(false)}
+            onPress={() => {
+              setIsCalling(false);
+              setActivePeerName(null);
+              meshEngine.endCall('ALL').catch(() => {});
+            }}
             activeOpacity={0.7}
           >
             <MicOff size={16} color="#ef4444" />

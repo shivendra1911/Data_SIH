@@ -228,12 +228,12 @@ const BLECallModal: React.FC<{
 
   const displayPeers: (MeshPeer & { phone?: string })[] = peers;
 
-  const handleBLECall = async (peer: MeshPeer) => {
+  const handleBLECall = (peer: MeshPeer) => {
     onClose();
     if (onInitiateCall) {
       onInitiateCall(peer);
     } else {
-      await meshEngine.initiateCall(peer.id, peer.name);
+      meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
     }
   };
 
@@ -572,13 +572,13 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
           onCallPeer={(peer) => {
             if (onInitiateCall) onInitiateCall(peer);
             else {
-              meshEngine.initiateCall(peer.id, peer.name);
+              meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
             }
           }}
           onGroupEmergencyCall={() => {
             if (onInitiateGroupCall) onInitiateGroupCall();
             else {
-              meshEngine.initiateGroupCall();
+              meshEngine.initiateGroupCall().catch(() => {});
             }
           }}
           onOpenChatWithPeer={(peer) => {
@@ -591,7 +591,7 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
           onCallVictim={(peer) => {
             if (onInitiateCall) onInitiateCall(peer);
             else {
-              meshEngine.initiateCall(peer.id, peer.name);
+              meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
             }
           }}
           onMessageVictim={(peer) => {
