@@ -150,12 +150,25 @@ export const HomeScreen: React.FC = () => {
       if (!data) return;
       console.log('[HomeScreen] 🚨 Processed emergency wake-up intent from lock screen:', data);
       if (data.emergency_type === 'CALL_REQ' || data.emergency_type === 'GROUP_CALL' || data.caller_name) {
-        setIncomingCaller({
-          id: data.caller_id || 'remote_node',
-          name: data.caller_name || 'Emergency Node',
-          hopCount: 1,
-          isGroupCall: Boolean(data.is_group_call || data.emergency_type === 'GROUP_CALL'),
-        });
+        if (data.auto_answer) {
+          console.log('[HomeScreen] 📞 Auto-answering call accepted via WhatsApp-style incoming call screen!');
+          const caller = {
+            id: data.caller_id || 'remote_node',
+            name: data.caller_name || 'Emergency Node',
+            hopCount: 1,
+            isGroupCall: Boolean(data.is_group_call || data.emergency_type === 'GROUP_CALL'),
+          };
+          setActiveCallPeer(caller);
+          setIncomingCaller(null);
+          (meshEngine as any).acceptCall(data.caller_id || 'remote_node');
+        } else {
+          setIncomingCaller({
+            id: data.caller_id || 'remote_node',
+            name: data.caller_name || 'Emergency Node',
+            hopCount: 1,
+            isGroupCall: Boolean(data.is_group_call || data.emergency_type === 'GROUP_CALL'),
+          });
+        }
       }
       clearPendingEmergencyIntent();
     };

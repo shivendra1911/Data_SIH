@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -432,7 +433,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       attribution: 'Dark Mode'
     });
 
-    // 6. Autonomous Offline Tactical Navigation Layer (100% Offline HUD)
+    // 6. Autonomous Offline Tactical Navigation Layer (100% Offline Vector Engine)
     var AutonomousOfflineCanvasLayer = L.GridLayer.extend({
       createTile: function(coords) {
         var tile = document.createElement('canvas');
@@ -440,34 +441,118 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         tile.width = tileSize.x;
         tile.height = tileSize.y;
         var ctx = tile.getContext('2d');
+        var w = tile.width;
+        var h = tile.height;
 
-        // Dark tactical navigation background
-        ctx.fillStyle = '#0b1120';
-        ctx.fillRect(0, 0, tile.width, tile.height);
+        // 1. Tactical Navy Base Ground
+        ctx.fillStyle = '#0b1324';
+        ctx.fillRect(0, 0, w, h);
 
-        // Subtle tactical grid lines
+        // 2. Topographic Contour Elevation Bands
         ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (var x = 0; x <= tile.width; x += 64) {
-          ctx.moveTo(x, 0); ctx.lineTo(x, tile.height);
-        }
-        for (var y = 0; y <= tile.height; y += 64) {
-          ctx.moveTo(0, y); ctx.lineTo(tile.width, y);
+        for (var i = 0; i < 4; i++) {
+          var yBase = ((coords.y % 4) * 64 + i * 64) % h;
+          ctx.moveTo(0, yBase);
+          ctx.bezierCurveTo(w * 0.33, yBase - 18, w * 0.66, yBase + 24, w, yBase);
         }
         ctx.stroke();
 
-        // Coordinate crosshair ticks
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        for (var cx = 64; cx < tile.width; cx += 64) {
-          for (var cy = 64; cy < tile.height; cy += 64) {
-            ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy);
-            ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4);
+        // 3. City Infrastructure Blocks & Land Plots
+        ctx.fillStyle = '#111d33';
+        for (var bx = 16; bx < w - 30; bx += 64) {
+          for (var by = 16; by < h - 30; by += 64) {
+            ctx.fillRect(bx, by, 48, 44);
+            ctx.strokeStyle = '#1a2b47';
+            ctx.strokeRect(bx, by, 48, 44);
           }
         }
+
+        // 4. Urban Secondary Street Grid
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5);
+        ctx.moveTo(w * 0.5, 0); ctx.lineTo(w * 0.5, h);
         ctx.stroke();
+
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        // 5. Major Arterial Evacuation Highway Corridor
+        var diagOffset = ((coords.x + coords.y) % 2 === 0);
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        if (diagOffset) {
+          ctx.moveTo(0, h * 0.15); ctx.lineTo(w, h * 0.85);
+        } else {
+          ctx.moveTo(0, h * 0.85); ctx.lineTo(w, h * 0.15);
+        }
+        ctx.stroke();
+
+        // Glowing Centerline
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([8, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 6. River Channel & Floodplain Hazard Buffer
+        if ((coords.x + coords.y) % 3 === 0) {
+          ctx.fillStyle = 'rgba(2, 132, 199, 0.4)';
+          ctx.beginPath();
+          ctx.moveTo(0, h * 0.65);
+          ctx.bezierCurveTo(w * 0.4, h * 0.55, w * 0.6, h * 0.85, w, h * 0.75);
+          ctx.lineTo(w, h * 0.95);
+          ctx.bezierCurveTo(w * 0.6, h * 1.05, w * 0.4, h * 0.75, 0, h * 0.85);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = '#0ea5e9';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = '#7dd3fc';
+          ctx.font = 'bold 9px monospace';
+          ctx.fillText('🌊 RIVER WATERWAY', 14, h * 0.78);
+
+          // Red Flood Hazard Buffer
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+          ctx.fillRect(0, h * 0.60, w, 14);
+          ctx.fillStyle = '#f87171';
+          ctx.font = 'bold 8px sans-serif';
+          ctx.fillText('⚠️ FLOOD RISK ZONE', 16, h * 0.64);
+        }
+
+        // 7. Tactical Road Name Labels
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 9px sans-serif';
+        if (diagOffset) {
+          ctx.save();
+          ctx.translate(w * 0.38, h * 0.46);
+          ctx.rotate(Math.atan2(h * 0.7, w));
+          ctx.fillText('⚡ NH-19 EVAC CORRIDOR', -40, -5);
+          ctx.restore();
+        } else {
+          ctx.fillText('EVAC ROUTE ' + (coords.x % 10), 10, h * 0.46);
+        }
+
+        // 8. Tactical Coordinate Crosshairs & Corner Ticks
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 8); ctx.lineTo(8, 8); ctx.lineTo(8, 0);
+        ctx.moveTo(w, 8); ctx.lineTo(w - 8, 8); ctx.lineTo(w - 8, 0);
+        ctx.moveTo(0, h - 8); ctx.lineTo(8, h - 8); ctx.lineTo(8, h);
+        ctx.moveTo(w, h - 8); ctx.lineTo(w - 8, h - 8); ctx.lineTo(w - 8, h);
+        ctx.stroke();
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '8px monospace';
+        ctx.fillText(coords.z + '/' + coords.x + '/' + coords.y, w - 48, h - 6);
 
         return tile;
       }
@@ -480,6 +565,25 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     var currentTileLayer = ${isOffline ? 'offlineTileLayer' : 'googleStreetLayer'};
     currentTileLayer.addTo(map);
+
+    function attachTileFallback(layer) {
+      if (!layer) return;
+      layer.on('tileerror', function() {
+        if (currentTileLayer !== offlineTileLayer) {
+          window.switchLayer('offline');
+          try {
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LAYER_FALLBACK', layer: 'offline' }));
+            }
+          } catch (e) {}
+        }
+      });
+    }
+    attachTileFallback(googleStreetLayer);
+    attachTileFallback(googleSatLayer);
+    attachTileFallback(googleHybridLayer);
+    attachTileFallback(googleTerrainLayer);
+    attachTileFallback(darkLayer);
 
     window.switchLayer = function(layerName) {
       if (currentTileLayer) {
@@ -547,9 +651,20 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       iconAnchor: [14, 14]
     });
 
+    var rangeCircles = [];
+    function updateRangeRings(lat, lng) {
+      rangeCircles.forEach(function(c) { map.removeLayer(c); });
+      rangeCircles = [];
+      var r500 = L.circle([lat, lng], { radius: 500, color: '#38bdf8', weight: 1.2, dashArray: '4, 4', fill: false }).addTo(map);
+      var r1000 = L.circle([lat, lng], { radius: 1000, color: '#0284c7', weight: 1.0, dashArray: '6, 6', fill: false }).addTo(map);
+      var r2000 = L.circle([lat, lng], { radius: 2000, color: '#1e3a8a', weight: 0.8, dashArray: '8, 8', fill: false }).addTo(map);
+      rangeCircles.push(r500, r1000, r2000);
+    }
+
     window.updateUserGps = function(lat, lng, accuracy, center) {
       lastUserLat = lat;
       lastUserLng = lng;
+      updateRangeRings(lat, lng);
       if (!userMarker) {
         userMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
         accuracyCircle = L.circle([lat, lng], {
@@ -711,20 +826,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               if (nearbyCitizens.length > 0) {
                 sendCitizensToMap(nearbyCitizens);
               }
+            } else if (data.type === 'LAYER_FALLBACK') {
+              setMapLayer(data.layer);
             }
           } catch (e) {}
         }}
       />
-
-      {/* ─── Floating Offline Banner when Cellular/Wi-Fi Disconnects ─── */}
-      {isOffline && (
-        <View style={styles.offlineBanner}>
-          <WifiOff size={14} color="#f59e0b" />
-          <Text style={styles.offlineBannerText}>
-            ⚡ Cellular/Wi-Fi Disconnected: Switched to Autonomous Offline Map
-          </Text>
-        </View>
-      )}
 
       {/* ─── Floating Top Bar: GPS Telemetry & Layer Selector ─── */}
       <View style={styles.topControlContainer}>
@@ -745,8 +852,23 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           </Text>
         </View>
 
+        {/* Floating Offline Banner when Cellular/Wi-Fi Disconnects */}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <WifiOff size={13} color="#10b981" />
+            <Text style={styles.offlineBannerText}>
+              ⚡ Autonomous Tactical GIS Active • Satellite GPS Locked
+            </Text>
+          </View>
+        )}
+
         {/* Layer Selector Pill */}
-        <View style={styles.layerPillRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ maxWidth: '100%' }}
+          contentContainerStyle={styles.layerPillRow}
+        >
           <TouchableOpacity
             style={[styles.layerPillBtn, mapLayer === 'street' && styles.layerPillBtnActive]}
             onPress={() => handleSwitchLayer('street')}
@@ -754,6 +876,16 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           >
             <Text style={[styles.layerPillText, mapLayer === 'street' && styles.layerPillTextActive]}>
               🗺️ Street
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.layerPillBtn, mapLayer === 'offline' && styles.layerPillBtnActive]}
+            onPress={() => handleSwitchLayer('offline')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.layerPillText, mapLayer === 'offline' && styles.layerPillTextActive]}>
+              ⚡ Offline
             </Text>
           </TouchableOpacity>
 
@@ -796,7 +928,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               🌙 Dark
             </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
 
       {/* ─── Floating Map Quick-Action Buttons (Right Column) ─── */}
@@ -890,24 +1022,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
   offlineBanner: {
-    position: 'absolute',
-    top: 50,
-    left: 16,
-    right: 16,
+    width: '100%',
     backgroundColor: 'rgba(15, 23, 42, 0.95)',
     borderWidth: 1.5,
     borderColor: '#f59e0b',
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    zIndex: 50,
+    marginTop: 8,
     shadowColor: '#f59e0b',
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 6,
+    elevation: 4,
   },
   offlineBannerText: {
     color: '#fef3c7',

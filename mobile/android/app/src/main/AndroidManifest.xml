@@ -55,6 +55,18 @@
       </intent-filter>
     </activity>
 
+    <!-- WhatsApp-Style Full Screen Incoming Call Activity -->
+    <activity
+        android:name=".IncomingCallActivity"
+        android:showWhenLocked="true"
+        android:turnScreenOn="true"
+        android:showForAllUsers="true"
+        android:excludeFromRecents="true"
+        android:launchMode="singleTask"
+        android:theme="@style/AppTheme"
+        android:exported="true"
+        android:screenOrientation="portrait" />
+
     <!-- Persistent 24/7 NeerNetra Mesh Background Service -->
     <service
         android:name=".NeerNetraMeshService"

@@ -25,12 +25,11 @@ import androidx.core.app.NotificationCompat;
 /**
  * NeerNetraMeshService
  * ====================
- * Persistent Android Foreground Service that ensures:
- *  1. BLE Mesh, SOS monitoring, and GATT server remain 100% active when the app is closed/minimized.
- *  2. Acquires PARTIAL_WAKE_LOCK to prevent CPU sleep during disaster emergency relays.
- *  3. Wakes up locked phone screen via SCREEN_BRIGHT_WAKE_LOCK and displays full-screen heads-up
- *     UI for incoming calls and emergency SOS alerts.
- *  4. Plays high-priority alarm / siren audio on STREAM_ALARM bypassing silent/Do-Not-Disturb mode.
+ * Persistent Android Foreground Service that runs 24/7 to guarantee:
+ *  1. Native BLE Mesh & GATT Server remain active when app is closed/swiped away.
+ *  2. Incoming walkie-talkie calls and SOS alarms trigger WhatsApp-style full-screen
+ *     incoming call screen (IncomingCallActivity) and ring continuously.
+ *  3. Holds PARTIAL_WAKE_LOCK preventing CPU sleep during disaster monitoring.
  */
 public class NeerNetraMeshService extends Service {
 
@@ -40,6 +39,9 @@ public class NeerNetraMeshService extends Service {
     public static final String CHANNEL_EMERGENCY_ID = "neernetra_emergency_wake_channel";
     public static final int SERVICE_NOTIFICATION_ID = 4001;
     public static final int EMERGENCY_NOTIFICATION_ID = 4002;
+
+    public static final String ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE";
+    public static final String ACTION_DECLINE_CALL = "ACTION_DECLINE_CALL";
 
     private PowerManager.WakeLock partialWakeLock;
     private static MediaPlayer emergencyPlayer;
@@ -52,25 +54,54 @@ public class NeerNetraMeshService extends Service {
         createNotificationChannels();
         acquirePartialWakeLock();
 
-        // Start in foreground immediately
+        // Start Foreground Service with safe fallback
         Notification notification = buildForegroundNotification();
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
-        } else {
-            startForeground(SERVICE_NOTIFICATION_ID, notification);
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+            } else {
+                startForeground(SERVICE_NOTIFICATION_ID, notification);
+            }
+        } catch (SecurityException se) {
+            Log.w(TAG, "Starting FGS with connectedDevice failed (permissions pending), falling back: " + se.getMessage());
+            try {
+                startForeground(SERVICE_NOTIFICATION_ID, notification);
+            } catch (Exception ignored) {}
+        }
+
+        // Boot 24/7 Native BLE Mesh Engine immediately
+        try {
+            NeerNetraNativeMeshManager.getInstance(this).startMeshEngine("NeerNetra-Node");
+            Log.i(TAG, "[MeshService] Native BLE Mesh Engine initialized in 24/7 background service");
+        } catch (Exception e) {
+            Log.e(TAG, "[MeshService] Failed to start native mesh engine: " + e.getMessage());
         }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "[MeshService] onStartCommand received, flag: " + flags + ", startId: " + startId);
-
-        if (intent != null && "ACTION_STOP_SERVICE".equals(intent.getAction())) {
-            stopSelf();
-            return START_NOT_STICKY;
+        if (intent != null) {
+            String action = intent.getAction();
+            if (ACTION_STOP_SERVICE.equals(action)) {
+                stopSelf();
+                return START_NOT_STICKY;
+            } else if (ACTION_DECLINE_CALL.equals(action)) {
+                Log.i(TAG, "[MeshService] ACTION_DECLINE_CALL received, stopping alarm and cancelling notification");
+                stopEmergencyAlarm();
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    nm.cancel(EMERGENCY_NOTIFICATION_ID);
+                }
+                return START_STICKY;
+            }
         }
+
+        // Ensure mesh engine stays running
+        try {
+            NeerNetraNativeMeshManager.getInstance(this).startMeshEngine("NeerNetra-Node");
+        } catch (Exception ignored) {}
 
         return START_STICKY;
     }
@@ -89,7 +120,6 @@ public class NeerNetraMeshService extends Service {
         return null;
     }
 
-    // ── Static Helper: Start Service ──────────────────────────────────────────
     public static void startService(Context context) {
         try {
             Intent intent = new Intent(context, NeerNetraMeshService.class);
@@ -98,24 +128,23 @@ public class NeerNetraMeshService extends Service {
             } else {
                 context.startService(intent);
             }
-            Log.i(TAG, "[MeshService] startService dispatched successfully");
+            Log.i(TAG, "[MeshService] startService dispatched");
         } catch (Exception e) {
-            Log.e(TAG, "[MeshService] Failed to start foreground service: " + e.getMessage());
+            Log.e(TAG, "[MeshService] Failed to start service: " + e.getMessage());
         }
     }
 
-    // ── Static Helper: Stop Service ───────────────────────────────────────────
     public static void stopService(Context context) {
         try {
             Intent intent = new Intent(context, NeerNetraMeshService.class);
-            intent.setAction("ACTION_STOP_SERVICE");
+            intent.setAction(ACTION_STOP_SERVICE);
             context.startService(intent);
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Failed to stop service: " + e.getMessage());
         }
     }
 
-    // ── Static Helper: Lockscreen Wake-Up & Full-Screen Intent ────────────────
+    // ── WhatsApp-Style Lock Screen Wake-Up & Full Screen Activity Launch ─────
     public static void wakeScreenAndShowNotification(
             Context context,
             String title,
@@ -123,10 +152,10 @@ public class NeerNetraMeshService extends Service {
             String emergencyType,
             @Nullable Bundle extras
     ) {
-        Log.i(TAG, "[MeshService] 🚨 Triggering Lock Screen Wake-Up: " + title + " (" + emergencyType + ")");
+        Log.i(TAG, "🚨 WhatsApp-Style Incoming Call Triggered: " + title + " (" + emergencyType + ")");
 
         try {
-            // 1. Wake the physical phone screen
+            // 1. Wake physical phone screen
             PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 @SuppressWarnings("deprecation")
@@ -136,39 +165,66 @@ public class NeerNetraMeshService extends Service {
                     PowerManager.ON_AFTER_RELEASE,
                     "NeerNetra:ScreenWakeUpLock"
                 );
-                screenLock.acquire(15000); // Keep screen lit for 15s to view incoming call/alert
+                screenLock.acquire(20000); // 20 seconds screen wake
             }
 
-            // 2. Build full-screen intent to launch MainActivity over lock screen
-            Intent fullScreenIntent = new Intent(context, MainActivity.class);
-            fullScreenIntent.addFlags(
+            // 2. Prepare Intent to launch WhatsApp-style IncomingCallActivity
+            Intent callActivityIntent = new Intent(context, IncomingCallActivity.class);
+            callActivityIntent.addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_CLEAR_TOP |
                 Intent.FLAG_ACTIVITY_SINGLE_TOP
             );
-            fullScreenIntent.putExtra("emergency_type", emergencyType);
-            fullScreenIntent.putExtra("title", title);
-            fullScreenIntent.putExtra("message", message);
+            callActivityIntent.putExtra("emergency_type", emergencyType);
+            callActivityIntent.putExtra("title", title);
+            callActivityIntent.putExtra("message", message);
             if (extras != null) {
-                fullScreenIntent.putExtras(extras);
+                callActivityIntent.putExtras(extras);
             }
 
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            int pFlags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                flags |= PendingIntent.FLAG_IMMUTABLE;
+                pFlags |= PendingIntent.FLAG_IMMUTABLE;
             }
 
-            PendingIntent pendingIntent = PendingIntent.getActivity(
+            PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
                 context,
                 (int) System.currentTimeMillis(),
-                fullScreenIntent,
-                flags
+                callActivityIntent,
+                pFlags
             );
 
-            // 3. Play high-priority siren / ringtone on ALARM stream
-            playEmergencyAlarm(context);
+            // 3. Answer Action (Launches MainActivity directly into active call)
+            Intent answerIntent = new Intent(context, MainActivity.class);
+            answerIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            );
+            answerIntent.putExtra("emergency_type", emergencyType);
+            answerIntent.putExtra("auto_answer", true);
+            if (extras != null) {
+                answerIntent.putExtras(extras);
+            }
 
-            // 4. Build high-priority Heads-up / Lock-screen notification
+            PendingIntent answerPendingIntent = PendingIntent.getActivity(
+                context,
+                (int) System.currentTimeMillis() + 1,
+                answerIntent,
+                pFlags
+            );
+
+            // 4. Decline Action (Silences ringtone and cancels notification)
+            Intent declineIntent = new Intent(context, NeerNetraMeshService.class);
+            declineIntent.setAction(ACTION_DECLINE_CALL);
+            PendingIntent declinePendingIntent = PendingIntent.getService(
+                context,
+                (int) System.currentTimeMillis() + 2,
+                declineIntent,
+                pFlags
+            );
+
+            // 5. Build high-priority Heads-up / Lock-screen CallStyle Notification
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -181,7 +237,7 @@ public class NeerNetraMeshService extends Service {
                     emergencyChan.enableLights(true);
                     emergencyChan.setLightColor(Color.RED);
                     emergencyChan.enableVibration(true);
-                    emergencyChan.setVibrationPattern(new long[]{0, 500, 200, 500, 200, 1000});
+                    emergencyChan.setVibrationPattern(new long[]{0, 1000, 1000, 1000});
                     emergencyChan.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
                     emergencyChan.setBypassDnd(true);
                     nm.createNotificationChannel(emergencyChan);
@@ -195,16 +251,18 @@ public class NeerNetraMeshService extends Service {
                     .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setAutoCancel(true)
-                    .setFullScreenIntent(pendingIntent, true) // Crucial for lock-screen wake-up
-                    .setContentIntent(pendingIntent)
-                    .setVibrate(new long[]{0, 500, 200, 500, 200, 1000})
+                    .setFullScreenIntent(fullScreenPendingIntent, true) // Guarantees lock-screen wakeup
+                    .setContentIntent(fullScreenPendingIntent)
+                    .addAction(R.mipmap.ic_launcher, "DECLINE", declinePendingIntent)
+                    .addAction(R.mipmap.ic_launcher, "ANSWER", answerPendingIntent)
+                    .setVibrate(new long[]{0, 1000, 1000, 1000})
                     .setColor(Color.RED);
 
                 nm.notify(EMERGENCY_NOTIFICATION_ID, builder.build());
             }
 
-            // 5. Also launch activity directly
-            context.startActivity(fullScreenIntent);
+            // 6. Also start IncomingCallActivity directly
+            context.startActivity(callActivityIntent);
 
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Error in wakeScreenAndShowNotification: " + e.getMessage(), e);
@@ -215,22 +273,18 @@ public class NeerNetraMeshService extends Service {
         try {
             stopEmergencyAlarm();
             Uri alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            if (alertUri == null) {
-                alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            }
-            if (alertUri == null) {
-                alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            }
+            if (alertUri == null) alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (alertUri == null) alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
             emergencyPlayer = new MediaPlayer();
             emergencyPlayer.setDataSource(context, alertUri);
             emergencyPlayer.setAudioAttributes(
                 new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
             );
-            emergencyPlayer.setLooping(false);
+            emergencyPlayer.setLooping(true);
             emergencyPlayer.prepare();
             emergencyPlayer.start();
         } catch (Exception e) {
@@ -241,16 +295,13 @@ public class NeerNetraMeshService extends Service {
     public static void stopEmergencyAlarm() {
         if (emergencyPlayer != null) {
             try {
-                if (emergencyPlayer.isPlaying()) {
-                    emergencyPlayer.stop();
-                }
+                if (emergencyPlayer.isPlaying()) emergencyPlayer.stop();
                 emergencyPlayer.release();
             } catch (Exception ignored) {}
             emergencyPlayer = null;
         }
     }
 
-    // ── Notifications & Channels ──────────────────────────────────────────────
     private void createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -302,14 +353,16 @@ public class NeerNetraMeshService extends Service {
 
     private void acquirePartialWakeLock() {
         try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (pm != null && (partialWakeLock == null || !partialWakeLock.isHeld())) {
-                partialWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NeerNetra:MeshServiceCpuWakeLock");
-                partialWakeLock.acquire();
-                Log.i(TAG, "[MeshService] Partial WakeLock acquired successfully");
+            if (partialWakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    partialWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "neernetra:MeshForegroundLock");
+                    partialWakeLock.acquire();
+                    Log.i(TAG, "[MeshService] Acquired PARTIAL_WAKE_LOCK for 24/7 mesh monitoring");
+                }
             }
         } catch (Exception e) {
-            Log.e(TAG, "[MeshService] Error acquiring partial wakelock: " + e.getMessage());
+            Log.e(TAG, "[MeshService] Failed to acquire wake lock: " + e.getMessage());
         }
     }
 
@@ -318,7 +371,7 @@ public class NeerNetraMeshService extends Service {
             if (partialWakeLock != null && partialWakeLock.isHeld()) {
                 partialWakeLock.release();
                 partialWakeLock = null;
-                Log.i(TAG, "[MeshService] Partial WakeLock released");
+                Log.i(TAG, "[MeshService] Released PARTIAL_WAKE_LOCK");
             }
         } catch (Exception ignored) {}
     }
