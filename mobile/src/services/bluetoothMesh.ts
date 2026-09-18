@@ -924,6 +924,9 @@ class NeerNetraBLEMesh {
       this.chatMessages.push(msg);
       if (this.chatMessages.length > 100) this.chatMessages.shift();
 
+      // Play audio chime on receiving mesh chat message
+      playPttTone('incoming').catch(() => {});
+
       if (this.onMessageReceived) this.onMessageReceived(msg);
       console.log(`[BLE Mesh] 💬 CHAT received from ${msg.senderName}: "${msg.text}" (hop ${msg.hopCount})`);
     } catch {}
@@ -984,13 +987,26 @@ class NeerNetraBLEMesh {
       const isGroup = Boolean(data.isGroupCall || data.targetId === 'GROUP_CALL' || data.targetId === 'BROADCAST');
 
       if (!isGroup) {
-        // Strict 1-to-1 targeting: only ring if target matches our device ID, node ID, or name
-        const isForMe =
+        // Robust 1-to-1 targeting:
+        const isDirectIdMatch =
           data.targetNodeId === this.myDeviceId ||
           data.targetId === this.myDeviceId ||
-          (this.myName && data.targetName && this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase());
+          (this.macToNodeId.get(data.targetId) === this.myDeviceId) ||
+          (this.peerNodeIdToMac.get(data.targetNodeId) === this.myDeviceId);
 
-        if (!isForMe) {
+        const isNameMatch = Boolean(
+          this.myName && data.targetName &&
+          (this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase() ||
+           data.targetName.toLowerCase().includes(this.myDeviceId.slice(-4).toLowerCase()) ||
+           (this.myName.includes('[') && data.targetName.includes(this.myName.split('[')[1]?.replace(']', ''))))
+        );
+
+        const isIntendedRecipient = isDirectIdMatch || isNameMatch || (
+          // Direct 1-hop link where the target is not another known device in our mesh
+          ttl >= 6 && (!data.targetId || !this.activePeers.has(data.targetId) || this.connectedDevices.has(senderId) || this.peripheralClients.has(senderId))
+        );
+
+        if (!isIntendedRecipient) {
           console.log(`[BLE Mesh] 📞 Ignoring private 1-to-1 call from ${data.callerName || senderId} (intended for ${data.targetName || data.targetId})`);
           return;
         }

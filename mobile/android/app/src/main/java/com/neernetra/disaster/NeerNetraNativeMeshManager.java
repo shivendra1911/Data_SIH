@@ -92,6 +92,19 @@ public class NeerNetraNativeMeshManager {
                 return false;
             }
 
+            // ── Runtime permission check (Android 12+ requires BLUETOOTH_CONNECT at runtime) ──
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                boolean hasConnect = appContext.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                if (!hasConnect) {
+                    Log.w(TAG, "BLUETOOTH_CONNECT not yet granted — will retry when permission is given by user.");
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        startMeshEngine(deviceName != null ? deviceName : "NeerNetra-Node");
+                    }, 4000);
+                    return false;
+                }
+            }
+
             // 1. Open GATT Server
             gattServer = bluetoothManager.openGattServer(appContext, gattServerCallback);
             if (gattServer == null) {
@@ -137,6 +150,13 @@ public class NeerNetraNativeMeshManager {
             Log.i(TAG, "24/7 Native BLE Mesh Engine successfully started!");
             return true;
 
+        } catch (SecurityException se) {
+            Log.e(TAG, "startMeshEngine SecurityException (permission not granted yet): " + se.getMessage());
+            // Auto-retry once React Native grants BLE permissions
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                startMeshEngine(deviceName != null ? deviceName : "NeerNetra-Node");
+            }, 5000);
+            return false;
         } catch (Exception e) {
             Log.e(TAG, "startMeshEngine exception: " + e.getMessage(), e);
             return false;
@@ -180,8 +200,18 @@ public class NeerNetraNativeMeshManager {
         } catch (Exception ignored) {}
 
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                boolean hasAdv = appContext.checkSelfPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                if (!hasAdv) {
+                    Log.w(TAG, "BLUETOOTH_ADVERTISE not yet granted — will advertise when permitted");
+                    return;
+                }
+            }
             advertiser.startAdvertising(settings, data, scanBuilder.build(), advertiseCallback);
             Log.i(TAG, "Native BLE advertising started for NeerNetra");
+        } catch (SecurityException se) {
+            Log.w(TAG, "Advertising SecurityException: " + se.getMessage());
         } catch (Exception e) {
             Log.w(TAG, "Advertising start error: " + e.getMessage());
         }
@@ -434,29 +464,27 @@ public class NeerNetraNativeMeshManager {
     private void checkAndTriggerWhatsAppCallOrAlert(String deviceAddress, byte[] data) {
         if (data == null || data.length < 5) return;
         try {
-            // The incoming bytes ARE the Base64-encoded JSON packet envelope.
-            // We must decode Base64 first to get the actual JSON {"t":7, "p":"...", ...}
-            String decodedJson = null;
-            try {
-                String rawUtf8 = new String(data, StandardCharsets.UTF_8).trim();
-                // Try Base64 decode first (the primary path — packets are always Base64-wrapped)
-                byte[] jsonBytes = android.util.Base64.decode(rawUtf8, android.util.Base64.NO_WRAP);
-                decodedJson = new String(jsonBytes, StandardCharsets.UTF_8);
-            } catch (Exception ignored) {
-                // If Base64 decode fails, try treating raw bytes as plain JSON (fallback)
-                decodedJson = new String(data, StandardCharsets.UTF_8);
+            // Check if raw bytes are already JSON (primary path over BLE write)
+            String decodedJson = new String(data, StandardCharsets.UTF_8).trim();
+            if (!decodedJson.startsWith("{")) {
+                try {
+                    byte[] jsonBytes = android.util.Base64.decode(decodedJson, android.util.Base64.NO_WRAP);
+                    String tryJson = new String(jsonBytes, StandardCharsets.UTF_8).trim();
+                    if (tryJson.startsWith("{")) {
+                        decodedJson = tryJson;
+                    }
+                } catch (Exception ignored) {}
             }
 
-            if (decodedJson == null) return;
+            if (decodedJson == null || !decodedJson.startsWith("{")) return;
 
             // ── Call End / Decline → dismiss IncomingCallActivity immediately ──
             if (decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
                 decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9")) {
                 Log.i(TAG, "📴 Remote CALL_END/DECLINE received — dismissing IncomingCallActivity immediately");
-                // Broadcast a local intent to dismiss IncomingCallActivity if it's visible
-                Intent dismissIntent = new Intent("com.neernetra.DISMISS_INCOMING_CALL");
+                Intent dismissIntent = new Intent(IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL);
                 appContext.sendBroadcast(dismissIntent);
-                // Also cancel the emergency notification
+                NeerNetraMeshService.stopEmergencyAlarm();
                 try {
                     android.app.NotificationManager nm =
                         (android.app.NotificationManager) appContext.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -493,6 +521,23 @@ public class NeerNetraNativeMeshManager {
                     isGroup ? "GROUP_CALL" : "CALL_REQ",
                     b
                 );
+            }
+            // ── Incoming Offline Chat Message (t: 1) ──
+            else if (decodedJson.contains("\"t\":1") || decodedJson.contains("\"t\": 1")) {
+                String senderName = "Nearby Citizen";
+                String chatText = "New mesh message";
+                try {
+                    JSONObject jo = new JSONObject(decodedJson);
+                    if (jo.has("p")) {
+                        String pStr = jo.getString("p");
+                        JSONObject p = new JSONObject(pStr);
+                        if (p.has("senderName")) senderName = p.getString("senderName");
+                        if (p.has("text")) chatText = p.getString("text");
+                    }
+                } catch (Exception ignored) {}
+
+                Log.i(TAG, "💬 Offline Chat Message detected from " + senderName + ": " + chatText);
+                NeerNetraMeshService.showChatNotification(appContext, senderName, chatText);
             }
             // ── Emergency SOS Distress Packet (t: 3) ──
             else if (decodedJson.contains("\"t\":3") || decodedJson.contains("\"t\": 3")) {

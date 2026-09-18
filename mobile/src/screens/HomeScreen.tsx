@@ -235,6 +235,15 @@ export const HomeScreen: React.FC = () => {
           setActiveCallPeer(null);
           setIncomingCaller(null);
         };
+        (meshEngine as any).onMessageReceived = (msg: any) => {
+          console.log('[HomeScreen] 💬 Message received:', msg);
+          if (currentTab !== 'mesh') {
+            Alert.alert(`💬 ${msg.senderName}`, msg.text, [
+              { text: 'Open Chat', onPress: () => setCurrentTab('mesh') },
+              { text: 'Dismiss', style: 'cancel' },
+            ]);
+          }
+        };
         (meshEngine as any).onStateChange = (state: string) => {
           if (state === 'PoweredOff') setNetworkMode('OFFLINE_QUEUED');
         };

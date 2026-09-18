@@ -37,13 +37,16 @@ public class NeerNetraMeshService extends Service {
 
     public static final String CHANNEL_MESH_ID = "neernetra_mesh_foreground_channel";
     public static final String CHANNEL_EMERGENCY_ID = "neernetra_emergency_wake_channel";
+    public static final String CHANNEL_CHAT_ID = "neernetra_chat_channel";
     public static final int SERVICE_NOTIFICATION_ID = 4001;
     public static final int EMERGENCY_NOTIFICATION_ID = 4002;
+    public static final int CHAT_NOTIFICATION_ID = 4003;
 
     public static final String ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE";
     public static final String ACTION_DECLINE_CALL = "ACTION_DECLINE_CALL";
 
     private PowerManager.WakeLock partialWakeLock;
+    private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
 
     @Override
@@ -158,6 +161,9 @@ public class NeerNetraMeshService extends Service {
             // 1. Wake physical phone screen
             PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
+                if (activeScreenLock != null && activeScreenLock.isHeld()) {
+                    try { activeScreenLock.release(); } catch (Exception ignored) {}
+                }
                 @SuppressWarnings("deprecation")
                 PowerManager.WakeLock screenLock = pm.newWakeLock(
                     PowerManager.SCREEN_BRIGHT_WAKE_LOCK |
@@ -165,7 +171,8 @@ public class NeerNetraMeshService extends Service {
                     PowerManager.ON_AFTER_RELEASE,
                     "NeerNetra:ScreenWakeUpLock"
                 );
-                screenLock.acquire(20000); // 20 seconds screen wake
+                screenLock.acquire(8000); // 8 seconds screen wake (prevents 20s hang)
+                activeScreenLock = screenLock;
             }
 
             // 2. Prepare Intent to launch WhatsApp-style IncomingCallActivity
@@ -293,6 +300,12 @@ public class NeerNetraMeshService extends Service {
     }
 
     public static void stopEmergencyAlarm() {
+        if (activeScreenLock != null && activeScreenLock.isHeld()) {
+            try {
+                activeScreenLock.release();
+            } catch (Exception ignored) {}
+            activeScreenLock = null;
+        }
         if (emergencyPlayer != null) {
             try {
                 if (emergencyPlayer.isPlaying()) emergencyPlayer.stop();
@@ -328,6 +341,64 @@ public class NeerNetraMeshService extends Service {
             alertChan.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             alertChan.setBypassDnd(true);
             nm.createNotificationChannel(alertChan);
+
+            NotificationChannel chatChan = new NotificationChannel(
+                CHANNEL_CHAT_ID,
+                "NeerNetra Mesh Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            chatChan.setDescription("Incoming chat messages from nearby mesh citizens");
+            chatChan.enableLights(true);
+            chatChan.setLightColor(Color.CYAN);
+            chatChan.enableVibration(true);
+            chatChan.setVibrationPattern(new long[]{0, 250, 150, 250});
+            chatChan.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            nm.createNotificationChannel(chatChan);
+        }
+    }
+
+    /**
+     * Display a heads-up Notification for incoming offline BLE mesh chat messages
+     * even when the app is completely closed or the screen is locked!
+     */
+    public static void showChatNotification(Context context, String senderName, String messageText) {
+        try {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+
+            Intent openAppIntent = new Intent(context, MainActivity.class);
+            openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            openAppIntent.putExtra("nav_screen", "Chat");
+
+            int pFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                context,
+                (int) System.currentTimeMillis(),
+                openAppIntent,
+                pFlags
+            );
+
+            Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_CHAT_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(senderName != null ? senderName : "Nearby Citizen")
+                .setContentText(messageText != null ? messageText : "New mesh message")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .setSound(defaultSoundUri)
+                .setVibrate(new long[]{0, 250, 150, 250})
+                .setContentIntent(pendingIntent);
+
+            nm.notify(CHAT_NOTIFICATION_ID, builder.build());
+            Log.i(TAG, "💬 Showed offline chat notification for: " + senderName);
+        } catch (Exception e) {
+            Log.w(TAG, "showChatNotification error: " + e.getMessage());
         }
     }
 
