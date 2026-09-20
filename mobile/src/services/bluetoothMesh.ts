@@ -327,7 +327,8 @@ class NeerNetraBLEMesh {
         (clientAddress) => {
           console.log('[BLE Mesh] Remote device connected as Central to us:', clientAddress);
           this.peripheralClients.add(clientAddress);
-          if (!this.activePeers.has(clientAddress)) {
+          const existingPeer = this.activePeers.get(clientAddress);
+          if (!existingPeer) {
             const peer: MeshPeer = {
               id: clientAddress,
               name: `Citizen [${clientAddress.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`,
@@ -339,8 +340,11 @@ class NeerNetraBLEMesh {
               lastSeen: new Date(),
             };
             this.activePeers.set(clientAddress, peer);
-            this.emitPeersUpdate();
+          } else {
+            // Refresh lastSeen so stale pruning doesn't remove them
+            this.activePeers.set(clientAddress, { ...existingPeer, lastSeen: new Date() });
           }
+          this.emitPeersUpdate();
 
           // Immediately send a HELLO via GATT notify so the peer knows we exist
           // even if their Central→us connection failed or is still pending.
@@ -368,6 +372,42 @@ class NeerNetraBLEMesh {
         (clientAddress) => {
           console.log('[BLE Mesh] Remote Central disconnected from our server:', clientAddress);
           this.peripheralClients.delete(clientAddress);
+          // Keep peer visible in UI — update lastSeen so 90s pruning timer is reset
+          const existing = this.activePeers.get(clientAddress);
+          if (existing && !this.connectedDevices.has(clientAddress)) {
+            this.activePeers.set(clientAddress, { ...existing, lastSeen: new Date() });
+            this.emitPeersUpdate();
+          }
+        },
+        // Native scanner callback: Java found a NeerNetra peer via its own BLE scan
+        (nativeDeviceId, nativeDeviceName, rssi) => {
+          const existing = this.activePeers.get(nativeDeviceId);
+          const resolvedName = (nativeDeviceName && !nativeDeviceName.startsWith('Citizen_'))
+            ? nativeDeviceName
+            : (existing?.name || `Citizen_${nativeDeviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`);
+          const peer: MeshPeer = {
+            id: nativeDeviceId,
+            name: existing?.name && !existing.name.startsWith('Citizen_') ? existing.name : resolvedName,
+            signalStrength: rssi,
+            relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
+            role: 'Citizen Node',
+            distanceMeters: this.rssiToDistance(rssi),
+            status: existing ? existing.status : 'SAFE',
+            lastSeen: new Date(),
+          };
+          this.activePeers.set(nativeDeviceId, peer);
+          this.emitPeersUpdate();
+
+          // Try to connect if not already connected
+          if (!this.connectedDevices.has(nativeDeviceId) &&
+              !this.connectingDevices.has(nativeDeviceId) &&
+              !this.peripheralClients.has(nativeDeviceId)) {
+            const myId = (this.myDeviceId || '').toLowerCase();
+            const peerId = (nativeDeviceId || '').toLowerCase();
+            if (myId < peerId) {
+              this.connectToPeer(nativeDeviceId).catch(() => {});
+            }
+          }
         }
       );
       console.log('[BLE Mesh] Native GATT Server started:', gattStarted);
@@ -383,25 +423,32 @@ class NeerNetraBLEMesh {
     await this.startScanning();
   }
 
+
   // ── Central: Scan for NeerNetra peers ─────────────────────────────────────
   async startScanning() {
-    if (this.isScanning || !this.manager) return;
+    // Allow restart even if isScanning=true by always calling stopDeviceScan first
+    if (!this.manager) return;
+
+    try { this.manager.stopDeviceScan(); } catch {}
+    this.isScanning = false;
+
+    // Brief settle so the OS BLE stack fully stops the previous scan
+    await new Promise((r) => setTimeout(r, 200));
+
+    if (this.isScanning) return; // another startScanning beat us to it
     this.isScanning = true;
 
     console.log('[BLE Mesh] Scanning for nearby NeerNetra emergency nodes...');
 
     try {
-      this.manager.stopDeviceScan();
-    } catch {}
-
-    try {
       this.manager.startDeviceScan(
         null,
-        { allowDuplicates: true },
+        { allowDuplicates: true, scanMode: 2 }, // scanMode 2 = SCAN_MODE_LOW_LATENCY
         async (error: any, device: any) => {
           if (error) {
+            console.warn('[BLE Mesh] Scan error, will retry:', error?.message || error?.reason);
             this.isScanning = false;
-            setTimeout(() => this.startScanning(), 8000);
+            setTimeout(() => this.startScanning(), 6000);
             return;
           }
 
@@ -429,7 +476,7 @@ class NeerNetraBLEMesh {
             : `Citizen_${device.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`;
           const existingPeer = this.activePeers.get(device.id);
 
-          console.log(`[BLE Mesh] 🎯 Verified NeerNetra peer found: ${device.id} (${peerName}) [RSSI: ${peerRssi}dBm]`);
+          console.log(`[BLE Mesh] 🎯 Verified NeerNetra peer: ${device.id} (${peerName}) [RSSI: ${peerRssi}dBm]`);
 
           const peer: MeshPeer = {
             id: device.id,
@@ -443,11 +490,12 @@ class NeerNetraBLEMesh {
           };
 
           this.activePeers.set(device.id, peer);
-          // Periodic cleanup: prune stale disconnected peers older than 60s
+
+          // Stale peer cleanup: 90s window — keep peers visible in the UI even without a full GATT connect
           const nowMs = Date.now();
           this.activePeers.forEach((p, id) => {
             if (!this.connectedDevices.has(id) && !this.peripheralClients.has(id)) {
-              if (p.lastSeen && (nowMs - p.lastSeen.getTime() > 60000)) {
+              if (p.lastSeen && (nowMs - p.lastSeen.getTime() > 90000)) {
                 this.activePeers.delete(id);
               }
             }
@@ -461,7 +509,7 @@ class NeerNetraBLEMesh {
                                      this.peripheralClients.has(device.id);
           if (!isAlreadyConnected) {
             // Deterministic initiator tie-breaker:
-            // Device with smaller ID connects; device with larger ID waits for incoming connection
+            // Device with smaller ID connects as Central; larger ID waits for incoming connection
             const myId = (this.myDeviceId || '').toLowerCase();
             const peerId = (device.id || '').toLowerCase();
             const shouldInitiate = myId < peerId;
@@ -484,21 +532,17 @@ class NeerNetraBLEMesh {
     } catch (scanErr: any) {
       console.warn('[BLE Mesh] startDeviceScan call error:', scanErr?.message);
       this.isScanning = false;
-      setTimeout(() => this.startScanning(), 10000);
+      setTimeout(() => this.startScanning(), 8000);
       return;
     }
 
-    // Refresh scan every 25 seconds
+    // Refresh scan every 20 seconds (shorter cycle = faster re-discovery after earbud connects/disconnects)
     if (this.scanTimer) clearInterval(this.scanTimer);
     this.scanTimer = setInterval(() => {
-      if (this.manager && this.isScanning) {
-        try {
-          this.manager.stopDeviceScan();
-          this.isScanning = false;
-        } catch {}
-        setTimeout(() => this.startScanning(), 1500);
+      if (this.manager) {
+        this.startScanning().catch(() => {});
       }
-    }, 25000);
+    }, 20000);
   }
 
   async triggerManualScan(): Promise<MeshPeer[]> {
@@ -603,8 +647,17 @@ class NeerNetraBLEMesh {
       }));
 
       discovered.onDisconnected(() => {
-        console.log(`[BLE Mesh] Peer disconnected: ${devId}`);
+        console.log(`[BLE Mesh] Peer Central-connection dropped: ${devId}`);
         this.connectedDevices.delete(devId);
+        // Only remove from activePeers if also not connected via our GATT server
+        // This preserves the peer card when only one direction disconnects
+        if (!this.peripheralClients.has(devId)) {
+          // Update lastSeen so peer is still visible in UI for 90s
+          const existing = this.activePeers.get(devId);
+          if (existing) {
+            this.activePeers.set(devId, { ...existing, lastSeen: new Date() });
+          }
+        }
         this.emitPeersUpdate();
       });
 

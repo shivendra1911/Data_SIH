@@ -24,7 +24,8 @@ export const startGattServer = async (
   deviceName: string,
   onPacketReceived: (fromDevice: string, base64Data: string) => void,
   onCentralConnected?: (clientAddress: string) => void,
-  onCentralDisconnected?: (clientAddress: string) => void
+  onCentralDisconnected?: (clientAddress: string) => void,
+  onNativePeerFound?: (deviceId: string, deviceName: string, rssi: number) => void
 ): Promise<boolean> => {
   if (Platform.OS !== 'android') return false;
   if (!NeerNetraGatt) {
@@ -57,6 +58,11 @@ export const startGattServer = async (
     emitter.addListener('onCentralDisconnected', (address: string) => {
       console.log(`[GattBridge] Central disconnected from our server: ${address}`);
       if (onCentralDisconnected) onCentralDisconnected(address);
+    });
+
+    // Native background scanner found a NeerNetra peer (fires even when JS BLE scanner is throttled)
+    emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number }) => {
+      if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi);
     });
 
     return true;

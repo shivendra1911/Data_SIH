@@ -10,6 +10,9 @@ import android.os.ParcelUuid;
 import android.os.PowerManager;
 import android.util.Log;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.WritableMap;
@@ -63,6 +66,10 @@ public class NeerNetraNativeMeshManager {
     private final Map<String, Map<Integer, byte[]>> incomingWriteBuffers = new ConcurrentHashMap<>();
     private final Map<String, Integer> incomingWriteTotals = new ConcurrentHashMap<>();
     private final Map<String, Long> incomingWriteTimestamps = new ConcurrentHashMap<>();
+    private final Map<String, Long> nativePeerLastSeen = new ConcurrentHashMap<>();
+    private BluetoothLeScanner nativeScanner;
+    private ScanCallback nativeScanCallback;
+    private boolean isScanningNative = false;
     private boolean isRunning = false;
 
     private NeerNetraNativeMeshManager(Context context) {
@@ -146,6 +153,9 @@ public class NeerNetraNativeMeshManager {
             // 2. Start BLE Advertising
             startAdvertising(deviceName);
 
+            // 3. Start native BLE background scanner (runs 24/7 even when JS is killed)
+            startNativeScanning();
+
             isRunning = true;
             Log.i(TAG, "24/7 Native BLE Mesh Engine successfully started!");
             return true;
@@ -226,8 +236,106 @@ public class NeerNetraNativeMeshManager {
         @Override
         public void onStartFailure(int errorCode) {
             Log.w(TAG, "BLE Advertising failed with error code: " + errorCode);
+            if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
+                Log.i(TAG, "Advertising was already running — treating as success");
+            }
         }
     };
+
+    // ── Native 24/7 Background BLE Scanner ────────────────────────────────────
+    private void startNativeScanning() {
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) return;
+        nativeScanner = bluetoothAdapter.getBluetoothLeScanner();
+        if (nativeScanner == null) {
+            Log.w(TAG, "BluetoothLeScanner not available for native scanning");
+            return;
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                boolean hasScan = appContext.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                if (!hasScan) {
+                    Log.w(TAG, "BLUETOOTH_SCAN not yet granted — native scanner will start after permission");
+                    return;
+                }
+            }
+
+            if (isScanningNative) {
+                try { nativeScanner.stopScan(nativeScanCallback); } catch (Exception ignored) {}
+                isScanningNative = false;
+            }
+
+            // Filter for our NeerNetra service UUID only — no location data involved
+            List<ScanFilter> filters = new ArrayList<>();
+            filters.add(new ScanFilter.Builder()
+                .setServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
+                .build());
+
+            ScanSettings scanSettings = new ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setReportDelay(0)
+                .build();
+
+            nativeScanCallback = new ScanCallback() {
+                @Override
+                public void onScanResult(int callbackType, ScanResult result) {
+                    if (result == null || result.getDevice() == null) return;
+                    String address = result.getDevice().getAddress();
+                    int rssi = result.getRssi();
+                    String deviceName = "";
+                    try {
+                        deviceName = result.getDevice().getName();
+                        if (deviceName == null) deviceName = "";
+                    } catch (SecurityException ignored) {}
+
+                    long now = System.currentTimeMillis();
+                    Long lastSeen = nativePeerLastSeen.get(address);
+                    nativePeerLastSeen.put(address, now);
+
+                    // Emit to React Native so JS layer can update its peer list
+                    try {
+                        WritableMap peerMap = Arguments.createMap();
+                        peerMap.putString("id", address);
+                        peerMap.putString("name", deviceName.isEmpty() ? "Citizen_" + address.replace(":", "").substring(Math.max(0, address.length() - 8)) : deviceName);
+                        peerMap.putInt("rssi", rssi);
+                        emitEventMapToReactNative("onNativePeerFound", peerMap);
+                    } catch (Exception ignored) {}
+
+                    // If we haven't seen this peer recently, send a synthetic HELLO
+                    if (lastSeen == null || now - lastSeen > 30000) {
+                        Log.i(TAG, "Native scan found NeerNetra peer: " + address + " (RSSI: " + rssi + ")");
+                    }
+                }
+
+                @Override
+                public void onScanFailed(int errorCode) {
+                    Log.w(TAG, "Native BLE scan failed: " + errorCode);
+                    isScanningNative = false;
+                    // Retry after 10s if scan failed
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        if (isRunning) startNativeScanning();
+                    }, 10000);
+                }
+
+                @Override
+                public void onBatchScanResults(List<ScanResult> results) {
+                    for (ScanResult r : results) onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, r);
+                }
+            };
+
+            nativeScanner.startScan(filters, scanSettings, nativeScanCallback);
+            isScanningNative = true;
+            Log.i(TAG, "Native BLE background scanner started (NeerNetra UUID filter)");
+
+        } catch (SecurityException se) {
+            Log.w(TAG, "Native scan SecurityException: " + se.getMessage());
+        } catch (Exception e) {
+            Log.w(TAG, "Native scan start error: " + e.getMessage());
+        }
+    }
+
+
 
     // ── Notify All Connected Centrals ─────────────────────────────────────────
     public int notifyAllClients(String base64Data) {
@@ -612,10 +720,15 @@ public class NeerNetraNativeMeshManager {
     public synchronized void stopMeshEngine() {
         try {
             if (advertiser != null) advertiser.stopAdvertising(advertiseCallback);
+            if (nativeScanner != null && nativeScanCallback != null && isScanningNative) {
+                try { nativeScanner.stopScan(nativeScanCallback); } catch (Exception ignored) {}
+                isScanningNative = false;
+            }
             if (gattServer != null) gattServer.close();
             gattServer = null;
             isRunning = false;
             connectedCentrals.clear();
+            nativePeerLastSeen.clear();
             Log.i(TAG, "Native BLE Mesh Engine stopped");
         } catch (Exception ignored) {}
     }
