@@ -23,6 +23,7 @@ import {
   downloadMapForZone,
   isOfflineMapReady,
   getCachedSafeRoute,
+  getLocalTileUrlTemplate,
 } from '../services/offlineMapManager';
 import {
   getNearestSafeRoute,
@@ -433,134 +434,14 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       attribution: 'Dark Mode'
     });
 
-    // 6. Autonomous Offline Tactical Navigation Layer (100% Offline Vector Engine)
-    var AutonomousOfflineCanvasLayer = L.GridLayer.extend({
-      createTile: function(coords) {
-        var tile = document.createElement('canvas');
-        var tileSize = this.getTileSize();
-        tile.width = tileSize.x;
-        tile.height = tileSize.y;
-        var ctx = tile.getContext('2d');
-        var w = tile.width;
-        var h = tile.height;
-
-        // 1. Tactical Navy Base Ground
-        ctx.fillStyle = '#0b1324';
-        ctx.fillRect(0, 0, w, h);
-
-        // 2. Topographic Contour Elevation Bands
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (var i = 0; i < 4; i++) {
-          var yBase = ((coords.y % 4) * 64 + i * 64) % h;
-          ctx.moveTo(0, yBase);
-          ctx.bezierCurveTo(w * 0.33, yBase - 18, w * 0.66, yBase + 24, w, yBase);
-        }
-        ctx.stroke();
-
-        // 3. City Infrastructure Blocks & Land Plots
-        ctx.fillStyle = '#111d33';
-        for (var bx = 16; bx < w - 30; bx += 64) {
-          for (var by = 16; by < h - 30; by += 64) {
-            ctx.fillRect(bx, by, 48, 44);
-            ctx.strokeStyle = '#1a2b47';
-            ctx.strokeRect(bx, by, 48, 44);
-          }
-        }
-
-        // 4. Urban Secondary Street Grid
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5);
-        ctx.moveTo(w * 0.5, 0); ctx.lineTo(w * 0.5, h);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
-
-        // 5. Major Arterial Evacuation Highway Corridor
-        var diagOffset = ((coords.x + coords.y) % 2 === 0);
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        if (diagOffset) {
-          ctx.moveTo(0, h * 0.15); ctx.lineTo(w, h * 0.85);
-        } else {
-          ctx.moveTo(0, h * 0.85); ctx.lineTo(w, h * 0.15);
-        }
-        ctx.stroke();
-
-        // Glowing Centerline
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.8;
-        ctx.setLineDash([8, 6]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // 6. River Channel & Floodplain Hazard Buffer
-        if ((coords.x + coords.y) % 3 === 0) {
-          ctx.fillStyle = 'rgba(2, 132, 199, 0.4)';
-          ctx.beginPath();
-          ctx.moveTo(0, h * 0.65);
-          ctx.bezierCurveTo(w * 0.4, h * 0.55, w * 0.6, h * 0.85, w, h * 0.75);
-          ctx.lineTo(w, h * 0.95);
-          ctx.bezierCurveTo(w * 0.6, h * 1.05, w * 0.4, h * 0.75, 0, h * 0.85);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.strokeStyle = '#0ea5e9';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          ctx.fillStyle = '#7dd3fc';
-          ctx.font = 'bold 9px monospace';
-          ctx.fillText('🌊 RIVER WATERWAY', 14, h * 0.78);
-
-          // Red Flood Hazard Buffer
-          ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
-          ctx.fillRect(0, h * 0.60, w, 14);
-          ctx.fillStyle = '#f87171';
-          ctx.font = 'bold 8px sans-serif';
-          ctx.fillText('⚠️ FLOOD RISK ZONE', 16, h * 0.64);
-        }
-
-        // 7. Tactical Road Name Labels
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = 'bold 9px sans-serif';
-        if (diagOffset) {
-          ctx.save();
-          ctx.translate(w * 0.38, h * 0.46);
-          ctx.rotate(Math.atan2(h * 0.7, w));
-          ctx.fillText('⚡ NH-19 EVAC CORRIDOR', -40, -5);
-          ctx.restore();
-        } else {
-          ctx.fillText('EVAC ROUTE ' + (coords.x % 10), 10, h * 0.46);
-        }
-
-        // 8. Tactical Coordinate Crosshairs & Corner Ticks
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, 8); ctx.lineTo(8, 8); ctx.lineTo(8, 0);
-        ctx.moveTo(w, 8); ctx.lineTo(w - 8, 8); ctx.lineTo(w - 8, 0);
-        ctx.moveTo(0, h - 8); ctx.lineTo(8, h - 8); ctx.lineTo(8, h);
-        ctx.moveTo(w, h - 8); ctx.lineTo(w - 8, h - 8); ctx.lineTo(w - 8, h);
-        ctx.stroke();
-
-        ctx.fillStyle = '#475569';
-        ctx.font = '8px monospace';
-        ctx.fillText(coords.z + '/' + coords.x + '/' + coords.y, w - 48, h - 6);
-
-        return tile;
-      }
-    });
-
-    var offlineTileLayer = new AutonomousOfflineCanvasLayer({
+    // 6. Downloaded Offline Map Layer
+    var downloadedTilesUrl = '${getLocalTileUrlTemplate()}';
+    var offlineTileLayer = L.tileLayer(downloadedTilesUrl, {
       maxZoom: 21,
-      attribution: 'NeerNetra Tactical Offline Navigation'
+      minNativeZoom: 14, // Upscale/downscale from zoom 14 tiles
+      maxNativeZoom: 14,
+      attribution: 'Downloaded Offline Map',
+      errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
     });
 
     var currentTileLayer = ${isOffline ? 'offlineTileLayer' : 'googleStreetLayer'};
@@ -804,12 +685,14 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       {/* ─── Ultra-Reliable Interactive WebGL/Canvas Map Engine ─── */}
       <RNCWebView
         ref={webViewRef}
-        source={{ html: leafletHtml }}
+        source={{ html: leafletHtml, baseUrl: 'file:///' }}
         style={styles.map}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         geolocationEnabled={true}
         allowFileAccess={true}
+        allowFileAccessFromFileURLs={true}
+        allowUniversalAccessFromFileURLs={true}
         allowsInlineMediaPlayback={true}
         originWhitelist={['*']}
         onMessage={(event: any) => {
