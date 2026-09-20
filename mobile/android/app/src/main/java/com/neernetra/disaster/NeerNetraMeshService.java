@@ -379,6 +379,18 @@ public class NeerNetraMeshService extends Service {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
 
+            // 1. Wake physical phone screen briefly for message (like WhatsApp)
+            PowerManager chatPm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (chatPm != null) {
+                @SuppressWarnings("deprecation")
+                PowerManager.WakeLock screenLock = chatPm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK |
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "NeerNetra:ChatScreenWakeUp"
+                );
+                screenLock.acquire(3000); // 3 seconds screen wake for chat
+            }
+
             // Ensure Notification Channel has IMPORTANCE_HIGH and VISIBILITY_PUBLIC on Android 8+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 NotificationChannel chatChan = new NotificationChannel(
