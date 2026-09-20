@@ -186,6 +186,9 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const initScreenData = async (lat: number, lng: number) => {
     const ready = await isOfflineMapReady();
     setOfflineReady(ready);
+    if (!ready && !isOffline) {
+      handleDownload();
+    }
     if (isRedZone) {
       await loadSafeRoute(lat, lng);
     }
@@ -434,14 +437,54 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       attribution: 'Dark Mode'
     });
 
-    // 6. Downloaded Offline Map Layer
-    var downloadedTilesUrl = '${getLocalTileUrlTemplate()}';
-    var offlineTileLayer = L.tileLayer(downloadedTilesUrl, {
+    // 6. Downloaded & Pre-bundled High-Definition Offline Map Layer
+    var OfflineSmartLayer = L.TileLayer.extend({
+      createTile: function(coords, done) {
+        var tile = document.createElement('img');
+        var localTemplate = '${getLocalTileUrlTemplate()}';
+        var localUrl = localTemplate.replace('{z}', coords.z).replace('{x}', coords.x).replace('{y}', coords.y);
+        var assetUrl = 'file:///android_asset/map_tiles/' + coords.z + '/' + coords.x + '/' + coords.y + '.png';
+
+        L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
+
+        var step = 0;
+        L.DomEvent.on(tile, 'error', L.Util.bind(function() {
+          if (step === 0) {
+            step = 1;
+            tile.src = assetUrl;
+          } else {
+            var canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#0a101d';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, 256, 256);
+            ctx.fillStyle = '#0284c7';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText('⚡ OFFLINE SECTOR', 12, 24);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px monospace';
+            ctx.fillText('Z' + coords.z + ' • X' + coords.x + ' Y' + coords.y, 12, 42);
+            done(null, canvas);
+          }
+        }, this));
+
+        tile.alt = '';
+        tile.setAttribute('role', 'presentation');
+        tile.src = localUrl;
+        return tile;
+      }
+    });
+
+    var offlineTileLayer = new OfflineSmartLayer('', {
+      minZoom: 10,
       maxZoom: 21,
-      minNativeZoom: 14, // Upscale/downscale from zoom 14 tiles
-      maxNativeZoom: 14,
-      attribution: 'Downloaded Offline Map',
-      errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+      minNativeZoom: 12,
+      maxNativeZoom: 15,
+      attribution: 'Offline Map'
     });
 
     var currentTileLayer = ${isOffline ? 'offlineTileLayer' : 'googleStreetLayer'};
@@ -685,7 +728,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       {/* ─── Ultra-Reliable Interactive WebGL/Canvas Map Engine ─── */}
       <RNCWebView
         ref={webViewRef}
-        source={{ html: leafletHtml, baseUrl: 'file:///' }}
+        source={{ html: leafletHtml, baseUrl: 'file:///android_asset/' }}
         style={styles.map}
         javaScriptEnabled={true}
         domStorageEnabled={true}
@@ -812,6 +855,39 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             </Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Offline Cache Status / Download Button */}
+        <TouchableOpacity
+          style={[
+            styles.downloadMapPill,
+            offlineReady && styles.downloadMapPillReady,
+            isDownloading && styles.downloadMapPillDownloading,
+          ]}
+          onPress={handleDownload}
+          disabled={isDownloading}
+          activeOpacity={0.8}
+        >
+          {isDownloading ? (
+            <ActivityIndicator size="small" color="#f59e0b" style={{ marginRight: 6 }} />
+          ) : offlineReady ? (
+            <CheckCircle2 size={13} color="#10b981" style={{ marginRight: 6 }} />
+          ) : (
+            <DownloadCloud size={13} color="#38bdf8" style={{ marginRight: 6 }} />
+          )}
+          <Text
+            style={[
+              styles.downloadMapPillText,
+              offlineReady && styles.downloadMapPillTextReady,
+              isDownloading && styles.downloadMapPillTextDownloading,
+            ]}
+          >
+            {isDownloading
+              ? `Caching High-Res Offline Map (${downloadProgress}%)...`
+              : offlineReady
+              ? '✓ Offline GIS Map Ready (100% Offline Active)'
+              : '📥 Download Full Zone Map for Offline Use'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* ─── Floating Map Quick-Action Buttons (Right Column) ─── */}
@@ -920,6 +996,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 4,
+  },
+  downloadMapPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    marginTop: 6,
+    elevation: 4,
+  },
+  downloadMapPillReady: {
+    borderColor: '#10b981',
+    backgroundColor: 'rgba(6, 78, 59, 0.85)',
+  },
+  downloadMapPillDownloading: {
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(69, 26, 3, 0.85)',
+  },
+  downloadMapPillText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  downloadMapPillTextReady: {
+    color: '#34d399',
+  },
+  downloadMapPillTextDownloading: {
+    color: '#fbbf24',
   },
   offlineBannerText: {
     color: '#fef3c7',

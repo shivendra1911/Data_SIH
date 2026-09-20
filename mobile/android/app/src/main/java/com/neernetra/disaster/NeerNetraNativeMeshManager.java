@@ -195,15 +195,16 @@ public class NeerNetraNativeMeshManager {
             .setTimeout(0)
             .build();
 
+        // Primary advertisement packet: Service UUID only (18 bytes, well within 31-byte limit)
         AdvertiseData data = new AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
-            .addServiceUuid(new ParcelUuid(NEERNETRA_16BIT_UUID))
             .build();
 
+        // Scan response packet: Manufacturer signature only (8 bytes, well within 31-byte limit)
         AdvertiseData.Builder scanBuilder = new AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
+            .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false);
         try {
             scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'E', 'E', 'R' });
@@ -266,11 +267,16 @@ public class NeerNetraNativeMeshManager {
                 isScanningNative = false;
             }
 
-            // Filter for our NeerNetra service UUID only — no location data involved
+            // Filter for our NeerNetra service UUID or manufacturer data — no location data involved
             List<ScanFilter> filters = new ArrayList<>();
             filters.add(new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
                 .build());
+            try {
+                filters.add(new ScanFilter.Builder()
+                    .setManufacturerData(0x4E65, new byte[] { 'N', 'E' })
+                    .build());
+            } catch (Exception ignored) {}
 
             ScanSettings scanSettings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)

@@ -64,10 +64,10 @@ export const downloadMapForZone = async (
       ((1.0 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2.0) * n
     );
 
-    // 3x3 grid around center tile = 9 tiles total
+    // 5x5 grid around center tile = 25 tiles total for wide sector coverage
     const tilesToDownload: { x: number; y: number }[] = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
         tilesToDownload.push({ x: centerTileX + dx, y: centerTileY + dy });
       }
     }

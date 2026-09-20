@@ -406,6 +406,16 @@ class NeerNetraBLEMesh {
             const peerId = (nativeDeviceId || '').toLowerCase();
             if (myId < peerId) {
               this.connectToPeer(nativeDeviceId).catch(() => {});
+            } else {
+              setTimeout(() => {
+                if (
+                  !this.connectedDevices.has(nativeDeviceId) &&
+                  !this.connectingDevices.has(nativeDeviceId) &&
+                  !this.peripheralClients.has(nativeDeviceId)
+                ) {
+                  this.connectToPeer(nativeDeviceId).catch(() => {});
+                }
+              }, 2500);
             }
           }
         }
