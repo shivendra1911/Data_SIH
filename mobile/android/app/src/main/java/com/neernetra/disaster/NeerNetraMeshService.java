@@ -1,12 +1,16 @@
 package com.neernetra.disaster;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.media.AudioAttributes;
@@ -15,8 +19,11 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -49,6 +56,38 @@ public class NeerNetraMeshService extends Service {
     private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
 
+    private final Handler watchdogHandler = new Handler(Looper.getMainLooper());
+    private final Runnable watchdogRunnable = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                Log.d(TAG, "[MeshService Watchdog] 10-minute health check — ensuring wakeLock and mesh engine alive");
+                acquirePartialWakeLock();
+                NeerNetraNativeMeshManager.getInstance(NeerNetraMeshService.this).startMeshEngine("NeerNetra-Node");
+            } catch (Exception e) {
+                Log.w(TAG, "[MeshService Watchdog] Check error: " + e.getMessage());
+            }
+            watchdogHandler.postDelayed(this, 10 * 60 * 1000); // every 10 minutes
+        }
+    };
+
+    private final BroadcastReceiver bluetoothStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent != null && BluetoothAdapter.ACTION_STATE_CHANGED.equals(intent.getAction())) {
+                int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                if (state == BluetoothAdapter.STATE_ON) {
+                    Log.i(TAG, "[MeshService] Bluetooth turned ON / radio reset — re-initializing 24/7 native mesh engine");
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        try {
+                            NeerNetraNativeMeshManager.getInstance(context).startMeshEngine("NeerNetra-Node");
+                        } catch (Exception ignored) {}
+                    }, 1500);
+                }
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -74,6 +113,14 @@ public class NeerNetraMeshService extends Service {
             } catch (Exception ignored) {}
         }
 
+        // Register dynamic receiver for Bluetooth state changes (handles toggles & earbud disconnect radio resets)
+        try {
+            IntentFilter btFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+            registerReceiver(bluetoothStateReceiver, btFilter);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not register bluetoothStateReceiver: " + e.getMessage());
+        }
+
         // Boot 24/7 Native BLE Mesh Engine immediately
         try {
             NeerNetraNativeMeshManager.getInstance(this).startMeshEngine("NeerNetra-Node");
@@ -81,6 +128,9 @@ public class NeerNetraMeshService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Failed to start native mesh engine: " + e.getMessage());
         }
+
+        // Start 10-minute periodic watchdog
+        watchdogHandler.postDelayed(watchdogRunnable, 10 * 60 * 1000);
     }
 
     @Override
@@ -110,8 +160,42 @@ public class NeerNetraMeshService extends Service {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.i(TAG, "[MeshService] onTaskRemoved triggered — user swiped away app from Recents. Scheduling instant resurrection!");
+        try {
+            Intent restartServiceIntent = new Intent(getApplicationContext(), NeerNetraMeshService.class);
+            restartServiceIntent.setPackage(getPackageName());
+            int piFlags = PendingIntent.FLAG_ONE_SHOT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                piFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent restartServicePendingIntent = PendingIntent.getService(
+                getApplicationContext(),
+                1001,
+                restartServiceIntent,
+                piFlags
+            );
+            AlarmManager alarmService = (AlarmManager) getApplicationContext().getSystemService(Context.ALARM_SERVICE);
+            if (alarmService != null) {
+                alarmService.set(
+                    AlarmManager.ELAPSED_REALTIME,
+                    SystemClock.elapsedRealtime() + 1000,
+                    restartServicePendingIntent
+                );
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "[MeshService] Failed to schedule resurrection alarm: " + e.getMessage());
+        }
+    }
+
+    @Override
     public void onDestroy() {
         Log.i(TAG, "[MeshService] Service destroying, releasing wake locks");
+        watchdogHandler.removeCallbacks(watchdogRunnable);
+        try {
+            unregisterReceiver(bluetoothStateReceiver);
+        } catch (Exception ignored) {}
         releasePartialWakeLock();
         stopEmergencyAlarm();
         super.onDestroy();

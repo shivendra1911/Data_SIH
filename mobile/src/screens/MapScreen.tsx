@@ -439,42 +439,50 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     // 6. Downloaded & Pre-bundled High-Definition Offline Map Layer
     var OfflineSmartLayer = L.TileLayer.extend({
+      getTileUrl: function(coords) {
+        return 'map_tiles/' + coords.z + '/' + coords.x + '/' + coords.y + '.png';
+      },
       createTile: function(coords, done) {
         var tile = document.createElement('img');
+        var assetUrl = 'map_tiles/' + coords.z + '/' + coords.x + '/' + coords.y + '.png';
         var localTemplate = '${getLocalTileUrlTemplate()}';
         var localUrl = localTemplate.replace('{z}', coords.z).replace('{x}', coords.x).replace('{y}', coords.y);
-        var assetUrl = 'file:///android_asset/map_tiles/' + coords.z + '/' + coords.x + '/' + coords.y + '.png';
 
         L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
 
-        var step = 0;
+        var triedAsset = true;
         L.DomEvent.on(tile, 'error', L.Util.bind(function() {
-          if (step === 0) {
-            step = 1;
-            tile.src = assetUrl;
+          if (triedAsset) {
+            triedAsset = false;
+            tile.src = localUrl;
           } else {
             var canvas = document.createElement('canvas');
             canvas.width = 256;
             canvas.height = 256;
             var ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#0a101d';
+            ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, 256, 256);
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 1;
             ctx.strokeRect(0, 0, 256, 256);
-            ctx.fillStyle = '#0284c7';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillText('⚡ OFFLINE SECTOR', 12, 24);
+            ctx.strokeStyle = '#172554';
+            ctx.beginPath();
+            ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+            ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+            ctx.stroke();
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('⚡ TACTICAL GIS SECTOR', 12, 24);
             ctx.fillStyle = '#64748b';
-            ctx.font = '10px monospace';
-            ctx.fillText('Z' + coords.z + ' • X' + coords.x + ' Y' + coords.y, 12, 42);
+            ctx.font = '9px monospace';
+            ctx.fillText('Z' + coords.z + ' • X' + coords.x + ' Y' + coords.y, 12, 40);
             done(null, canvas);
           }
         }, this));
 
         tile.alt = '';
         tile.setAttribute('role', 'presentation');
-        tile.src = localUrl;
+        tile.src = assetUrl;
         return tile;
       }
     });
@@ -482,7 +490,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     var offlineTileLayer = new OfflineSmartLayer('', {
       minZoom: 10,
       maxZoom: 21,
-      minNativeZoom: 12,
+      minNativeZoom: 10,
       maxNativeZoom: 15,
       attribution: 'Offline Map'
     });

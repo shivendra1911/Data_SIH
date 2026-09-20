@@ -72,6 +72,7 @@
         android:name=".NeerNetraMeshService"
         android:enabled="true"
         android:exported="false"
+        android:stopWithTask="false"
         android:foregroundServiceType="connectedDevice" />
 
     <!-- System Boot / Update Auto-Restart Receiver -->

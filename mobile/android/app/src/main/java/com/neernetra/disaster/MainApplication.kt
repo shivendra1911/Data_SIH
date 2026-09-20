@@ -36,6 +36,11 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    try {
+      NeerNetraMeshService.startService(this)
+    } catch (e: Exception) {
+      // Ignored
+    }
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

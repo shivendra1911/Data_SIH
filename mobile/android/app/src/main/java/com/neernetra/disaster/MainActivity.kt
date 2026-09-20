@@ -22,7 +22,24 @@ class MainActivity : ReactActivity() {
     setTheme(R.style.AppTheme)
     super.onCreate(null)
     setupLockScreenFlags()
+    checkBatteryOptimizations()
     handleEmergencyIntent(intent)
+  }
+
+  private fun checkBatteryOptimizations() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+      if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
+        try {
+          val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = android.net.Uri.parse("package:$packageName")
+          }
+          startActivity(intent)
+        } catch (e: Exception) {
+          // Fallback if OEM blocks direct prompt
+        }
+      }
+    }
   }
 
   private fun setupLockScreenFlags() {

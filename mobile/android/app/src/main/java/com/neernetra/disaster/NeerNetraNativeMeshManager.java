@@ -72,6 +72,18 @@ public class NeerNetraNativeMeshManager {
     private boolean isScanningNative = false;
     private boolean isRunning = false;
 
+    private final android.os.Handler scanRecycleHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable scanRecycleRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isRunning) {
+                Log.i(TAG, "[MeshWatchdog] Recycling native BLE scan to prevent 30-min OS limit");
+                restartNativeScanning();
+            }
+            scanRecycleHandler.postDelayed(this, 10 * 60 * 1000);
+        }
+    };
+
     private NeerNetraNativeMeshManager(Context context) {
         this.appContext = context.getApplicationContext();
         this.bluetoothManager = (BluetoothManager) appContext.getSystemService(Context.BLUETOOTH_SERVICE);
@@ -89,6 +101,9 @@ public class NeerNetraNativeMeshManager {
 
     public synchronized boolean startMeshEngine(String deviceName) {
         if (isRunning && gattServer != null) {
+            if (!isScanningNative) {
+                startNativeScanning();
+            }
             Log.i(TAG, "Mesh engine already active");
             return true;
         }
@@ -155,6 +170,9 @@ public class NeerNetraNativeMeshManager {
 
             // 3. Start native BLE background scanner (runs 24/7 even when JS is killed)
             startNativeScanning();
+
+            scanRecycleHandler.removeCallbacks(scanRecycleRunnable);
+            scanRecycleHandler.postDelayed(scanRecycleRunnable, 10 * 60 * 1000);
 
             isRunning = true;
             Log.i(TAG, "24/7 Native BLE Mesh Engine successfully started!");
@@ -339,6 +357,22 @@ public class NeerNetraNativeMeshManager {
         } catch (Exception e) {
             Log.w(TAG, "Native scan start error: " + e.getMessage());
         }
+    }
+
+    public synchronized void restartNativeScanning() {
+        if (!isRunning) return;
+        try {
+            if (nativeScanner != null && isScanningNative && nativeScanCallback != null) {
+                nativeScanner.stopScan(nativeScanCallback);
+                isScanningNative = false;
+            }
+        } catch (Exception ignored) {}
+
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            if (isRunning) {
+                startNativeScanning();
+            }
+        }, 1000);
     }
 
 
@@ -725,6 +759,7 @@ public class NeerNetraNativeMeshManager {
 
     public synchronized void stopMeshEngine() {
         try {
+            scanRecycleHandler.removeCallbacks(scanRecycleRunnable);
             if (advertiser != null) advertiser.stopAdvertising(advertiseCallback);
             if (nativeScanner != null && nativeScanCallback != null && isScanningNative) {
                 try { nativeScanner.stopScan(nativeScanCallback); } catch (Exception ignored) {}
