@@ -502,27 +502,39 @@ export const sendHighFrequencyTelemetry = async (payload: TelemetryStreamPayload
     const noteContent = `${payload.phone_model || 'Mobile Device'} | 5s Stream | Acc: ±${Math.round(payload.accuracy || 0)}m | Alt: ${Math.round(payload.altitude || 0)}m`;
     
     // 1. Post to Supabase Cloud
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     await fetch(`${SUPABASE_REST_URL}/sos_alerts`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
+        Prefer: 'return=minimal',
       },
-      body: JSON.stringify({
-        device_id: payload.device_uuid,
-        lat: payload.lat,
-        lng: payload.lng,
-        status: payload.status,
-        sos_type: payload.sos_type || 'LOCATION_TRACKING',
-        notes: noteContent,
-        created_at: payload.timestamp,
-      }),
+      signal: controller.signal,
+      body: JSON.stringify([
+        {
+          device_id: payload.device_uuid,
+          lat: payload.lat,
+          lng: payload.lng,
+          status: payload.status,
+          sos_type: payload.sos_type || 'LOCATION_TRACKING',
+          notes: noteContent,
+        },
+      ]),
     }).catch(() => {});
+    clearTimeout(timeoutId);
 
-    // 2. Also forward to local web dashboard
-    for (const base of ['http://127.0.0.1:3000', 'http://10.0.2.2:3000']) {
+    // 2. Also forward to local web dashboard & active gateways
+    const candidateBases = [
+      'http://127.0.0.1:3000',
+      'http://localhost:3000',
+      'http://10.0.2.2:3000',
+      workingBaseUrl,
+    ];
+    for (const base of candidateBases) {
+      if (!base) continue;
       fetch(`${base}/api/citizen/telemetry-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

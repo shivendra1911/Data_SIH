@@ -163,14 +163,33 @@ export const start5SecDisasterLocationStream = (deviceUuid: string) => {
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
-        const currentPos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        lat = currentPos.coords.latitude;
-        lng = currentPos.coords.longitude;
-        altitude = currentPos.coords.altitude;
-        accuracy = currentPos.coords.accuracy;
-        speed = currentPos.coords.speed;
+        // Fast instant fallback from last known hardware fix
+        try {
+          const lastLoc = await Location.getLastKnownPositionAsync();
+          if (lastLoc && lastLoc.coords) {
+            lat = lastLoc.coords.latitude;
+            lng = lastLoc.coords.longitude;
+            altitude = lastLoc.coords.altitude;
+            accuracy = lastLoc.coords.accuracy;
+            speed = lastLoc.coords.speed;
+          }
+        } catch {}
+
+        // Race with 3500ms timeout so 5s loop never hangs on GPS acquisition
+        try {
+          const freshPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+          const fresh = await Promise.race([freshPromise, timeoutPromise]);
+          if (fresh && (fresh as any).coords) {
+            lat = (fresh as any).coords.latitude;
+            lng = (fresh as any).coords.longitude;
+            altitude = (fresh as any).coords.altitude;
+            accuracy = (fresh as any).coords.accuracy;
+            speed = (fresh as any).coords.speed;
+          }
+        } catch {}
       }
 
       const phoneModel = getDeviceModelName();

@@ -53,20 +53,47 @@ export async function GET(req: NextRequest) {
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       for (const alert of cloudAlerts) {
-        if (alert.notes?.includes("5s Stream") || alert.status === "SOS_STREAM" || alert.status === "SOS") {
+        // Exclude dummy test devices and synthetic pings
+        const devId = (alert.device_id || "").toLowerCase();
+        const noteStr = (alert.notes || "").toLowerCase();
+        if (
+          !alert.device_id ||
+          devId === "test" ||
+          devId === "test2" ||
+          devId.startsWith("test") ||
+          devId.includes("dummy") ||
+          devId.includes("mock") ||
+          devId === "cloud_device" ||
+          noteStr.startsWith("test")
+        ) {
+          continue;
+        }
+
+        const isTelemetry =
+          alert.notes?.includes("5s Stream") ||
+          alert.notes?.includes("live GPS") ||
+          alert.notes?.includes("Periodic") ||
+          alert.notes?.includes("check-in") ||
+          alert.status === "SOS_STREAM" ||
+          alert.status === "LOCATION_TRACKING" ||
+          alert.status === "SOS" ||
+          alert.sos_type === "LOCATION_TRACKING" ||
+          alert.sos_type === "CHECKIN";
+
+        if (isTelemetry && alert.lat != null && alert.lng != null) {
           const exists = stream.some((s) => s.id === alert.id || s.timestamp === alert.created_at);
           if (!exists) {
-            let model = "Mobile Device";
+            let model = "Android Phone";
             if (alert.notes) {
               const parts = alert.notes.split("|");
-              if (parts[0]) model = parts[0].trim();
+              if (parts[0] && parts[0].trim()) model = parts[0].trim();
             }
             stream.push({
               id: alert.id || `cloud-${alert.created_at}`,
-              device_uuid: alert.device_id || "cloud_device",
+              device_uuid: alert.device_id,
               phone_model: model,
-              lat: alert.lat,
-              lng: alert.lng,
+              lat: Number(alert.lat),
+              lng: Number(alert.lng),
               altitude: 184,
               accuracy: 10,
               speed: 0,
@@ -81,6 +108,15 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.debug("[TelemetryStream API] Supabase query notice:", err);
   }
+
+  // Filter out any lingering dummy entries from memory stream as well
+  stream = stream.filter(
+    (b) =>
+      b.device_uuid &&
+      !b.device_uuid.toLowerCase().startsWith("test") &&
+      !b.device_uuid.toLowerCase().includes("dummy") &&
+      !b.phone_model.toLowerCase().startsWith("test")
+  );
 
   // Sort descending by timestamp
   stream.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());

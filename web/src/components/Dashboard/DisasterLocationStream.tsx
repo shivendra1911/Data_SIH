@@ -71,8 +71,16 @@ export default function DisasterLocationStream() {
 
   // Group breadcrumbs strictly by real connected device_uuid
   const detectedNodes = useMemo(() => {
+    const cleanBreadcrumbs = breadcrumbs.filter(
+      (b) =>
+        b.device_uuid &&
+        !b.device_uuid.toLowerCase().startsWith("test") &&
+        !b.device_uuid.toLowerCase().includes("dummy") &&
+        !b.phone_model.toLowerCase().startsWith("test")
+    );
+
     const map = new Map<string, { model: string; points: Breadcrumb[] }>();
-    breadcrumbs.forEach((b) => {
+    cleanBreadcrumbs.forEach((b) => {
       const list = map.get(b.device_uuid) || { model: b.phone_model || "Android Phone", points: [] };
       list.points.push(b);
       map.set(b.device_uuid, list);
@@ -106,16 +114,23 @@ export default function DisasterLocationStream() {
 
   // Active breadcrumbs to display in the chronological list
   const activeBreadcrumbs = useMemo(() => {
+    const cleanBreadcrumbs = breadcrumbs.filter(
+      (b) =>
+        b.device_uuid &&
+        !b.device_uuid.toLowerCase().startsWith("test") &&
+        !b.device_uuid.toLowerCase().includes("dummy") &&
+        !b.phone_model.toLowerCase().startsWith("test")
+    );
     if (selectedNodeId === "ALL") {
-      return breadcrumbs;
+      return cleanBreadcrumbs;
     }
     if (activeNode) {
       return activeNode.breadcrumbs;
     }
-    return breadcrumbs;
+    return cleanBreadcrumbs;
   }, [selectedNodeId, activeNode, breadcrumbs]);
 
-  const latest = activeNode?.latestPoint || breadcrumbs[0] || null;
+  const latest = activeNode?.latestPoint || activeBreadcrumbs[0] || null;
 
   return (
     <div className="rounded-3xl border border-slate-200 glass-card shadow-lg overflow-hidden font-sans">

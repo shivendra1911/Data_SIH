@@ -32,6 +32,7 @@ import {
 import {
   getLastKnownLocation,
   start5MinPeriodicLocationTracker,
+  stopPeriodicLocationTracker,
   start5SecDisasterLocationStream,
   stop5SecDisasterLocationStream,
 } from '../services/locationTracker';
@@ -179,6 +180,8 @@ export const HomeScreen: React.FC = () => {
     return () => {
       mobileSirenListener.stop();
       unsubscribeWake();
+      stopPeriodicLocationTracker();
+      stop5SecDisasterLocationStream();
     };
   }, []);
 
@@ -191,6 +194,7 @@ export const HomeScreen: React.FC = () => {
       }
       setDeviceUuid(storedUuid);
       start5MinPeriodicLocationTracker(storedUuid, 'local_sector');
+      start5SecDisasterLocationStream(storedUuid);
       const cachedLoc = await getLastKnownLocation();
       setLastLocation(cachedLoc);
 

@@ -505,7 +505,7 @@ class NeerNetraBLEMesh {
           const nowMs = Date.now();
           this.activePeers.forEach((p, id) => {
             if (!this.connectedDevices.has(id) && !this.peripheralClients.has(id)) {
-              if (p.lastSeen && (nowMs - p.lastSeen.getTime() > 90000)) {
+              if (p.lastSeen && (nowMs - new Date(p.lastSeen).getTime() > 90000)) {
                 this.activePeers.delete(id);
               }
             }

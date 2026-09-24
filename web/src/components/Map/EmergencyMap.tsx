@@ -347,8 +347,18 @@ export default function EmergencyMap({
   const [showLastKnownCitizens, setShowLastKnownCitizens] = useState<boolean>(true);
   const [showSafeRoutes, setShowSafeRoutes] = useState<boolean>(true);
   const [showResponders, setShowResponders] = useState<boolean>(true);
-  const [basemap, setBasemap] = useState<"topo" | "satellite" | "osm">("topo");
+  const [basemap, setBasemap] = useState<"hybrid" | "satellite" | "terrain" | "street">("hybrid");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  // Filter out any mock/dummy telemetry devices
+  const realCitizens = citizens.filter(
+    (c) =>
+      c.device_uuid &&
+      !c.device_uuid.toLowerCase().includes("test") &&
+      !c.device_uuid.toLowerCase().includes("dummy") &&
+      !c.device_uuid.toLowerCase().includes("mock") &&
+      !c.device_uuid.toLowerCase().includes("cloud_device")
+  );
 
   const activeSafeRoutes =
     safeRoutes && safeRoutes.length > 0
@@ -360,24 +370,38 @@ export default function EmergencyMap({
       ? responders
       : getRespondersForZone(activeZone);
 
+  const googleApiKey =
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    "AIzaSyBuZa36PDwWKduUlVQKPWoqPS7TiwW10EI";
+
   const basemapConfigs = {
-    topo: {
-      name: "Topographic Contours",
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-      attribution: "Tiles &copy; Esri, DeLorme, USGS, NPS",
-      maxZoom: 19,
+    hybrid: {
+      name: "Google Hybrid (Satellite + Roads)",
+      url: `https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${googleApiKey}`,
+      subdomains: ["0", "1", "2", "3"],
+      attribution: "&copy; Google Maps",
+      maxZoom: 21,
     },
     satellite: {
-      name: "Satellite Recon",
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      attribution: "Tiles &copy; Esri, Maxar, Earthstar Geographics",
-      maxZoom: 18,
+      name: "Google Satellite",
+      url: `https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${googleApiKey}`,
+      subdomains: ["0", "1", "2", "3"],
+      attribution: "&copy; Google Maps",
+      maxZoom: 21,
     },
-    osm: {
-      name: "Tactical Street",
-      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution: "&copy; OpenStreetMap contributors",
-      maxZoom: 19,
+    terrain: {
+      name: "Google Terrain (Relief)",
+      url: `https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&key=${googleApiKey}`,
+      subdomains: ["0", "1", "2", "3"],
+      attribution: "&copy; Google Maps",
+      maxZoom: 21,
+    },
+    street: {
+      name: "Google Roadmap",
+      url: `https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${googleApiKey}`,
+      subdomains: ["0", "1", "2", "3"],
+      attribution: "&copy; Google Maps",
+      maxZoom: 21,
     },
   };
 
@@ -385,6 +409,12 @@ export default function EmergencyMap({
 
   return (
     <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-white/10 bg-[#161a20] shadow-sm">
+      {/* Live Google Maps Status Indicator */}
+      <div className="absolute top-3 left-3 z-[1000] bg-[#161a20]/90 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow-xl flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        <span>Google Maps Engine • Live PostGIS Telemetry</span>
+      </div>
+
       <MapContainer
         center={center}
         zoom={zoom}
@@ -393,11 +423,12 @@ export default function EmergencyMap({
       >
         <MapViewController center={center} zoom={zoom} />
 
-        {/* Clean Tactical Tiles with Zero Watermarks */}
+        {/* Official Google Maps Live Tiles */}
         <TileLayer
           key={basemap}
           attribution={basemapConfigs[basemap].attribution}
           url={basemapConfigs[basemap].url}
+          subdomains={basemapConfigs[basemap].subdomains}
           maxZoom={basemapConfigs[basemap].maxZoom}
         />
 
@@ -564,7 +595,7 @@ export default function EmergencyMap({
 
         {/* Live Citizen Telemetry Pins */}
         {showLiveCitizens &&
-          citizens
+          realCitizens
             .filter((c) => c.is_live)
             .map((citizen) => (
               <Marker
@@ -595,7 +626,7 @@ export default function EmergencyMap({
 
         {/* Last Known Locations (Offline / Relayed via BLE Mesh) */}
         {showLastKnownCitizens &&
-          citizens
+          realCitizens
             .filter((c) => !c.is_live)
             .map((citizen) => (
               <React.Fragment key={citizen.id}>
@@ -844,7 +875,7 @@ export default function EmergencyMap({
                     : "bg-[#161a20] text-white/70 border border-white/10 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <span>🟢 Live Citizens ({citizens.filter((c) => c.is_live).length || sosEvents.length})</span>
+                <span>🟢 Live Citizens ({realCitizens.filter((c) => c.is_live).length || sosEvents.length})</span>
               </button>
 
               {/* Last Known Locations (BLE Mesh) */}
@@ -856,52 +887,67 @@ export default function EmergencyMap({
                     : "bg-[#161a20] text-white/70 border border-white/10 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <span>⏱️ Last Known ({citizens.filter((c) => !c.is_live).length})</span>
+                <span>⏱️ Last Known ({realCitizens.filter((c) => !c.is_live).length})</span>
               </button>
             </div>
           </div>
 
           {/* Basemap Selection */}
           <div className="pt-2.5 border-t border-white/10 mt-2">
-            <div className="text-[10px] font-bold uppercase text-white/60 flex items-center gap-1 mb-1.5">
-              <Globe className="w-3 h-3 text-white" aria-hidden /> Terrain Mode
+            <div className="text-[10px] font-bold uppercase text-white/60 flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-1">
+                <Globe className="w-3 h-3 text-emerald-400" aria-hidden /> Google Maps
+              </span>
+              <span className="text-[9px] text-emerald-400 font-mono font-bold">● LIVE</span>
             </div>
-            <div className="grid grid-cols-3 gap-1 bg-[#161a20] p-1 rounded-xl border border-white/10">
+            <div className="grid grid-cols-4 gap-1 bg-[#161a20] p-1 rounded-xl border border-white/10">
               <button
-                onClick={() => setBasemap("topo")}
-                className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 cursor-pointer ${
-                  basemap === "topo"
+                type="button"
+                onClick={() => setBasemap("hybrid")}
+                className={`px-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-0.5 cursor-pointer ${
+                  basemap === "hybrid"
                     ? "bg-white text-[#161a20] shadow-sm"
                     : "text-white/60 hover:text-white"
                 }`}
-                title="Elevation Contours (Esri Topo)"
+                title="Google Hybrid (Satellite + Roads)"
               >
-                <Mountain className="w-3 h-3" aria-hidden />
-                <span>Topo</span>
+                <span>Hybrid</span>
               </button>
               <button
+                type="button"
                 onClick={() => setBasemap("satellite")}
-                className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`px-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-0.5 cursor-pointer ${
                   basemap === "satellite"
                     ? "bg-white text-[#161a20] shadow-sm"
                     : "text-white/60 hover:text-white"
                 }`}
-                title="Satellite Reconnaissance (Esri Imagery)"
+                title="Google Satellite Recon"
               >
-                <Satellite className="w-3 h-3" aria-hidden />
                 <span>Sat</span>
               </button>
               <button
-                onClick={() => setBasemap("osm")}
-                className={`px-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1 cursor-pointer ${
-                  basemap === "osm"
+                type="button"
+                onClick={() => setBasemap("terrain")}
+                className={`px-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-0.5 cursor-pointer ${
+                  basemap === "terrain"
                     ? "bg-white text-[#161a20] shadow-sm"
                     : "text-white/60 hover:text-white"
                 }`}
-                title="OpenStreetMap Road Network"
+                title="Google Mountain Relief & Contours"
               >
-                <Globe className="w-3 h-3" aria-hidden />
-                <span>OSM</span>
+                <span>Terrain</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBasemap("street")}
+                className={`px-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-0.5 cursor-pointer ${
+                  basemap === "street"
+                    ? "bg-white text-[#161a20] shadow-sm"
+                    : "text-white/60 hover:text-white"
+                }`}
+                title="Google Vector Streets Roadmap"
+              >
+                <span>Street</span>
               </button>
             </div>
           </div>

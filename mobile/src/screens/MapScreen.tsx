@@ -108,6 +108,13 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     accuracy: number | null;
     speed: number | null;
   } | null>(null);
+  const liveCoordsRef = useRef<{
+    latitude: number;
+    longitude: number;
+    heading: number | null;
+    accuracy: number | null;
+    speed: number | null;
+  } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'ACQUIRING' | 'LOCKED' | 'PERMISSION_DENIED'>('ACQUIRING');
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
 
@@ -127,9 +134,31 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           return;
         }
 
+        // 0. Fast instant cached GPS location lock
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown && isMounted) {
+            const coords = {
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              heading: lastKnown.coords.heading,
+              accuracy: lastKnown.coords.accuracy,
+              speed: lastKnown.coords.speed,
+            };
+            liveCoordsRef.current = coords;
+            setLiveCoords(coords);
+            setGpsStatus('LOCKED');
+            sendGpsToMap(coords.latitude, coords.longitude, coords.accuracy || 10, true);
+            loadSafeRoute(coords.latitude, coords.longitude);
+            loadNearbyCitizens(coords.latitude, coords.longitude);
+          }
+        } catch (cachedErr) {
+          console.warn('[MapScreen] Failed to get last known location:', cachedErr);
+        }
+
         // 1. Initial fast GPS lock
         const initialLoc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.Balanced,
         });
 
         if (initialLoc && isMounted) {
@@ -140,6 +169,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             accuracy: initialLoc.coords.accuracy,
             speed: initialLoc.coords.speed,
           };
+          liveCoordsRef.current = coords;
           setLiveCoords(coords);
           setGpsStatus('LOCKED');
 
@@ -164,6 +194,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               accuracy: loc.coords.accuracy,
               speed: loc.coords.speed,
             };
+            liveCoordsRef.current = coords;
             setLiveCoords(coords);
             setGpsStatus('LOCKED');
             sendGpsToMap(coords.latitude, coords.longitude, coords.accuracy || 10, false);
@@ -322,32 +353,62 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     html, body, #map { width: 100%; height: 100%; background: #0f172a; overflow: hidden; }
     .user-beacon {
       position: relative;
-      width: 28px;
-      height: 28px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .user-beacon-core {
       position: absolute;
-      top: 5px;
-      left: 5px;
-      width: 18px;
-      height: 18px;
+      width: 22px;
+      height: 22px;
       background: #0284c7;
-      border: 3px solid #ffffff;
+      border: 3.5px solid #ffffff;
       border-radius: 50%;
-      box-shadow: 0 0 10px rgba(2, 132, 199, 0.9);
+      box-shadow: 0 0 16px rgba(2, 132, 199, 1), 0 3px 8px rgba(0,0,0,0.7);
       z-index: 10;
     }
     .user-beacon-pulse {
       position: absolute;
-      top: -6px;
-      left: -6px;
-      width: 40px;
-      height: 40px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
-      background: rgba(2, 132, 199, 0.35);
-      border: 2px solid #0284c7;
+      background: rgba(2, 132, 199, 0.45);
+      border: 2px solid #38bdf8;
       animation: beaconRipple 1.8s infinite ease-out;
       z-index: 5;
+    }
+    .user-beacon-pointer {
+      position: absolute;
+      top: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 10px solid #0284c7;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+      z-index: 18;
+    }
+    .user-beacon-tag {
+      position: absolute;
+      top: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0284c7;
+      color: #ffffff;
+      font-size: 9px;
+      font-weight: 900;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 2px 7px;
+      border-radius: 6px;
+      border: 1.5px solid #ffffff;
+      white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.7);
+      letter-spacing: 0.5px;
+      z-index: 20;
     }
     @keyframes beaconRipple {
       0% { transform: scale(0.5); opacity: 1; }
@@ -578,9 +639,9 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
     var userIcon = L.divIcon({
       className: '',
-      html: '<div class="user-beacon"><div class="user-beacon-pulse"></div><div class="user-beacon-core"></div></div>',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14]
+      html: '<div class="user-beacon"><div class="user-beacon-tag">YOU ARE HERE</div><div class="user-beacon-pointer"></div><div class="user-beacon-pulse"></div><div class="user-beacon-core"></div></div>',
+      iconSize: [44, 44],
+      iconAnchor: [22, 22]
     });
 
     var rangeCircles = [];
@@ -598,7 +659,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       lastUserLng = lng;
       updateRangeRings(lat, lng);
       if (!userMarker) {
-        userMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+        userMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 10000 }).addTo(map);
         accuracyCircle = L.circle([lat, lng], {
           radius: accuracy || 15,
           color: '#0284c7',
@@ -617,6 +678,9 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         map.panTo([lat, lng], { animate: true, duration: 0.8 });
       }
     };
+
+    // Immediately spawn the location marker & pointer at current coordinates on load
+    window.updateUserGps(lastUserLat, lastUserLng, 15, true);
 
     window.centerOnUser = function() {
       map.flyTo([lastUserLat, lastUserLng], 16, { duration: 0.6 });
@@ -751,8 +815,11 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             const data = JSON.parse(event.nativeEvent.data);
             if (data.type === 'MAP_READY') {
               setMapLoaded(true);
-              if (liveCoords) {
-                sendGpsToMap(liveCoords.latitude, liveCoords.longitude, liveCoords.accuracy || 10, true);
+              const active = liveCoordsRef.current;
+              if (active) {
+                sendGpsToMap(active.latitude, active.longitude, active.accuracy || 10, true);
+              } else {
+                sendGpsToMap(currentLat, currentLng, 15, true);
               }
               if (isRedZone && safeRouteData) {
                 sendRouteToMap(safeRouteData);
