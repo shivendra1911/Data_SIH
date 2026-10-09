@@ -86,7 +86,7 @@ public class IncomingCallActivity extends Activity {
         };
         IntentFilter filter = new IntentFilter(ACTION_DISMISS_INCOMING_CALL);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(dismissReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(dismissReceiver, filter, Context.RECEIVER_EXPORTED);
         } else {
             registerReceiver(dismissReceiver, filter);
         }
@@ -139,18 +139,26 @@ public class IncomingCallActivity extends Activity {
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(dp(24), dp(48), dp(24), dp(48));
 
+        boolean isSiren = "SIREN".equalsIgnoreCase(emergencyType) || "EVACUATION".equalsIgnoreCase(emergencyType);
+
         TextView topPill = new TextView(this);
-        topPill.setText(isGroupCall ? "🚨 GROUP EMERGENCY INTERCOM" : "📞 DIRECT BLE MESH CALL");
+        if (isSiren) {
+            topPill.setText("🚨 EMERGENCY CIVIL DEFENSE SIREN");
+        } else if (isGroupCall) {
+            topPill.setText("🚨 GROUP EMERGENCY INTERCOM");
+        } else {
+            topPill.setText("📞 DIRECT BLE MESH CALL");
+        }
         topPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        topPill.setTextColor(isGroupCall ? Color.parseColor("#ef4444") : Color.parseColor("#38bdf8"));
+        topPill.setTextColor((isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#38bdf8"));
         topPill.setTypeface(Typeface.DEFAULT_BOLD);
         topPill.setGravity(Gravity.CENTER);
         topPill.setPadding(dp(16), dp(8), dp(16), dp(8));
 
         GradientDrawable pillBg = new GradientDrawable();
-        pillBg.setColor(isGroupCall ? Color.parseColor("#2a1215") : Color.parseColor("#0c2340"));
+        pillBg.setColor((isSiren || isGroupCall) ? Color.parseColor("#2a1215") : Color.parseColor("#0c2340"));
         pillBg.setCornerRadius(dp(20));
-        pillBg.setStroke(dp(1), isGroupCall ? Color.parseColor("#ef4444") : Color.parseColor("#0284c7"));
+        pillBg.setStroke(dp(1), (isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#0284c7"));
         topPill.setBackground(pillBg);
         root.addView(topPill);
 
@@ -171,7 +179,7 @@ public class IncomingCallActivity extends Activity {
         GradientDrawable waveBg = new GradientDrawable();
         waveBg.setShape(GradientDrawable.OVAL);
         waveBg.setColor(Color.TRANSPARENT);
-        waveBg.setStroke(dp(2), isGroupCall ? Color.parseColor("#ef4444") : Color.parseColor("#10b981"));
+        waveBg.setStroke(dp(2), (isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#10b981"));
         waveRing.setBackground(waveBg);
 
         ScaleAnimation pulse = new ScaleAnimation(
@@ -190,12 +198,12 @@ public class IncomingCallActivity extends Activity {
         coreParams.gravity = Gravity.CENTER;
         coreAvatar.setLayoutParams(coreParams);
         coreAvatar.setGravity(Gravity.CENTER);
-        coreAvatar.setText(isGroupCall ? "🚨" : "👤");
+        coreAvatar.setText((isSiren || isGroupCall) ? "🚨" : "👤");
         coreAvatar.setTextSize(TypedValue.COMPLEX_UNIT_SP, 48);
 
         GradientDrawable coreBg = new GradientDrawable();
         coreBg.setShape(GradientDrawable.OVAL);
-        coreBg.setColor(isGroupCall ? Color.parseColor("#991b1b") : Color.parseColor("#0369a1"));
+        coreBg.setColor((isSiren || isGroupCall) ? Color.parseColor("#991b1b") : Color.parseColor("#0369a1"));
         coreBg.setStroke(dp(3), Color.parseColor("#ffffff"));
         coreAvatar.setBackground(coreBg);
         avatarContainer.addView(coreAvatar);
@@ -203,7 +211,7 @@ public class IncomingCallActivity extends Activity {
         root.addView(avatarContainer);
 
         TextView nameView = new TextView(this);
-        nameView.setText(callerName);
+        nameView.setText(isSiren ? "CIVIL DEFENSE ALARM" : callerName);
         nameView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
         nameView.setTextColor(Color.WHITE);
         nameView.setTypeface(Typeface.DEFAULT_BOLD);
@@ -216,9 +224,13 @@ public class IncomingCallActivity extends Activity {
         root.addView(nameView);
 
         TextView subView = new TextView(this);
-        subView.setText(isGroupCall
-            ? "Broadcast Alert • Rings all nearby mesh nodes"
-            : "Offline BLE Walkie-Talkie Audio Call • Direct Link");
+        if (isSiren) {
+            subView.setText("Immediate High-Ground Evacuation Ordered • Civil Defense Directive");
+        } else if (isGroupCall) {
+            subView.setText("Broadcast Alert • Rings all nearby mesh nodes");
+        } else {
+            subView.setText("Offline BLE Walkie-Talkie Audio Call • Direct Link");
+        }
         subView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subView.setTextColor(Color.parseColor("#94a3b8"));
         subView.setGravity(Gravity.CENTER);
@@ -230,9 +242,14 @@ public class IncomingCallActivity extends Activity {
         root.addView(subView);
 
         TextView badgeView = new TextView(this);
-        badgeView.setText("⚡ 100% OFFLINE • ZERO INTERNET REQUIRED");
+        if (isSiren) {
+            badgeView.setText("⚠️ LIFE SAFETY CRITICAL • TAKE IMMEDIATE ACTION");
+            badgeView.setTextColor(Color.parseColor("#ef4444"));
+        } else {
+            badgeView.setText("⚡ 100% OFFLINE • ZERO INTERNET REQUIRED");
+            badgeView.setTextColor(Color.parseColor("#10b981"));
+        }
         badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        badgeView.setTextColor(Color.parseColor("#10b981"));
         badgeView.setTypeface(Typeface.DEFAULT_BOLD);
         badgeView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(
@@ -280,7 +297,7 @@ public class IncomingCallActivity extends Activity {
         });
 
         TextView declineLabel = new TextView(this);
-        declineLabel.setText("Decline");
+        declineLabel.setText(isSiren ? "Silence" : "Decline");
         declineLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         declineLabel.setTextColor(Color.parseColor("#94a3b8"));
         declineLabel.setPadding(0, dp(8), 0, 0);
@@ -301,7 +318,7 @@ public class IncomingCallActivity extends Activity {
         LinearLayout.LayoutParams btnParams2 = new LinearLayout.LayoutParams(dp(76), dp(76));
         answerBtn.setLayoutParams(btnParams2);
         answerBtn.setGravity(Gravity.CENTER);
-        answerBtn.setText("📞");
+        answerBtn.setText(isSiren ? "▲" : "📞");
         answerBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
         answerBtn.setTextColor(Color.WHITE);
 
@@ -327,7 +344,7 @@ public class IncomingCallActivity extends Activity {
         });
 
         TextView answerLabel = new TextView(this);
-        answerLabel.setText("Answer");
+        answerLabel.setText(isSiren ? "Evacuate" : "Answer");
         answerLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         answerLabel.setTextColor(Color.parseColor("#4ade80"));
         answerLabel.setTypeface(Typeface.DEFAULT_BOLD);

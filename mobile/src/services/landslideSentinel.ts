@@ -4,6 +4,7 @@ import * as Speech from 'expo-speech';
 import { meshManager } from './bluetoothMesh';
 import { getCurrentDeviceLocation } from './locationService';
 import { saveSOSToOfflineQueue } from './offlineStorage';
+import { subscribeToNativeLandslide } from './gattServerBridge';
 
 export interface LandslideAlert {
   title: string;
@@ -23,6 +24,7 @@ export interface LandslideCallbacks {
 
 class LandslideSentinel {
   private subscription: any = null;
+  private nativeLandslideUnsub: (() => void) | null = null;
   private isArmed: boolean = true;
   private isMonitoring: boolean = false;
   private tremorStartTime: number = 0;
@@ -39,6 +41,14 @@ class LandslideSentinel {
       this.callbacks = { ...this.callbacks, ...callbacks };
     }
     if (this.isMonitoring) return true;
+
+    // Hook into Android native background foreground service landslide detection (runs in lock screen / Doze)
+    if (!this.nativeLandslideUnsub) {
+      this.nativeLandslideUnsub = subscribeToNativeLandslide(({ tremorG, durationMs }) => {
+        console.warn(`[LandslideSentinel] 🚨 Native background sensor triggered landslide: tremor=${tremorG}g, duration=${durationMs}ms`);
+        this.triggerLandslideAlarm(Math.floor(durationMs / 1000));
+      });
+    }
 
     try {
       const isAvail = await Accelerometer.isAvailableAsync().catch(() => false);
@@ -70,6 +80,10 @@ class LandslideSentinel {
     if (this.subscription) {
       try { this.subscription.remove(); } catch {}
       this.subscription = null;
+    }
+    if (this.nativeLandslideUnsub) {
+      this.nativeLandslideUnsub();
+      this.nativeLandslideUnsub = null;
     }
     this.isMonitoring = false;
     this.tremorStartTime = 0;

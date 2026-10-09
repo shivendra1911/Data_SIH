@@ -1161,13 +1161,14 @@ class NeerNetraBLEMesh {
         try {
           const { buildingCollapseDetector } = require('./buildingCollapseDetector');
           if (buildingCollapseDetector?.handlePeerCollapseReport) {
+            const sectorNodes = Math.max(3, this.getConnectedPeers().length + 1);
             buildingCollapseDetector.handlePeerCollapseReport({
               deviceId: senderId || data.deviceId || data.device_uuid || 'peer_collapse_node',
               lat: Number(data.lat || 0),
               lng: Number(data.lng || 0),
               timestamp: Date.now(),
               peakG: Number(data.peakG || data.peak_g || 4.2),
-            });
+            }, sectorNodes);
           }
         } catch (e) {
           console.warn('[BLE Mesh] Failed to forward collapse report to sentinel:', e);

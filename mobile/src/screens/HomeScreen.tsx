@@ -50,6 +50,10 @@ import {
   getPendingEmergencyIntent,
   clearPendingEmergencyIntent,
   subscribeToEmergencyWakeUp,
+  getHardwareSensorStatus,
+  subscribeToNativeLandslide,
+  subscribeToNativeStorm,
+  HardwareSensorStatus,
 } from '../services/gattServerBridge';
 import { CollapseSafetyModal } from '../components/CollapseSafetyModal';
 import {
@@ -105,6 +109,7 @@ export const HomeScreen: React.FC = () => {
   const [stormAlert, setStormAlert] = useState<StormAlert | null>(null);
   const [isLowPowerBeaconActive, setIsLowPowerBeaconActive] = useState<boolean>(false);
   const [landslideAlert, setLandslideAlert] = useState<LandslideAlert | null>(null);
+  const [hardwareSensorStatus, setHardwareSensorStatus] = useState<HardwareSensorStatus | null>(null);
 
   // Active top navigation tab state
   const [currentTab, setCurrentTab] = useState<CitizenTab>('status');
@@ -246,7 +251,49 @@ export const HomeScreen: React.FC = () => {
       },
     });
 
+    // 5. 24/7 Physical Hardware Sensor Telemetry Polling (Every 1500ms)
+    const pollHardwareSensors = async () => {
+      try {
+        const status = await getHardwareSensorStatus();
+        if (status) {
+          setHardwareSensorStatus(status);
+        }
+      } catch {}
+    };
+    pollHardwareSensors();
+    const sensorPollTimer = setInterval(pollHardwareSensors, 1500);
+
+    // 6. Direct subscriptions to native Android background landslide & storm events
+    const unsubNativeLandslide = subscribeToNativeLandslide(({ tremorG, durationMs }) => {
+      setLandslideAlert({
+        title: '🚨 WAYANAD LANDSLIDE SENTINEL',
+        message: `Continuous 10-50Hz bedrock harmonic micro-tremors (${tremorG.toFixed(2)}g) detected for ${Math.round(durationMs / 1000)}s! Evacuate uphill immediately.`,
+        tremorFrequencyHz: 28,
+        durationSeconds: Math.round(durationMs / 1000),
+        timestamp: Date.now(),
+      });
+    });
+
+    const unsubNativeStorm = subscribeToNativeStorm(({ dropHpa, currentHpa }) => {
+      const isCritical = dropHpa >= 6.0;
+      setStormAlert({
+        severity: isCritical ? 'CLOUDBURST_CRITICAL' : 'SQUALL_WARNING',
+        pressureDeltaHpa: dropHpa,
+        currentPressureHpa: currentHpa,
+        baselinePressureHpa: currentHpa + dropHpa,
+        timeWindowHours: 3,
+        title: isCritical ? '⛈️ RAPID CYCLONIC PRESSURE COLLAPSE' : '⚠️ SEVERE SQUALL / MONSOON DROP DETECTED',
+        message: isCritical
+          ? `Atmospheric pressure dropped by ${dropHpa.toFixed(1)} hPa in <=3h! Extreme cloudburst imminent.`
+          : `Atmospheric pressure dropped by ${dropHpa.toFixed(1)} hPa in <=3h. Severe convective thunderstorm approaching.`,
+        timestamp: Date.now(),
+      });
+    });
+
     return () => {
+      clearInterval(sensorPollTimer);
+      unsubNativeLandslide();
+      unsubNativeStorm();
       mobileSirenListener.stop();
       unsubscribeWake();
       stopPeriodicLocationTracker();
@@ -457,10 +504,32 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleSimulateCollapse = () => {
+    setQuorumCount(0);
+    setCollapseCountdown(60);
+    setCollapseEventData({
+      confidence: 0.98,
+      peakG: 4.8,
+      rubbleDurationMs: 8000,
+      freeFallDurationMs: 350,
+      timestamp: Date.now(),
+      location: lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : { lat: 30.5573, lng: 79.5642 },
+    });
+    setShowCollapseModal(true);
     buildingCollapseDetector.simulateCollapseEvent(4.8);
   };
 
   const handleSimulateQuorumCollapse = () => {
+    setQuorumCount(3);
+    setCollapseCountdown(60);
+    setCollapseEventData({
+      confidence: 0.98,
+      peakG: 4.8,
+      rubbleDurationMs: 8000,
+      freeFallDurationMs: 350,
+      timestamp: Date.now(),
+      location: lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : { lat: 30.5573, lng: 79.5642 },
+    });
+    setShowCollapseModal(true);
     buildingCollapseDetector.simulateQuorumConsensus(3, 4.8);
   };
 
@@ -630,6 +699,7 @@ export const HomeScreen: React.FC = () => {
             quorumCount={quorumCount}
             stormAlertActive={Boolean(stormAlert)}
             landslideAlertActive={Boolean(landslideAlert)}
+            hardwareSensorStatus={hardwareSensorStatus}
           />
         )}
 

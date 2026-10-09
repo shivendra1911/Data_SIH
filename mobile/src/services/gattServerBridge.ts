@@ -292,4 +292,62 @@ export const setLowPowerBeaconMode = async (enable: boolean): Promise<boolean> =
   }
 };
 
+export interface HardwareSensorStatus {
+  accelerometer: boolean;
+  accelerometerName: string;
+  gyroscope: boolean;
+  gyroscopeName: string;
+  barometer: boolean;
+  barometerName: string;
+  isBackgroundMonitoringActive: boolean;
+  nativeCollapseSentinelActive: boolean;
+  nativeLandslideSentinelActive: boolean;
+  lastVectorMagnitudeG?: number;
+  lastGyroOmega?: number;
+  lastPressureHpa?: number;
+}
+
+export const getHardwareSensorStatus = async (): Promise<HardwareSensorStatus | null> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.getHardwareSensorStatus) return null;
+  try {
+    return await NeerNetraGatt.getHardwareSensorStatus();
+  } catch {
+    return null;
+  }
+};
+
+export const subscribeToNativeCollapse = (
+  callback: (event: { peakG: number; freeFallDurationMs: number; timestamp: number }) => void
+) => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt) return () => {};
+  if (!emitter) {
+    emitter = new NativeEventEmitter(NeerNetraGatt);
+  }
+  const sub = emitter.addListener('onNativeCollapseDetected', callback);
+  return () => sub.remove();
+};
+
+export const subscribeToNativeLandslide = (
+  callback: (event: { tremorG: number; durationMs: number; timestamp: number }) => void
+) => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt) return () => {};
+  if (!emitter) {
+    emitter = new NativeEventEmitter(NeerNetraGatt);
+  }
+  const sub = emitter.addListener('onNativeLandslideDetected', callback);
+  return () => sub.remove();
+};
+
+export const subscribeToNativeStorm = (
+  callback: (event: { dropHpa: number; currentHpa: number; timestamp: number }) => void
+) => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt) return () => {};
+  if (!emitter) {
+    emitter = new NativeEventEmitter(NeerNetraGatt);
+  }
+  const sub = emitter.addListener('onNativeStormDetected', callback);
+  return () => sub.remove();
+};
+
+
 

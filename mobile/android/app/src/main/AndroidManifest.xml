@@ -25,8 +25,12 @@
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+  <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"/>
   <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+  <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
+  <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false"/>
+  <uses-feature android:name="android.hardware.sensor.barometer" android:required="false"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -115,6 +119,18 @@
         android:exported="false">
       <intent-filter>
         <action android:name="com.neernetra.disaster.RESTART_MESH_SERVICE"/>
+      </intent-filter>
+    </receiver>
+
+    <!-- Emergency Wake-up & Lock-Screen Call/Siren Trigger Receiver -->
+    <receiver
+        android:name=".EmergencyTriggerReceiver"
+        android:enabled="true"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="com.neernetra.disaster.TRIGGER_INCOMING_CALL"/>
+        <action android:name="com.neernetra.disaster.TRIGGER_EMERGENCY_SIREN"/>
+        <action android:name="com.neernetra.disaster.TRIGGER_COLLAPSE"/>
       </intent-filter>
     </receiver>
   </application>

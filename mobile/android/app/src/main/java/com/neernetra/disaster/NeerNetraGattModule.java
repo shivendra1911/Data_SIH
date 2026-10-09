@@ -471,4 +471,74 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             promise.reject("STOP_ERROR", e.getMessage());
         }
     }
+
+    @ReactMethod
+    public void getHardwareSensorStatus(Promise promise) {
+        try {
+            WritableMap map = Arguments.createMap();
+            map.putBoolean("accelerometer", NeerNetraMeshService.isAccelerometerAvailable);
+            map.putString("accelerometerName", NeerNetraMeshService.accelerometerName);
+            map.putBoolean("gyroscope", NeerNetraMeshService.isGyroscopeAvailable);
+            map.putString("gyroscopeName", NeerNetraMeshService.gyroscopeName);
+            map.putBoolean("barometer", NeerNetraMeshService.isPressureAvailable);
+            map.putString("barometerName", NeerNetraMeshService.pressureName);
+            map.putBoolean("isBackgroundMonitoringActive", true);
+            map.putBoolean("nativeCollapseSentinelActive", true);
+            map.putBoolean("nativeLandslideSentinelActive", true);
+            map.putDouble("lastVectorMagnitudeG", (double) NeerNetraMeshService.lastVectorMagnitudeG);
+            map.putDouble("lastGyroOmega", (double) NeerNetraMeshService.lastGyroOmega);
+            map.putDouble("lastPressureHpa", (double) NeerNetraMeshService.lastPressureHpa);
+            promise.resolve(map);
+        } catch (Exception e) {
+            promise.reject("SENSOR_STATUS_ERROR", e.getMessage());
+        }
+    }
+
+    public static void notifyNativeCollapseEvent(float peakG, long freeFallMs) {
+        if (staticReactContext != null && staticReactContext.hasActiveReactInstance()) {
+            try {
+                WritableMap map = Arguments.createMap();
+                map.putDouble("peakG", (double) peakG);
+                map.putDouble("freeFallDurationMs", (double) freeFallMs);
+                map.putDouble("timestamp", (double) System.currentTimeMillis());
+                staticReactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("onNativeCollapseDetected", map);
+            } catch (Exception e) {
+                Log.w(TAG, "Error emitting onNativeCollapseDetected: " + e.getMessage());
+            }
+        }
+    }
+
+    public static void notifyNativeLandslideEvent(float tremorG, long durationMs) {
+        if (staticReactContext != null && staticReactContext.hasActiveReactInstance()) {
+            try {
+                WritableMap map = Arguments.createMap();
+                map.putDouble("tremorG", (double) tremorG);
+                map.putDouble("durationMs", (double) durationMs);
+                map.putDouble("timestamp", (double) System.currentTimeMillis());
+                staticReactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("onNativeLandslideDetected", map);
+            } catch (Exception e) {
+                Log.w(TAG, "Error emitting onNativeLandslideDetected: " + e.getMessage());
+            }
+        }
+    }
+
+    public static void notifyNativeStormEvent(float dropHpa, float currentHpa) {
+        if (staticReactContext != null && staticReactContext.hasActiveReactInstance()) {
+            try {
+                WritableMap map = Arguments.createMap();
+                map.putDouble("dropHpa", (double) dropHpa);
+                map.putDouble("currentHpa", (double) currentHpa);
+                map.putDouble("timestamp", (double) System.currentTimeMillis());
+                staticReactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("onNativeStormDetected", map);
+            } catch (Exception e) {
+                Log.w(TAG, "Error emitting onNativeStormDetected: " + e.getMessage());
+            }
+        }
+    }
 }

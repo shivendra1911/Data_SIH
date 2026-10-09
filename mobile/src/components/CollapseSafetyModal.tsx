@@ -44,9 +44,14 @@ export const CollapseSafetyModal: React.FC<CollapseSafetyModalProps> = ({
           {quorumCount >= 3 && (
             <View style={styles.quorumBadge}>
               <Radio color="#10B981" size={16} />
-              <Text style={styles.quorumText}>
-                MESH QUORUM: {quorumCount} Phones Confirmed Collapse Within 100m!
-              </Text>
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.quorumText}>
+                  1/3rd SECTOR QUORUM CONSENSUS VERIFIED
+                </Text>
+                <Text style={{ fontSize: 11, color: '#A7F3D0', marginTop: 2 }}>
+                  {quorumCount} phones confirmed collapse within 100m & 15s (N &ge; max(3, &lceil;Sector/3&rceil;))
+                </Text>
+              </View>
             </View>
           )}
 

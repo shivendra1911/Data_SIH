@@ -971,11 +971,27 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
             cl["trapped_headcount"] = n
             cl["last_report_at"] = now_iso
 
-            # Quorum check: >= 3 phones within 100m -> CONFIRMED_COLLAPSE
-            if n >= 3:
+            # 1/3rd Sector Quorum Consensus Rule: N >= max(3, ceil(activeSectorNodes / 3)) within 100m
+            nearby_nodes = [
+                d for d in location_history_db.values()
+                if haversine_distance_meters(payload.lat, payload.lng, d.get("lat", payload.lat), d.get("lng", payload.lng)) <= 500.0
+            ]
+            sector_nodes = max(3, len(nearby_nodes))
+            quorum_threshold = max(3, math.ceil(sector_nodes / 3.0))
+            cl["active_sector_nodes"] = sector_nodes
+            cl["quorum_threshold"] = quorum_threshold
+
+            if n >= quorum_threshold:
                 cl["status"] = "CONFIRMED_COLLAPSE"
                 cl["priority"] = "P1-CRITICAL"
         else:
+            nearby_nodes = [
+                d for d in location_history_db.values()
+                if haversine_distance_meters(payload.lat, payload.lng, d.get("lat", payload.lat), d.get("lng", payload.lng)) <= 500.0
+            ]
+            sector_nodes = max(3, len(nearby_nodes))
+            quorum_threshold = max(3, math.ceil(sector_nodes / 3.0))
+
             matched_cluster_id = f"clp_cluster_{uuid.uuid4().hex[:8]}"
             collapse_clusters_db[matched_cluster_id] = {
                 "cluster_id": matched_cluster_id,
@@ -986,6 +1002,8 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
                 "radius_meters": 100.0,
                 "reporting_devices": [payload.device_uuid],
                 "trapped_headcount": 1,
+                "active_sector_nodes": sector_nodes,
+                "quorum_threshold": quorum_threshold,
                 "first_detected_at": now_iso,
                 "last_report_at": now_iso,
                 "max_peak_g": payload.peak_g,
@@ -997,7 +1015,7 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
     quorum_count = len(cluster["reporting_devices"])
     is_confirmed = cluster["status"] == "CONFIRMED_COLLAPSE"
 
-    print(f"[Collapse Ingest] Report from {payload.device_uuid[:8]} -> Cluster {matched_cluster_id} (Quorum: {quorum_count}, Status: {cluster['status']})")
+    print(f"[Collapse Ingest] Report from {payload.device_uuid[:8]} -> Cluster {matched_cluster_id} (Quorum: {quorum_count}/{cluster.get('quorum_threshold', 3)}, Status: {cluster['status']})")
 
     return {
         "success": True,
@@ -1005,6 +1023,8 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
         "cluster_id": matched_cluster_id,
         "cluster_status": cluster["status"],
         "quorum_count": quorum_count,
+        "quorum_threshold": cluster.get("quorum_threshold", 3),
+        "active_sector_nodes": cluster.get("active_sector_nodes", 3),
         "is_confirmed": is_confirmed,
         "centroid": {"lat": cluster["centroid_lat"], "lng": cluster["centroid_lng"]}
     }

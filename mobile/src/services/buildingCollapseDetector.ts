@@ -4,6 +4,7 @@ import * as Speech from 'expo-speech';
 import { meshManager } from './bluetoothMesh';
 import { getCurrentDeviceLocation } from './locationService';
 import { saveSOSToOfflineQueue } from './offlineStorage';
+import { subscribeToNativeCollapse } from './gattServerBridge';
 
 const CANDIDATE_URLS = [
   'http://127.0.0.1:8000',
@@ -64,6 +65,7 @@ class BuildingCollapseDetector {
   private accelSub: any = null;
   private gyroSub: any = null;
   private isMonitoring: boolean = false;
+  private nativeCollapseUnsub: (() => void) | null = null;
 
   // Kinetic state thresholds
   private freeFallStartTime: number = 0;
@@ -92,6 +94,15 @@ class BuildingCollapseDetector {
       this.callbacks = { ...this.callbacks, ...callbacks };
     }
     if (this.isMonitoring) return true;
+
+    // Hook into Android native foreground service collapse trigger (runs in lock screen / Doze)
+    if (!this.nativeCollapseUnsub) {
+      this.nativeCollapseUnsub = subscribeToNativeCollapse(({ peakG, freeFallDurationMs }) => {
+        console.warn(`[CollapseDetector] 🚨 Native background sensor triggered collapse: peak=${peakG}g, freefall=${freeFallDurationMs}ms`);
+        this.freeFallDurationMs = freeFallDurationMs;
+        this.triggerInvertedSafetyCountdown(peakG);
+      });
+    }
 
     try {
       const [accelAvail, gyroAvail] = await Promise.all([
@@ -142,6 +153,10 @@ class BuildingCollapseDetector {
     if (this.gyroSub) {
       try { this.gyroSub.remove(); } catch {}
       this.gyroSub = null;
+    }
+    if (this.nativeCollapseUnsub) {
+      this.nativeCollapseUnsub();
+      this.nativeCollapseUnsub = null;
     }
     this.isMonitoring = false;
     this.resetStateMachine('IDLE');
@@ -257,9 +272,14 @@ class BuildingCollapseDetector {
     const confidence = Math.min(0.98, Number((0.70 + peak / 15.0).toFixed(3)));
 
     let coords = { lat: 30.5573, lng: 79.5642 };
-    try {
-      coords = await getCurrentDeviceLocation();
-    } catch {}
+    if (!simulatedPeakG) {
+      try {
+        coords = await Promise.race([
+          getCurrentDeviceLocation(),
+          new Promise<{ lat: number; lng: number }>((_, reject) => setTimeout(() => reject('timeout'), 800)),
+        ]);
+      } catch {}
+    }
 
     const eventData: CollapseEventData = {
       confidence,
@@ -389,10 +409,11 @@ class BuildingCollapseDetector {
   }
 
   /**
-   * Quorum Consensus: Ingest peer collapse reports from mesh
-   * If >= 3 phones report within 100m and 15 seconds, quorum is reached.
+   * 1/3rd Sector Quorum Consensus: Ingest peer collapse reports from mesh
+   * Strict Consensus Rule: N >= max(3, ceil(activeSectorNodes / 3)) unique peer devices
+   * reporting kinetic shock impact within 100 meters and 15 seconds.
    */
-  public handlePeerCollapseReport(report: PeerCollapseReport) {
+  public handlePeerCollapseReport(report: PeerCollapseReport, activeSectorNodes: number = 9) {
     const now = Date.now();
     // Prune reports older than 15 seconds
     this.recentPeerReports = this.recentPeerReports.filter((r) => now - r.timestamp <= 15000);
@@ -406,8 +427,11 @@ class BuildingCollapseDetector {
 
     // Unique devices
     const uniqueIds = Array.from(new Set(cluster.map((c) => c.deviceId)));
-    if (uniqueIds.length >= 3) {
-      console.warn(`[CollapseDetector] 🏛️ MESH QUORUM CONSENSUS REACHED: ${uniqueIds.length} phones confirmed collapse!`);
+    // 1/3rd Sector Quorum Threshold: N >= max(3, ceil(activeSectorNodes / 3))
+    const quorumThreshold = Math.max(3, Math.ceil(activeSectorNodes / 3));
+
+    if (uniqueIds.length >= quorumThreshold) {
+      console.warn(`[CollapseDetector] 🏛️ 1/3RD SECTOR QUORUM CONSENSUS REACHED: ${uniqueIds.length}/${activeSectorNodes} phones confirmed collapse within 100m!`);
       if (this.callbacks.onQuorumConfirmed) {
         this.callbacks.onQuorumConfirmed(uniqueIds.length, uniqueIds);
       }
@@ -418,22 +442,38 @@ class BuildingCollapseDetector {
    * ADB / Testing Simulator Hook
    */
   public simulateCollapseEvent(peakG: number = 4.8) {
+    this.resetStateMachine('IDLE');
     this.peakG = peakG;
     this.freeFallDurationMs = 350;
     this.triggerInvertedSafetyCountdown(peakG);
   }
 
   public simulateQuorumConsensus(peerCount: number = 3, peakG: number = 4.8) {
+    this.resetStateMachine('IDLE');
     this.peakG = peakG;
     this.freeFallDurationMs = 350;
     const now = Date.now();
+    const count = Math.max(3, peerCount);
+    const peerIds = ['NODE_ALPHA', 'NODE_BETA', 'NODE_GAMMA'];
     this.recentPeerReports = [
       { deviceId: 'NODE_ALPHA', lat: 30.5573, lng: 79.5642, timestamp: now - 1000, peakG: 4.5 },
       { deviceId: 'NODE_BETA', lat: 30.5574, lng: 79.5643, timestamp: now - 2000, peakG: 4.2 },
       { deviceId: 'NODE_GAMMA', lat: 30.5572, lng: 79.5641, timestamp: now - 500, peakG: 4.9 },
     ];
+    for (let i = 4; i <= count; i++) {
+      const id = `NODE_${i}`;
+      peerIds.push(id);
+      this.recentPeerReports.push({
+        deviceId: id,
+        lat: 30.5573 + (i * 0.0001),
+        lng: 79.5642 + (i * 0.0001),
+        timestamp: now - (i * 300),
+        peakG: 4.0 + (Math.random() * 1.5),
+      });
+    }
+
     if (this.callbacks.onQuorumConfirmed) {
-      this.callbacks.onQuorumConfirmed(peerCount, ['NODE_ALPHA', 'NODE_BETA', 'NODE_GAMMA']);
+      this.callbacks.onQuorumConfirmed(count, peerIds);
     }
     this.triggerInvertedSafetyCountdown(peakG);
   }

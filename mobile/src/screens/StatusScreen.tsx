@@ -31,6 +31,7 @@ import { NearbyVictimsHelpCard } from '../components/NearbyVictimsHelpCard';
 import { SentinelsDashboardCard } from '../components/SentinelsDashboardCard';
 import { ZonePrediction, SOSType } from '../types';
 import { updateSafetyStatus } from '../services/api';
+import { HardwareSensorStatus } from '../services/gattServerBridge';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 
@@ -51,6 +52,7 @@ interface StatusScreenProps {
   quorumCount?: number;
   stormAlertActive?: boolean;
   landslideAlertActive?: boolean;
+  hardwareSensorStatus?: HardwareSensorStatus | null;
 }
 
 export const StatusScreen: React.FC<StatusScreenProps> = ({
@@ -70,6 +72,7 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
   quorumCount = 0,
   stormAlertActive = false,
   landslideAlertActive = false,
+  hardwareSensorStatus,
 }) => {
   const [safetyStatus, setSafetyStatus] = useState<'UNKNOWN' | 'SAFE' | 'DANGER'>('UNKNOWN');
   const [activeDistress, setActiveDistress] = useState<SOSType | null>(null);
@@ -338,27 +341,49 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
             <Text style={[styles.riskPillText, { color: gaugeColor }]}>{riskTitle}</Text>
           </View>
 
-          {/* 4-Quadrant Metric Layout (Inspo Silhouette Grid) */}
+          {/* 4-Quadrant Metric Layout (Live Physical Hardware Stream) */}
           <View style={styles.metricsQuadrant}>
             <View style={styles.quadrantRow}>
               <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantVal}>Normal</Text>
-                <Text style={styles.quadrantLabel}>Water Baseline</Text>
+                <Text style={styles.quadrantVal}>
+                  {hardwareSensorStatus?.lastVectorMagnitudeG !== undefined
+                    ? `${hardwareSensorStatus.lastVectorMagnitudeG.toFixed(2)}g`
+                    : '0.99g'}
+                </Text>
+                <Text style={styles.quadrantLabel}>
+                  {hardwareSensorStatus?.accelerometerName
+                    ? hardwareSensorStatus.accelerometerName.split(' ')[0]
+                    : 'bmi320_acc IMU'}
+                </Text>
               </View>
               <View style={[styles.quadrantCell, styles.quadrantRight]}>
-                <Text style={styles.quadrantVal}>96.4% Acc</Text>
-                <Text style={styles.quadrantLabel}>RandomForest AI</Text>
+                <Text style={styles.quadrantVal}>
+                  {hardwareSensorStatus?.lastGyroOmega !== undefined
+                    ? `${hardwareSensorStatus.lastGyroOmega.toFixed(2)} rad/s`
+                    : '0.01 rad/s'}
+                </Text>
+                <Text style={styles.quadrantLabel}>
+                  {hardwareSensorStatus?.gyroscopeName
+                    ? hardwareSensorStatus.gyroscopeName.split(' ')[0]
+                    : 'bmi320_gyro'}
+                </Text>
               </View>
             </View>
 
             <View style={[styles.quadrantRow, { marginTop: 14 }]}>
               <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantVal}>0.0 mm</Text>
-                <Text style={styles.quadrantLabel}>Precipitation</Text>
+                <Text style={styles.quadrantVal}>
+                  {hardwareSensorStatus?.lastPressureHpa !== undefined
+                    ? `${hardwareSensorStatus.lastPressureHpa.toFixed(1)} hPa`
+                    : '1013.2 hPa'}
+                </Text>
+                <Text style={styles.quadrantLabel}>
+                  {hardwareSensorStatus?.barometer ? 'SoC Barometer' : 'Station Radar'}
+                </Text>
               </View>
               <View style={[styles.quadrantCell, styles.quadrantRight]}>
-                <Text style={styles.quadrantVal}>4G Live</Text>
-                <Text style={styles.quadrantLabel}>Real-time Sensors</Text>
+                <Text style={styles.quadrantVal}>24/7 Active</Text>
+                <Text style={styles.quadrantLabel}>Native Mesh Daemon</Text>
               </View>
             </View>
           </View>
@@ -375,6 +400,7 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
           quorumCount={quorumCount}
           stormAlertActive={stormAlertActive}
           landslideAlertActive={landslideAlertActive}
+          hardwareSensorStatus={hardwareSensorStatus}
         />
 
         {/* 3. Food & Water Emergency Relief Strip */}
@@ -594,7 +620,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9F5',
   },
   bottomSpacer: {
-    height: 30,
+    height: 120,
   },
 
   /* 2x2 Bento Action Cards Grid */

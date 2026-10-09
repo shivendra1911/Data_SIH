@@ -94,6 +94,10 @@ public class NeerNetraConnectionService extends ConnectionService {
     }
 
     public static boolean triggerIncomingCall(Context context, String callerName, String callerId, boolean isGroupCall) {
+        return triggerIncomingCall(context, callerName, callerId, isGroupCall, isGroupCall ? "GROUP_CALL" : "CALL_REQ");
+    }
+
+    public static boolean triggerIncomingCall(Context context, String callerName, String callerId, boolean isGroupCall, String emergencyType) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
         try {
             TelecomManager tm = (TelecomManager) context.getSystemService(Context.TELECOM_SERVICE);
@@ -115,10 +119,11 @@ public class NeerNetraConnectionService extends ConnectionService {
             callExtras.putString("caller_name", callerName != null ? callerName : "Nearby Citizen");
             callExtras.putString("caller_id", callerId != null ? callerId : "unknown");
             callExtras.putBoolean("is_group_call", isGroupCall);
+            callExtras.putString("emergency_type", emergencyType != null ? emergencyType : (isGroupCall ? "GROUP_CALL" : "CALL_REQ"));
             extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, callExtras);
 
             tm.addNewIncomingCall(handle, extras);
-            Log.i(TAG, "addNewIncomingCall dispatched to system_server for " + callerName);
+            Log.i(TAG, "addNewIncomingCall dispatched to system_server for " + callerName + " (" + emergencyType + ")");
             return true;
         } catch (Exception e) {
             Log.w(TAG, "addNewIncomingCall failed: " + e.getMessage() + ", falling back to FullScreenIntent");
@@ -137,6 +142,7 @@ public class NeerNetraConnectionService extends ConnectionService {
         String callerName = "Nearby Citizen";
         String callerId = "unknown";
         boolean isGroup = false;
+        String emergencyType = "CALL_REQ";
 
         if (extras != null) {
             Bundle callExtras = extras.getBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS);
@@ -144,13 +150,14 @@ public class NeerNetraConnectionService extends ConnectionService {
                 callerName = callExtras.getString("caller_name", "Nearby Citizen");
                 callerId = callExtras.getString("caller_id", "unknown");
                 isGroup = callExtras.getBoolean("is_group_call", false);
+                emergencyType = callExtras.getString("emergency_type", isGroup ? "GROUP_CALL" : "CALL_REQ");
             }
         }
 
         connection.setCallerDisplayName(callerName, TelecomManager.PRESENTATION_ALLOWED);
         connection.setRinging();
         activeConnection = connection;
-        connection.showIncomingCallUi(callerName, callerId, isGroup);
+        connection.showIncomingCallUi(callerName, callerId, isGroup, emergencyType);
         return connection;
     }
 
@@ -169,12 +176,13 @@ public class NeerNetraConnectionService extends ConnectionService {
             this.request = request;
         }
 
-        public void showIncomingCallUi(String callerName, String callerId, boolean isGroup) {
+        public void showIncomingCallUi(String callerName, String callerId, boolean isGroup, String emergencyType) {
             try {
                 Intent intent = new Intent(context, IncomingCallActivity.class);
                 intent.putExtra("caller_name", callerName);
                 intent.putExtra("caller_id", callerId);
                 intent.putExtra("is_group_call", isGroup);
+                intent.putExtra("emergency_type", emergencyType);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                                 Intent.FLAG_ACTIVITY_CLEAR_TOP |
                                 Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
