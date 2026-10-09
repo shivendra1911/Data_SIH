@@ -10,3 +10,4 @@ __pycache__/
 crash_log.txt
 *.db
 *.apk
+.agents/

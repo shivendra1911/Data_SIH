@@ -28,6 +28,7 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 /**
  * NeerNetraMeshService
@@ -129,6 +130,21 @@ public class NeerNetraMeshService extends Service {
             Log.e(TAG, "[MeshService] Failed to start native mesh engine: " + e.getMessage());
         }
 
+        // Register AOSP Self-Managed Telecom PhoneAccount
+        NeerNetraConnectionService.registerPhoneAccount(this);
+
+        // Ensure Watchdog daemon service is running in isolated process
+        try {
+            Intent watchdogIntent = new Intent(this, NeerNetraWatchdogService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, watchdogIntent);
+            } else {
+                startService(watchdogIntent);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not start watchdog service: " + e.getMessage());
+        }
+
         // Start 10-minute periodic watchdog
         watchdogHandler.postDelayed(watchdogRunnable, 10 * 60 * 1000);
     }
@@ -162,15 +178,15 @@ public class NeerNetraMeshService extends Service {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        Log.i(TAG, "[MeshService] onTaskRemoved triggered — user swiped away app from Recents. Scheduling instant resurrection!");
+        Log.i(TAG, "[MeshService] onTaskRemoved triggered — user swiped away app from Recents. Scheduling instant resurrection via Broadcast!");
         try {
-            Intent restartServiceIntent = new Intent(getApplicationContext(), NeerNetraMeshService.class);
-            restartServiceIntent.setPackage(getPackageName());
+            Intent restartServiceIntent = new Intent(getApplicationContext(), RestartServiceReceiver.class);
+            restartServiceIntent.setAction("com.neernetra.disaster.RESTART_MESH_SERVICE");
             int piFlags = PendingIntent.FLAG_ONE_SHOT;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 piFlags |= PendingIntent.FLAG_IMMUTABLE;
             }
-            PendingIntent restartServicePendingIntent = PendingIntent.getService(
+            PendingIntent restartServicePendingIntent = PendingIntent.getBroadcast(
                 getApplicationContext(),
                 1001,
                 restartServiceIntent,
@@ -178,11 +194,20 @@ public class NeerNetraMeshService extends Service {
             );
             AlarmManager alarmService = (AlarmManager) getApplicationContext().getSystemService(Context.ALARM_SERVICE);
             if (alarmService != null) {
-                alarmService.set(
-                    AlarmManager.ELAPSED_REALTIME,
-                    SystemClock.elapsedRealtime() + 1000,
-                    restartServicePendingIntent
-                );
+                long triggerAt = SystemClock.elapsedRealtime() + 1000;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmService.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        restartServicePendingIntent
+                    );
+                } else {
+                    alarmService.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        restartServicePendingIntent
+                    );
+                }
             }
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Failed to schedule resurrection alarm: " + e.getMessage());
@@ -240,6 +265,15 @@ public class NeerNetraMeshService extends Service {
             @Nullable Bundle extras
     ) {
         Log.i(TAG, "🚨 WhatsApp-Style Incoming Call Triggered: " + title + " (" + emergencyType + ")");
+
+        String callerName = extras != null ? extras.getString("caller_name", "Nearby Citizen") : "Nearby Citizen";
+        String callerId = extras != null ? extras.getString("caller_id", "unknown") : "unknown";
+        boolean isGroup = extras != null && extras.getBoolean("is_group_call", false);
+
+        boolean telecomHandled = false;
+        if ("CALL_REQ".equals(emergencyType) || "GROUP_CALL".equals(emergencyType)) {
+            telecomHandled = NeerNetraConnectionService.triggerIncomingCall(context, callerName, callerId, isGroup);
+        }
 
         try {
             // 1. Wake physical phone screen
@@ -352,8 +386,14 @@ public class NeerNetraMeshService extends Service {
                 nm.notify(EMERGENCY_NOTIFICATION_ID, builder.build());
             }
 
-            // 6. Also start IncomingCallActivity directly
-            context.startActivity(callActivityIntent);
+            // 6. Direct activity start fallback if Telecom did not present UI
+            if (!telecomHandled) {
+                try {
+                    context.startActivity(callActivityIntent);
+                } catch (Exception balErr) {
+                    Log.d(TAG, "Direct startActivity blocked by BAL, FullScreenIntent handles lockscreen: " + balErr.getMessage());
+                }
+            }
 
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Error in wakeScreenAndShowNotification: " + e.getMessage(), e);

@@ -76,6 +76,10 @@ dispatched_rescues_db: List[Dict[str, Any]] = []
 # Active emergency broadcasts
 active_broadcasts_db: List[Dict[str, Any]] = []
 
+# Spatiotemporal Collapse Events & Clusters (Domain 4 Sentinel)
+collapse_events_db: List[Dict[str, Any]] = []
+collapse_clusters_db: Dict[str, Dict[str, Any]] = {}
+
 # Registered Firebase Cloud Messaging (FCM) push tokens
 registered_push_tokens: Dict[str, Dict[str, Any]] = {}
 FIREBASE_KEY_PATH = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
@@ -484,6 +488,22 @@ class FCMTestPayload(BaseModel):
     token: Optional[str] = None
     dry_run: bool = False
 
+class CollapseEventPayload(BaseModel):
+    device_uuid: str = Field(..., min_length=1, max_length=128)
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lng: float = Field(..., ge=-180.0, le=180.0)
+    confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+    peak_g: float = Field(default=4.0, ge=0.0)
+    rubble_duration_s: float = Field(default=8.0, ge=0.0)
+    timestamp: Optional[str] = None
+    notes: Optional[str] = None
+
+class CollapseCancelPayload(BaseModel):
+    device_uuid: str = Field(..., min_length=1, max_length=128)
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    timestamp: Optional[str] = None
+
 @app.on_event("startup")
 def startup_services():
     global model_clf, firebase_initialized, firestore_db
@@ -861,6 +881,183 @@ def get_sos_clusters(zone_id: str = "chamoli_01"):
         "zone_id": zone_id,
         "total_clusters": len(clusters_list),
         "clusters": clusters_list
+    }
+
+def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371000.0  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+# ── Domain 4: Building Collapse Spatiotemporal Consensus Endpoints ──────────
+
+@app.post("/api/collapse/event")
+def report_collapse_event(payload: CollapseEventPayload, background_tasks: BackgroundTasks):
+    """
+    Ingests structural collapse reports from edge smartphones.
+    Computes spatiotemporal clustering (t <= 15s, d <= 100m).
+    Triggers CONFIRMED_COLLAPSE cluster when >= 3 devices report.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    event_id = f"clp_{uuid.uuid4().hex[:10]}"
+
+    event_entry = {
+        "id": event_id,
+        "device_uuid": payload.device_uuid,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "confidence": payload.confidence,
+        "peak_g": payload.peak_g,
+        "rubble_duration_s": payload.rubble_duration_s,
+        "received_at": now_iso,
+        "timestamp": payload.timestamp or now_iso,
+        "notes": payload.notes or "Edge 3-phase kinetic collapse sentinel triggered"
+    }
+
+    with db_lock:
+        collapse_events_db.append(event_entry)
+
+        # Mirror as SOS event
+        sos_entry = {
+            "id": f"sos_clp_{uuid.uuid4().hex[:8]}",
+            "device_uuid": payload.device_uuid,
+            "lat": payload.lat,
+            "lng": payload.lng,
+            "zone_id": find_nearest_zone(payload.lat, payload.lng),
+            "status": "SOS",
+            "sos_type": "COLLAPSE",
+            "is_mesh_relayed": True,
+            "received_at": now_iso,
+            "notes": f"STRUCTURAL COLLAPSE: {payload.peak_g}g shock, {int(payload.confidence * 100)}% conf"
+        }
+        sos_events_db.append(sos_entry)
+
+        # Spatiotemporal clustering: Match against active clusters within 100 meters
+        matched_cluster_id = None
+        for cid, cl in collapse_clusters_db.items():
+            if cl.get("status") in ["PENDING_QUORUM", "CONFIRMED_COLLAPSE"]:
+                dist_m = haversine_distance_meters(payload.lat, payload.lng, cl["centroid_lat"], cl["centroid_lng"])
+                if dist_m <= 100.0:
+                    matched_cluster_id = cid
+                    break
+
+        if matched_cluster_id:
+            cl = collapse_clusters_db[matched_cluster_id]
+            if payload.device_uuid not in cl["reporting_devices"]:
+                cl["reporting_devices"].append(payload.device_uuid)
+                cl["reports"].append(event_entry)
+
+            n = len(cl["reporting_devices"])
+            cl["centroid_lat"] = round(sum(r["lat"] for r in cl["reports"]) / len(cl["reports"]), 6)
+            cl["centroid_lng"] = round(sum(r["lng"] for r in cl["reports"]) / len(cl["reports"]), 6)
+            cl["max_peak_g"] = max(cl["max_peak_g"], payload.peak_g)
+            cl["average_confidence"] = round(sum(r["confidence"] for r in cl["reports"]) / len(cl["reports"]), 3)
+            cl["trapped_headcount"] = n
+            cl["last_report_at"] = now_iso
+
+            # Quorum check: >= 3 phones within 100m -> CONFIRMED_COLLAPSE
+            if n >= 3:
+                cl["status"] = "CONFIRMED_COLLAPSE"
+                cl["priority"] = "P1-CRITICAL"
+        else:
+            matched_cluster_id = f"clp_cluster_{uuid.uuid4().hex[:8]}"
+            collapse_clusters_db[matched_cluster_id] = {
+                "cluster_id": matched_cluster_id,
+                "status": "PENDING_QUORUM",
+                "priority": "P2-HIGH",
+                "centroid_lat": round(payload.lat, 6),
+                "centroid_lng": round(payload.lng, 6),
+                "radius_meters": 100.0,
+                "reporting_devices": [payload.device_uuid],
+                "trapped_headcount": 1,
+                "first_detected_at": now_iso,
+                "last_report_at": now_iso,
+                "max_peak_g": payload.peak_g,
+                "average_confidence": payload.confidence,
+                "reports": [event_entry]
+            }
+
+    cluster = collapse_clusters_db[matched_cluster_id]
+    quorum_count = len(cluster["reporting_devices"])
+    is_confirmed = cluster["status"] == "CONFIRMED_COLLAPSE"
+
+    print(f"[Collapse Ingest] Report from {payload.device_uuid[:8]} -> Cluster {matched_cluster_id} (Quorum: {quorum_count}, Status: {cluster['status']})")
+
+    return {
+        "success": True,
+        "event_id": event_id,
+        "cluster_id": matched_cluster_id,
+        "cluster_status": cluster["status"],
+        "quorum_count": quorum_count,
+        "is_confirmed": is_confirmed,
+        "centroid": {"lat": cluster["centroid_lat"], "lng": cluster["centroid_lng"]}
+    }
+
+@app.post("/api/collapse/cancel")
+def cancel_collapse_alarm(payload: CollapseCancelPayload):
+    """
+    Handles user "I AM SAFE" confirmations within the 60-second grace window,
+    auto-downgrading or resolving false-alarm clusters.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    affected_clusters = []
+
+    with db_lock:
+        # Mark SAFE in location_history_db
+        if payload.device_uuid in location_history_db:
+            location_history_db[payload.device_uuid]["status"] = "SAFE"
+            location_history_db[payload.device_uuid]["last_synced_at"] = now_iso
+
+        # Remove from active collapse clusters
+        for cid, cl in collapse_clusters_db.items():
+            if payload.device_uuid in cl["reporting_devices"]:
+                cl["reporting_devices"].remove(payload.device_uuid)
+                cl["reports"] = [r for r in cl["reports"] if r["device_uuid"] != payload.device_uuid]
+                cl["trapped_headcount"] = len(cl["reporting_devices"])
+                if len(cl["reporting_devices"]) < 3 and cl["status"] == "CONFIRMED_COLLAPSE":
+                    cl["status"] = "PENDING_QUORUM"
+                if len(cl["reporting_devices"]) == 0:
+                    cl["status"] = "RESOLVED_SAFE"
+                affected_clusters.append(cid)
+
+    print(f"[Collapse Cancel] User {payload.device_uuid[:8]} confirmed SAFE. Disarmed from clusters: {affected_clusters}")
+
+    return {
+        "success": True,
+        "status": "CANCELLED",
+        "message": "Collapse alarm safely cancelled by user",
+        "affected_clusters": affected_clusters
+    }
+
+@app.get("/api/collapse/active-clusters")
+def get_active_collapse_clusters():
+    """
+    Supplies active USAR search and rescue clusters for the Web Command Center.
+    """
+    curr_time = datetime.now(timezone.utc)
+    active_list = []
+
+    with db_lock:
+        for cl in collapse_clusters_db.values():
+            if cl.get("status") in ["PENDING_QUORUM", "CONFIRMED_COLLAPSE"]:
+                item = dict(cl)
+                try:
+                    first_dt = datetime.fromisoformat(item["first_detected_at"].replace("Z", "+00:00"))
+                    item["elapsed_seconds"] = int((curr_time - first_dt).total_seconds())
+                except Exception:
+                    item["elapsed_seconds"] = 0
+                active_list.append(item)
+
+    active_list.sort(key=lambda x: (x["status"] == "CONFIRMED_COLLAPSE", x["trapped_headcount"]), reverse=True)
+
+    return {
+        "total_active_clusters": len(active_list),
+        "confirmed_clusters_count": len([c for c in active_list if c["status"] == "CONFIRMED_COLLAPSE"]),
+        "clusters": active_list
     }
 
 @app.post("/api/rescue/dispatch")
@@ -1419,6 +1616,7 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
         "all_zones": zones_output,
         "live_devices": enriched_devices,
         "clusters": clusters_res.get("clusters", []),
+        "collapse_clusters": get_active_collapse_clusters().get("clusters", []),
         "dispatches": dispatched_rescues_db[::-1],
         "active_broadcasts": active_broadcasts_db[::-1],
         "shelters": [s for s in REGIONAL_SHELTERS_DB if s["zone_id"] == zone_key] or REGIONAL_SHELTERS_DB[:2]

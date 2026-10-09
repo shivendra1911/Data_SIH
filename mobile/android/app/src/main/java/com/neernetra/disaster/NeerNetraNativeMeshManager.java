@@ -261,6 +261,45 @@ public class NeerNetraNativeMeshManager {
         }
     };
 
+    /**
+     * Switch between High-Performance 24/7 Mesh and Ultra-Low-Power 16-byte Beacon Mode (<= 15% Battery)
+     */
+    public void setLowPowerBeaconMode(boolean enable) {
+        if (advertiser == null || bluetoothAdapter == null) return;
+        try {
+            advertiser.stopAdvertising(advertiseCallback);
+            AdvertiseSettings settings = new AdvertiseSettings.Builder()
+                .setAdvertiseMode(enable ? AdvertiseSettings.ADVERTISE_MODE_LOW_POWER : AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                .setTxPowerLevel(enable ? AdvertiseSettings.ADVERTISE_TX_POWER_ULTRA_LOW : AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setConnectable(true)
+                .setTimeout(0)
+                .build();
+
+            AdvertiseData data = new AdvertiseData.Builder()
+                .setIncludeDeviceName(false)
+                .setIncludeTxPowerLevel(false)
+                .addServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
+                .build();
+
+            AdvertiseData.Builder scanBuilder = new AdvertiseData.Builder()
+                .setIncludeDeviceName(false)
+                .setIncludeTxPowerLevel(false);
+
+            if (enable) {
+                // 16-byte raw USAR manufacturer beacon: 'N', 'E', 'E', 'R', 0x01 (Critical Beacon), + 11 bytes zeros
+                byte[] beacon = new byte[] { 'N', 'E', 'E', 'R', 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+                scanBuilder.addManufacturerData(0x4E65, beacon);
+            } else {
+                scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'E', 'E', 'R' });
+            }
+
+            advertiser.startAdvertising(settings, data, scanBuilder.build(), advertiseCallback);
+            Log.i(TAG, "Switched BLE advertising mode: LowPower=" + enable);
+        } catch (Exception e) {
+            Log.w(TAG, "Error switching beacon mode: " + e.getMessage());
+        }
+    }
+
     // ── Native 24/7 Background BLE Scanner ────────────────────────────────────
     private void startNativeScanning() {
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) return;
@@ -430,6 +469,9 @@ public class NeerNetraNativeMeshManager {
         }
     }
 
+    private final Map<String, Queue<byte[]>> notificationQueues = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> isNotifying = new ConcurrentHashMap<>();
+
     private boolean sendSlicedNotification(BluetoothDevice device, byte[] data, int maxAttrLen) {
         int headerSize = 4;
         // Never exceed actual MTU: minimum payload is 16 bytes (16 + 4 header = 20 bytes <= MTU 23)
@@ -441,6 +483,8 @@ public class NeerNetraNativeMeshManager {
         synchronized (this) {
             pktId = (rollingPacketId++) & 0xFF;
         }
+
+        Queue<byte[]> queue = notificationQueues.computeIfAbsent(device.getAddress(), k -> new java.util.concurrent.ConcurrentLinkedQueue<>());
 
         for (int i = 0; i < totalSlices; i++) {
             int start = i * slicePayloadSize;
@@ -454,14 +498,32 @@ public class NeerNetraNativeMeshManager {
             chunk[3] = (byte) totalSlices;
             System.arraycopy(data, start, chunk, headerSize, len);
 
-            boolean sent = sendRawNotification(device, chunk);
-            if (!sent) return false;
+            queue.add(chunk);
+        }
 
-            if (i < totalSlices - 1) {
-                try { Thread.sleep(24); } catch (InterruptedException ignored) {}
+        processNextNotification(device);
+        return true;
+    }
+
+    private void processNextNotification(BluetoothDevice device) {
+        String addr = device.getAddress();
+        synchronized (isNotifying) {
+            if (Boolean.TRUE.equals(isNotifying.get(addr))) {
+                return;
+            }
+
+            Queue<byte[]> queue = notificationQueues.get(addr);
+            if (queue != null && !queue.isEmpty()) {
+                byte[] chunk = queue.poll();
+                if (chunk != null) {
+                    isNotifying.put(addr, true);
+                    boolean sent = sendRawNotification(device, chunk);
+                    if (!sent) {
+                        isNotifying.put(addr, false);
+                    }
+                }
             }
         }
-        return true;
     }
 
     // ── Incoming GATT Callbacks ───────────────────────────────────────────────
@@ -481,6 +543,8 @@ public class NeerNetraNativeMeshManager {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "Central disconnected: " + device.getAddress());
                 deviceMtus.remove(device.getAddress());
+                notificationQueues.remove(device.getAddress());
+                isNotifying.remove(device.getAddress());
                 synchronized (connectedCentrals) {
                     connectedCentrals.remove(device);
                 }
@@ -517,6 +581,16 @@ public class NeerNetraNativeMeshManager {
             if (responseNeeded) {
                 gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null);
             }
+        }
+
+        @Override
+        public void onNotificationSent(BluetoothDevice device, int status) {
+            if (device == null) return;
+            String addr = device.getAddress();
+            synchronized (isNotifying) {
+                isNotifying.put(addr, false);
+            }
+            processNextNotification(device);
         }
 
         @Override
@@ -665,17 +739,34 @@ public class NeerNetraNativeMeshManager {
                              decodedJson.contains("\"t\":\"7\"") || decodedJson.contains("\"t\": \"7\"");
             if (isCall) {
                 String callerName = "Nearby Citizen";
+                String targetId = null;
                 boolean isGroup = decodedJson.contains("GROUP_CALL") ||
                                   decodedJson.contains("\"isGroupCall\":true") ||
                                   decodedJson.contains("\"isGroupCall\": true");
                 try {
                     JSONObject jo = new JSONObject(decodedJson);
+                    if (jo.has("d")) {
+                        targetId = jo.optString("d");
+                    }
                     if (jo.has("p")) {
                         String pStr = jo.getString("p");
                         JSONObject p = new JSONObject(pStr);
                         if (p.has("callerName")) callerName = p.getString("callerName");
+                        if (targetId == null && p.has("targetId")) targetId = p.getString("targetId");
+                        if (targetId == null && p.has("targetNodeId")) targetId = p.getString("targetNodeId");
                     }
                 } catch (Exception ignored) {}
+
+                // Deterministic 1-to-1 Addressing Filter
+                if (!isGroup && targetId != null && !targetId.isEmpty() && !"BROADCAST".equals(targetId)) {
+                    android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                    String myNodeId = sp.getString("local_node_id", "");
+                    if (!myNodeId.isEmpty() && !targetId.equalsIgnoreCase(myNodeId) &&
+                        !targetId.contains(myNodeId) && !myNodeId.contains(targetId)) {
+                        Log.i(TAG, "Private intercom call addressed to " + targetId + " (not us: " + myNodeId + "). Suppressing lock-screen wake.");
+                        return;
+                    }
+                }
 
                 Bundle b = new Bundle();
                 b.putString("caller_name", callerName);

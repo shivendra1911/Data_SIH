@@ -24,6 +24,7 @@ import {
   triggerNativeSosAlert,
   dismissIncomingCall,
   showNativeChatNotification,
+  setLocalNodeId,
 } from './gattServerBridge';
 import { startBLEAdvertising } from './bleAdvertiser';
 
@@ -107,31 +108,43 @@ function encodePacket(
   senderId: string,
   payload: string,
   ttl: number = 7,
-  msgId?: string
+  msgId?: string,
+  targetId?: string
 ): string {
   const m = msgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4));
   const envelope = {
     t: type,
     m,
     s: senderId.substring(0, 16),
+    d: targetId || 'BROADCAST',
     ttl,
     p: payload,
   };
   const raw = JSON.stringify(envelope);
-  return btoa(unescape(encodeURIComponent(raw)));
+  try {
+    return btoa(unescape(encodeURIComponent(raw)));
+  } catch {
+    return btoa(raw.replace(/[^\x00-\xFF]/g, ''));
+  }
 }
 
 function decodePacket(base64: string): {
   type: BLEMsgType;
   msgId: string;
   senderId: string;
+  targetId: string;
   ttl: number;
   payload: string;
 } | null {
   try {
     const cleaned = cleanBase64(base64);
     if (!cleaned) return null;
-    const raw = decodeURIComponent(escape(atob(cleaned)));
+    let raw = '';
+    try {
+      raw = decodeURIComponent(escape(atob(cleaned)));
+    } catch {
+      raw = atob(cleaned);
+    }
 
     // 1. JSON envelope format (Modern robust)
     if (raw.startsWith('{') && raw.endsWith('}')) {
@@ -141,6 +154,7 @@ function decodePacket(base64: string): {
           type: obj.t as BLEMsgType,
           msgId: obj.m,
           senderId: obj.s,
+          targetId: obj.d || 'BROADCAST',
           ttl: obj.ttl || 1,
           payload: typeof obj.p === 'string' ? obj.p : JSON.stringify(obj.p),
         };
@@ -153,6 +167,7 @@ function decodePacket(base64: string): {
         type: raw.charCodeAt(0) as BLEMsgType,
         msgId: raw.substring(1, 17),
         senderId: raw.substring(17, 33).replace(/\0/g, ''),
+        targetId: 'BROADCAST',
         ttl: raw.charCodeAt(33),
         payload: raw.substring(34),
       };
@@ -170,7 +185,24 @@ class NeerNetraBLEMesh {
   private connectingDevices: Set<string> = new Set();
   private activePeers: Map<string, MeshPeer> = new Map();
   private chatMessages: MeshChatMessage[] = [];
-  private seenMsgIds: Set<string> = new Set();
+  private seenMsgIds: Map<string, number> = new Map();
+  private pendingRelays: Map<string, { timer: any; packet: any }> = new Map();
+
+  private isMessageSeen(msgId: string): boolean {
+    const now = Date.now();
+    if (this.seenMsgIds.size > 2048) {
+      for (const [id, ts] of this.seenMsgIds.entries()) {
+        if (now - ts > 120000) {
+          this.seenMsgIds.delete(id);
+        }
+      }
+    }
+    return this.seenMsgIds.has(msgId);
+  }
+
+  private markMessageSeen(msgId: string) {
+    this.seenMsgIds.set(msgId, Date.now());
+  }
   private myDeviceId: string = '';
   private myName: string = '';
   private isScanning: boolean = false;
@@ -274,6 +306,8 @@ class NeerNetraBLEMesh {
     const rawId = deviceId || 'dev_' + Math.random().toString(36).substring(2, 10);
     this.myDeviceId = rawId.substring(0, 16);
     this.myName = userName || 'NeerNetra Node';
+
+    setLocalNodeId(this.myDeviceId).catch(() => {});
 
     try {
       await this.requestAndroidPermissions();
@@ -712,7 +746,7 @@ class NeerNetraBLEMesh {
     }
   }
 
-  // ── Sliced Write Fallback for unnegotiated MTU (Safe 20-byte chunks for MTU 23) ──
+  // ── Sliced Write Fallback for unnegotiated MTU (Safe chunks adapted to MTU) ──
   private async sendSlicedWriteToPeer(device: Device, rawBase64Packet: string): Promise<boolean> {
     try {
       let raw = '';
@@ -723,15 +757,20 @@ class NeerNetraBLEMesh {
       }
       const rawLen = raw.length;
       const headerSize = 4;
-      const sliceSize = 16; // 16 bytes payload + 4 bytes header = 20 bytes total chunk (guaranteed <= MTU 23)
-      const totalSlices = Math.ceil(rawLen / sliceSize);
+      const sliceSize = Math.max(16, ((device.mtu || 23) - headerSize));
+      const totalSlices = Math.min(255, Math.ceil(rawLen / sliceSize));
       const pktId = Math.floor(Math.random() * 255);
 
       for (let i = 0; i < totalSlices; i++) {
         const start = i * sliceSize;
         const end = Math.min(start + sliceSize, rawLen);
-        const chunkRaw = String.fromCharCode(0x53, pktId, i, totalSlices) + raw.substring(start, end);
-        const chunkBase64 = btoa(chunkRaw);
+        const chunkRaw = String.fromCharCode(0x53, pktId & 0xFF, i & 0xFF, totalSlices & 0xFF) + raw.substring(start, end);
+        let chunkBase64 = '';
+        try {
+          chunkBase64 = btoa(unescape(encodeURIComponent(chunkRaw)));
+        } catch {
+          chunkBase64 = btoa(chunkRaw.replace(/[^\x00-\xFF]/g, ''));
+        }
 
         try {
           const chunkPromise = device.writeCharacteristicWithResponseForService(
@@ -754,7 +793,7 @@ class NeerNetraBLEMesh {
         }
 
         if (i < totalSlices - 1) {
-          await new Promise((r) => setTimeout(r, 20));
+          await new Promise((r) => setTimeout(r, 15));
         }
       }
       return true;
@@ -770,11 +809,13 @@ class NeerNetraBLEMesh {
     payload: string,
     ttl: number = 7,
     msgId?: string,
-    originSenderId?: string
+    originSenderId?: string,
+    targetId?: string
   ): Promise<boolean> {
     try {
       const sender = originSenderId || this.myDeviceId;
-      const packet = encodePacket(type, sender, payload, ttl, msgId);
+      const packet = encodePacket(type, sender, payload, ttl, msgId, targetId);
+      const writeTimeoutMs = type === BLEMsgType.VOICE_BURST ? 4000 : 1800;
 
       // Primary: Write with response (Android automatically handles Prepare/Execute Write for packets > MTU)
       try {
@@ -784,7 +825,7 @@ class NeerNetraBLEMesh {
           packet
         );
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('WriteWithResponse timeout')), 1500)
+          setTimeout(() => reject(new Error('WriteWithResponse timeout')), writeTimeoutMs)
         );
         await Promise.race([writePromise, timeoutPromise]);
         return true;
@@ -797,12 +838,12 @@ class NeerNetraBLEMesh {
             packet
           );
           const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('WriteWithoutResponse timeout')), 1000)
+            setTimeout(() => reject(new Error('WriteWithoutResponse timeout')), 1200)
           );
           await Promise.race([fallbackPromise, timeoutPromise]);
           return true;
         } catch (noRespErr) {
-          // Fallback 2: 20-byte safe slicing
+          // Fallback 2: safe slicing
           return await this.sendSlicedWriteToPeer(device, packet);
         }
       }
@@ -818,27 +859,29 @@ class NeerNetraBLEMesh {
     payload: string,
     ttl: number = 7,
     existingMsgId?: string,
-    originSenderId?: string
+    originSenderId?: string,
+    targetId?: string
   ) {
     const sender = originSenderId || this.myDeviceId;
     const mId = existingMsgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4));
 
     // Register msgId immediately so we never loop back our own broadcast
-    this.seenMsgIds.add(mId);
+    this.markMessageSeen(mId);
 
-    const packet = encodePacket(type, sender, payload, ttl, mId);
+    const packet = encodePacket(type, sender, payload, ttl, mId, targetId);
 
     // 1. Notify all Centrals connected to our GATT Server (Peripheral -> Central)
     notifyAllCentrals(packet).catch(() => {});
 
     // 2. Write to all Peripherals we connected to as Central (Central -> Peripheral)
     const writePromises = Array.from(this.connectedDevices.values()).map((d) =>
-      this.sendToPeer(d, type, payload, ttl, mId, sender).catch(() => false)
+      this.sendToPeer(d, type, payload, ttl, mId, sender, targetId).catch(() => false)
     );
 
-    // Hard ceiling: max 1200ms total wait so calling functions NEVER hang
+    // Dynamic timeout ceiling: allows audio bursts to finish without truncating
+    const timeoutMs = type === BLEMsgType.VOICE_BURST ? 5000 : Math.max(1800, Math.ceil(payload.length / 200) * 150);
     const allWrites = Promise.allSettled(writePromises);
-    const hardCeiling = new Promise((r) => setTimeout(r, 1200));
+    const hardCeiling = new Promise((r) => setTimeout(r, timeoutMs));
     await Promise.race([allWrites, hardCeiling]);
   }
 
@@ -895,69 +938,102 @@ class NeerNetraBLEMesh {
     // 1. Ignore if sent or originated by ourselves
     if (packet.senderId === this.myDeviceId) return;
 
-    // 2. Ignore if already seen this message ID
-    if (this.seenMsgIds.has(packet.msgId)) return;
-    this.seenMsgIds.add(packet.msgId);
-
-    if (this.seenMsgIds.size > 500) {
-      const oldest = this.seenMsgIds.values().next().value as string | undefined;
-      if (oldest) this.seenMsgIds.delete(oldest);
+    // Overhearing suppression: If another node already relayed this packet while we were in backoff, cancel our relay!
+    if (this.pendingRelays.has(packet.msgId)) {
+      const pending = this.pendingRelays.get(packet.msgId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingRelays.delete(packet.msgId);
+        console.log(`[BLE Mesh] 🔇 Overhearing suppression: canceled redundant relay for ${packet.msgId}`);
+      }
     }
 
-    console.log(`[BLE Mesh] 📥 Packet type=${packet.type} from=${packet.senderId} id=${packet.msgId} ttl=${packet.ttl}`);
+    // 2. Ignore if already processed this message ID
+    if (this.isMessageSeen(packet.msgId)) return;
+    this.markMessageSeen(packet.msgId);
 
-    switch (packet.type) {
-      case BLEMsgType.HELLO:
-        this.handleHello(fromDeviceId, packet.senderId, packet.payload);
-        break;
+    console.log(`[BLE Mesh] 📥 Packet type=${packet.type} from=${packet.senderId} id=${packet.msgId} target=${packet.targetId} ttl=${packet.ttl}`);
 
-      case BLEMsgType.CHAT:
-        this.handleChatMessage(packet.senderId, packet.payload, packet.ttl, packet.msgId);
-        break;
+    // Deterministic 1-to-1 Node Addressing Filter
+    const isBroadcast = !packet.targetId || packet.targetId === 'BROADCAST' || packet.targetId === 'GROUP_CALL';
+    const isForMe = isBroadcast || packet.targetId === this.myDeviceId ||
+                    (this.myName && packet.targetId.includes(this.myName));
 
-      case BLEMsgType.SOS:
-        this.handleSOSPacket(packet.senderId, packet.payload, packet.ttl);
-        break;
+    if (isForMe) {
+      switch (packet.type) {
+        case BLEMsgType.HELLO:
+          this.handleHello(fromDeviceId, packet.senderId, packet.payload);
+          break;
 
-      case BLEMsgType.SAFE:
-        this.handleSafeConfirmation(packet.senderId, packet.payload);
-        break;
+        case BLEMsgType.CHAT:
+          this.handleChatMessage(packet.senderId, packet.payload, packet.ttl, packet.msgId);
+          break;
 
-      case BLEMsgType.RELAY:
-        break;
+        case BLEMsgType.SOS:
+          this.handleSOSPacket(packet.senderId, packet.payload, packet.ttl);
+          break;
 
-      case BLEMsgType.CALL_REQUEST:
-        this.handleCallRequest(packet.senderId, packet.payload, packet.ttl);
-        break;
+        case BLEMsgType.SAFE:
+          this.handleSafeConfirmation(packet.senderId, packet.payload);
+          break;
 
-      case BLEMsgType.CALL_ACCEPT:
-        this.handleCallAccept(packet.senderId, packet.payload);
-        break;
+        case BLEMsgType.RELAY:
+          break;
 
-      case BLEMsgType.CALL_DECLINE:
-        this.handleCallDecline(packet.senderId, packet.payload);
-        break;
+        case BLEMsgType.CALL_REQUEST:
+          this.handleCallRequest(packet.senderId, packet.payload, packet.ttl);
+          break;
 
-      case BLEMsgType.CALL_END:
-        this.handleCallEnd(packet.senderId, packet.payload);
-        break;
+        case BLEMsgType.CALL_ACCEPT:
+          this.handleCallAccept(packet.senderId, packet.payload);
+          break;
 
-      case BLEMsgType.VOICE_BURST:
-        this.handleVoiceBurst(packet.senderId, packet.payload);
-        break;
+        case BLEMsgType.CALL_DECLINE:
+          this.handleCallDecline(packet.senderId, packet.payload);
+          break;
+
+        case BLEMsgType.CALL_END:
+          this.handleCallEnd(packet.senderId, packet.payload);
+          break;
+
+        case BLEMsgType.VOICE_BURST:
+          this.handleVoiceBurst(packet.senderId, packet.payload);
+          break;
+      }
+    } else {
+      console.log(`[BLE Mesh] 🔀 Packet ${packet.msgId} (type ${packet.type}) is directed to ${packet.targetId} (not me: ${this.myDeviceId}). Forwarding without ringing.`);
     }
 
-    // Multi-hop relay: ONLY relay broadcast data (CHAT, SOS, SAFE, RELAY) with decremented TTL
-    // Voice bursts, hello pings, and call signaling MUST NEVER be flood-relayed!
-    const relayableTypes = [BLEMsgType.CHAT, BLEMsgType.SOS, BLEMsgType.SAFE, BLEMsgType.RELAY];
-    if (packet.ttl > 1 && relayableTypes.includes(packet.type)) {
-      this.broadcastToAll(packet.type, packet.payload, packet.ttl - 1, packet.msgId, packet.senderId).then(() => {
-        const peer = this.activePeers.get(fromDeviceId);
-        if (peer) {
-          peer.relayedPacketsCount = (peer.relayedPacketsCount || 0) + 1;
-          this.activePeers.set(fromDeviceId, peer);
-        }
-      });
+    // Multi-hop managed relay: Relay ALL packet types (including calls, voice, and SOS) when ttl > 1
+    if (packet.ttl > 1 && packet.type !== BLEMsgType.HELLO) {
+      const peer = this.activePeers.get(fromDeviceId);
+      const rssi = peer?.signalStrength || -75;
+
+      // Inverse SNR Delay Backoff:
+      // Farthest nodes (weaker RSSI ~ -95dBm) relay first (25-50ms) to advance the perimeter rapidly!
+      // Closer nodes (stronger RSSI ~ -50dBm) wait longer (120-180ms) and will likely overhear and suppress!
+      const rssiClamped = Math.max(-95, Math.min(-50, rssi));
+      const distanceFactor = (-50 - rssiClamped) / 45; // 0 for strong/close, 1 for weak/far
+      const backoffDelay = packet.type === BLEMsgType.SOS ? 15 : Math.round(180 - distanceFactor * 140 + Math.random() * 20);
+
+      const relayTimer = setTimeout(() => {
+        this.pendingRelays.delete(packet.msgId);
+        this.broadcastToAll(
+          packet.type,
+          packet.payload,
+          packet.ttl - 1,
+          packet.msgId,
+          packet.senderId,
+          packet.targetId
+        ).then(() => {
+          if (peer) {
+            peer.relayedPacketsCount = (peer.relayedPacketsCount || 0) + 1;
+            this.activePeers.set(fromDeviceId, peer);
+          }
+        }).catch(() => {});
+      }, backoffDelay);
+
+      this.pendingRelays.set(packet.msgId, { timer: relayTimer, packet });
     }
   }
 
@@ -1297,7 +1373,7 @@ class NeerNetraBLEMesh {
     };
 
     this.chatMessages.push(msg);
-    this.seenMsgIds.add(msgId);
+    this.markMessageSeen(msgId);
 
     const payload = JSON.stringify({
       senderId: this.myDeviceId,
@@ -1312,9 +1388,9 @@ class NeerNetraBLEMesh {
     return msg;
   }
 
-  /** Broadcast SOS beacon via BLE mesh (all hops) */
+  /** Broadcast SOS beacon via BLE mesh (all hops, TTL=32) */
   async broadcastMultiHopSOS(payload: SOSPayload): Promise<{ hops: number; peersReached: number }> {
-    console.warn('[BLE Mesh] Broadcasting SOS across full mesh...');
+    console.warn('[BLE Mesh] Broadcasting SOS across full mesh (TTL=32)...');
     await saveSOSToOfflineQueue({ ...payload, is_mesh_relayed: true });
 
     const data = JSON.stringify({
@@ -1326,8 +1402,17 @@ class NeerNetraBLEMesh {
       timestamp: payload.timestamp || new Date().toISOString(),
     });
 
-    await this.broadcastToAll(BLEMsgType.SOS, data, 7);
-    return { hops: 7, peersReached: this.connectedDevices.size };
+    await this.broadcastToAll(BLEMsgType.SOS, data, 32);
+    return { hops: 32, peersReached: this.connectedDevices.size };
+  }
+
+  /** Compatibility method: Broadcast SOS packet over mesh (as required by UI components) */
+  async broadcastPacketOverMesh(payload: SOSPayload): Promise<{ success: boolean; relayedByCount: number }> {
+    const res = await this.broadcastMultiHopSOS(payload);
+    return {
+      success: true,
+      relayedByCount: Math.max(res.peersReached, this.activePeers.size),
+    };
   }
 
   /** Broadcast SOS alias for full cross-module compatibility */
@@ -1342,7 +1427,7 @@ class NeerNetraBLEMesh {
     console.log('[BLE Mesh] SAFE broadcast sent to all peers');
   }
 
-  /** Initiate a BLE voice intercom call to a peer or group */
+  /** Initiate a BLE voice intercom call to a peer or group (TTL=16) */
   async initiateCall(targetPeerId: string, targetName?: string, isGroupCall: boolean = false): Promise<boolean> {
     const isGroup = Boolean(isGroupCall || targetPeerId === 'GROUP_CALL');
     console.log(`[BLE Mesh] Initiating ${isGroup ? '🚨 GROUP EMERGENCY CALL' : '1-to-1 call'} to: ${targetPeerId}`);
@@ -1360,7 +1445,7 @@ class NeerNetraBLEMesh {
       timestamp: Date.now(),
     });
 
-    await this.broadcastToAll(BLEMsgType.CALL_REQUEST, payload, 1);
+    await this.broadcastToAll(BLEMsgType.CALL_REQUEST, payload, 16, undefined, this.myDeviceId, targetNodeId);
     return true;
   }
 
@@ -1370,48 +1455,60 @@ class NeerNetraBLEMesh {
     return this.initiateCall('GROUP_CALL', callerName || 'ALL NEARBY CITIZENS', true);
   }
 
-  /** Accept an incoming call */
+  /** Accept an incoming call (TTL=16) */
   async acceptCall(callerId: string): Promise<void> {
     console.log(`[BLE Mesh] Accepting call from: ${callerId}`);
+    const peer = this.activePeers.get(callerId) || Array.from(this.activePeers.values()).find((p) => p.id === callerId || p.nodeId === callerId);
+    const targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+
     const payload = JSON.stringify({
       responderId: this.myDeviceId,
       responderName: this.myName || 'Citizen Node',
       targetId: callerId,
+      targetNodeId,
       status: 'ACCEPTED',
       timestamp: Date.now(),
     });
-    this.broadcastToAll(BLEMsgType.CALL_ACCEPT, payload, 1).catch(() => {});
+    this.broadcastToAll(BLEMsgType.CALL_ACCEPT, payload, 16, undefined, this.myDeviceId, targetNodeId).catch(() => {});
   }
 
-  /** Decline an incoming call */
+  /** Decline an incoming call (TTL=16) */
   async declineCall(callerId: string): Promise<void> {
     console.log(`[BLE Mesh] Declining call from: ${callerId}`);
+    const peer = this.activePeers.get(callerId) || Array.from(this.activePeers.values()).find((p) => p.id === callerId || p.nodeId === callerId);
+    const targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+
     const payload = JSON.stringify({
       responderId: this.myDeviceId,
       targetId: callerId,
+      targetNodeId,
       status: 'DECLINED',
       timestamp: Date.now(),
     });
     // Dismiss the IncomingCallActivity immediately on THIS device in 0ms
     dismissIncomingCall().catch(() => {});
-    this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 1).catch(() => {});
+    this.broadcastToAll(BLEMsgType.CALL_DECLINE, payload, 16, undefined, this.myDeviceId, targetNodeId).catch(() => {});
   }
 
-  /** Terminate an ongoing call */
+  /** Terminate an ongoing call (TTL=16) */
   async endCall(peerId: string): Promise<void> {
     console.log(`[BLE Mesh] Ending call with: ${peerId}`);
+    const peer = this.activePeers.get(peerId) || Array.from(this.activePeers.values()).find((p) => p.id === peerId || p.nodeId === peerId);
+    const targetNodeId = peer?.nodeId || this.macToNodeId.get(peerId) || peerId;
+
     const payload = JSON.stringify({
       senderId: this.myDeviceId,
       targetId: peerId,
+      targetNodeId,
       status: 'ENDED',
       timestamp: Date.now(),
     });
     // Dismiss IncomingCallActivity on THIS device immediately (0ms)
     dismissIncomingCall().catch(() => {});
-    this.broadcastToAll(BLEMsgType.CALL_END, payload, 1).catch(() => {});
+    this.broadcastToAll(BLEMsgType.CALL_END, payload, 16, undefined, this.myDeviceId, targetNodeId).catch(() => {});
   }
 
-  /** Send real compressed microphone audio burst across BLE mesh */
+  /** Send real compressed microphone audio burst across BLE mesh (TTL=10) */
   async sendVoiceBurst(targetPeerId: string, base64Audio: string, isGroupCall: boolean = false): Promise<void> {
     if (!base64Audio || base64Audio.trim().length === 0) return;
 
@@ -1435,10 +1532,10 @@ class NeerNetraBLEMesh {
       timestamp: Date.now(),
     });
 
-    console.log(`[BLE Mesh] 🎙️ Transmitting voice burst (${safeAudio.length} chars) to ${isGroup ? '🚨 ALL NODES (GROUP)' : (peer?.name || targetPeerId)}`);
+    console.log(`[BLE Mesh] 🎙️ Transmitting voice burst (${safeAudio.length} chars, TTL=10) to ${isGroup ? '🚨 ALL NODES (GROUP)' : (peer?.name || targetPeerId)}`);
 
-    // Broadcast to all connected devices and centrals with single unified packet ID
-    await this.broadcastToAll(BLEMsgType.VOICE_BURST, payload, 1);
+    // Broadcast to all connected devices and centrals with TTL=10 and targetNodeId
+    await this.broadcastToAll(BLEMsgType.VOICE_BURST, payload, 10, undefined, this.myDeviceId, targetNodeId);
   }
 
   /** Get device's own mesh ID */

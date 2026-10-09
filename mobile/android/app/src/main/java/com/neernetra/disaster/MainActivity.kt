@@ -28,13 +28,17 @@ class MainActivity : ReactActivity() {
 
   private fun checkBatteryOptimizations() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      val prefs = getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE)
+      val hasAsked = prefs.getBoolean("hasAskedBatteryOpt", false)
+
       val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-      if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
+      if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName) && !hasAsked) {
         try {
           val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = android.net.Uri.parse("package:$packageName")
           }
           startActivity(intent)
+          prefs.edit().putBoolean("hasAskedBatteryOpt", true).apply()
         } catch (e: Exception) {
           // Fallback if OEM blocks direct prompt
         }

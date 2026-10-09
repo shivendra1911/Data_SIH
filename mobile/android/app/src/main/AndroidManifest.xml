@@ -11,6 +11,9 @@
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
+  <uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
@@ -73,6 +76,24 @@
         android:enabled="true"
         android:exported="false"
         android:stopWithTask="false"
+        android:foregroundServiceType="connectedDevice|microphone|phoneCall" />
+
+    <!-- AOSP Self-Managed Telecom ConnectionService for Lock-Screen Intercom -->
+    <service
+        android:name=".NeerNetraConnectionService"
+        android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="android.telecom.ConnectionService"/>
+      </intent-filter>
+    </service>
+
+    <!-- Isolated Process Watchdog Service -->
+    <service
+        android:name=".NeerNetraWatchdogService"
+        android:process=":watchdog"
+        android:enabled="true"
+        android:exported="false"
         android:foregroundServiceType="connectedDevice" />
 
     <!-- System Boot / Update Auto-Restart Receiver -->
@@ -84,6 +105,16 @@
         <action android:name="android.intent.action.BOOT_COMPLETED"/>
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
         <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+      </intent-filter>
+    </receiver>
+
+    <!-- Resurrection Watchdog Receiver -->
+    <receiver
+        android:name=".RestartServiceReceiver"
+        android:enabled="true"
+        android:exported="false">
+      <intent-filter>
+        <action android:name="com.neernetra.disaster.RESTART_MESH_SERVICE"/>
       </intent-filter>
     </receiver>
   </application>

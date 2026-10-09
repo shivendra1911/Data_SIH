@@ -6,6 +6,7 @@ import Header from "@/components/Dashboard/Header";
 import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
 import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
+import BuildingCollapsePanel from "@/components/Dashboard/BuildingCollapsePanel";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
@@ -493,8 +494,20 @@ export default function RescueCitizenGridPage() {
               />
             </div>
 
-            {/* Right 5 Cols: Emergency Responder Grid */}
+            {/* Right 5 Cols: USAR Collapse Sentinel & Emergency Responder Grid */}
             <div className="lg:col-span-5 flex flex-col space-y-4">
+              <BuildingCollapsePanel
+                onDispatchUSAR={(cid) => {
+                  setDispatchNotice(`🚨 Heavy USAR Rescue Squad deployed to Structural Collapse #${cid.slice(-6).toUpperCase()}`);
+                  setTimeout(() => setDispatchNotice(null), 5000);
+                }}
+                onFocusCoordinates={(lat, lng) => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = `/radar?lat=${lat}&lng=${lng}`;
+                  }
+                }}
+              />
+
               <EmergencyResponderGrid
                 responders={activeResponders}
                 zoneName={selectedZone.name}

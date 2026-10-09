@@ -51,6 +51,16 @@ import {
   clearPendingEmergencyIntent,
   subscribeToEmergencyWakeUp,
 } from '../services/gattServerBridge';
+import { CollapseSafetyModal } from '../components/CollapseSafetyModal';
+import {
+  buildingCollapseDetector,
+  CollapseEventData,
+} from '../services/buildingCollapseDetector';
+import {
+  barometerStormDetector,
+  StormAlert,
+} from '../services/barometerStormDetector';
+import { batteryPreservationManager } from '../services/batteryPreservationManager';
 
 const Tab = createBottomTabNavigator();
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
@@ -82,6 +92,14 @@ export const HomeScreen: React.FC = () => {
   const [remainingCountdown, setRemainingCountdown] = useState<number | null>(null);
   const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
   const [forcedSiren, setForcedSiren] = useState<MobileSirenEvent | null>(null);
+
+  // Sentinel States: Collapse, Barometer Storm, Battery
+  const [showCollapseModal, setShowCollapseModal] = useState<boolean>(false);
+  const [collapseCountdown, setCollapseCountdown] = useState<number>(60);
+  const [collapseEventData, setCollapseEventData] = useState<CollapseEventData | null>(null);
+  const [quorumCount, setQuorumCount] = useState<number>(0);
+  const [stormAlert, setStormAlert] = useState<StormAlert | null>(null);
+  const [isLowPowerBeaconActive, setIsLowPowerBeaconActive] = useState<boolean>(false);
 
   // Active top navigation tab state
   const [currentTab, setCurrentTab] = useState<CitizenTab>('status');
@@ -177,11 +195,50 @@ export const HomeScreen: React.FC = () => {
     getPendingEmergencyIntent().then(handleWakeIntent);
     const unsubscribeWake = subscribeToEmergencyWakeUp(handleWakeIntent);
 
+    // 1. Building Collapse 3-Phase Kinetic Sentinel
+    buildingCollapseDetector.startMonitoring({
+      onCollapseTriggered: (data) => {
+        setCollapseEventData(data);
+        setShowCollapseModal(true);
+        setCollapseCountdown(60);
+      },
+      onCountdownTick: (secs) => {
+        setCollapseCountdown(secs);
+      },
+      onAlarmCancelled: () => {
+        setShowCollapseModal(false);
+      },
+      onEmergencyDispatched: () => {
+        setShowCollapseModal(false);
+        setSosStatus('SOS');
+      },
+      onQuorumConfirmed: (count) => {
+        setQuorumCount(count);
+      },
+    });
+
+    // 2. In-Device Barometric Pressure Storm Sentinel
+    barometerStormDetector.startMonitoring({
+      onStormAlert: (alert) => {
+        setStormAlert(alert);
+      },
+    });
+
+    // 3. Zero-Minute Battery Auto-Preservation Protocol
+    batteryPreservationManager.startMonitoring({
+      onLowPowerModeChanged: (isLow) => {
+        setIsLowPowerBeaconActive(isLow);
+      },
+    });
+
     return () => {
       mobileSirenListener.stop();
       unsubscribeWake();
       stopPeriodicLocationTracker();
       stop5SecDisasterLocationStream();
+      buildingCollapseDetector.stopMonitoring();
+      barometerStormDetector.stopMonitoring();
+      batteryPreservationManager.stopMonitoring();
     };
   }, []);
 
@@ -422,6 +479,30 @@ export const HomeScreen: React.FC = () => {
         </View>
       )}
 
+      {/* In-Device Barometric Pressure Storm Sentinel Alert Banner */}
+      {stormAlert && (
+        <View style={styles.stormBanner}>
+          <Text style={styles.stormTitle}>{stormAlert.title}</Text>
+          <Text style={styles.stormSubtitle}>{stormAlert.message}</Text>
+          <TouchableOpacity
+            style={styles.stormDismissBtn}
+            activeOpacity={0.8}
+            onPress={() => setStormAlert(null)}
+          >
+            <Text style={styles.stormDismissText}>ACKNOWLEDGE STORM ALERT</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Zero-Minute Battery Auto-Preservation USAR Beacon Mode */}
+      {isLowPowerBeaconActive && (
+        <View style={styles.lowPowerBanner}>
+          <Text style={styles.lowPowerText}>
+            🪫 100+ HOUR LOW-POWER USAR BLE BEACON ACTIVE (&le;15% BATTERY)
+          </Text>
+        </View>
+      )}
+
       {/* Connectivity badge only when in mesh/offline mode or unsynced queue exists */}
       {(networkMode !== 'ONLINE' || queuedCount > 0) && (
         <MeshStatusBadge
@@ -544,6 +625,16 @@ export const HomeScreen: React.FC = () => {
           setShowRedAlertOverlay(false);
         }}
       />
+
+      {/* 3-Phase Kinetic Structural Collapse Safety Confirmation Modal */}
+      <CollapseSafetyModal
+        visible={showCollapseModal}
+        secondsRemaining={collapseCountdown}
+        eventData={collapseEventData}
+        quorumCount={quorumCount}
+        onConfirmSafe={() => buildingCollapseDetector.confirmUserSafe()}
+        onDispatchImmediately={() => buildingCollapseDetector.autoDispatchRescue()}
+      />
     </View>
   );
 };
@@ -596,5 +687,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
+  },
+  stormBanner: {
+    backgroundColor: '#0F172A',
+    borderBottomWidth: 2,
+    borderBottomColor: '#38BDF8',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  stormTitle: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.4,
+  },
+  stormSubtitle: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 15,
+  },
+  stormDismissBtn: {
+    marginTop: 8,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  stormDismissText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  lowPowerBanner: {
+    backgroundColor: '#78350F',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F59E0B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  lowPowerText: {
+    color: '#FEF3C7',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
 });

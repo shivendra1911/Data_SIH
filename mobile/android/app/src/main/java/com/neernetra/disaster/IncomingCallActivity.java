@@ -108,10 +108,6 @@ public class IncomingCallActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
-            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-            if (km != null) {
-                km.requestDismissKeyguard(this, null);
-            }
         } else {
             //noinspection deprecation
             getWindow().addFlags(
@@ -419,6 +415,13 @@ public class IncomingCallActivity extends Activity {
 
     private void answerCall() {
         stopRinging();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null) {
+                km.requestDismissKeyguard(this, null);
+            }
+        }
 
         Intent mainIntent = new Intent(this, MainActivity.class);
         mainIntent.addFlags(

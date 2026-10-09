@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } fr
 import { SOSStatus, SOSType, SOSPayload, NetworkMode } from '../types';
 import { getCurrentDeviceLocation } from '../services/locationService';
 import { sendSOSPayload } from '../services/api';
-import { meshManager } from '../services/meshService';
+import { meshManager } from '../services/bluetoothMesh';
 import { SOSTypePicker } from './SOSTypePicker';
 import { Radio, AlertOctagon, CheckCircle2, HeartHandshake, MapPin, ChevronDown } from 'lucide-react-native';
 

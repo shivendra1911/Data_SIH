@@ -10,6 +10,7 @@ import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStrea
 import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar";
 import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
+import BuildingCollapsePanel from "@/components/Dashboard/BuildingCollapsePanel";
 import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
@@ -688,6 +689,18 @@ export default function NationalSentinelPage() {
           {/* Section 3: High-Frequency GPS Telemetry, Citizen Rescue List & Emergency Response Grid */}
           <section aria-label="Field Telemetry & Citizen Operations" className="space-y-6">
             <DisasterLocationStream />
+
+            {/* USAR Structural Collapse Kinetic Sentinel Panel */}
+            <BuildingCollapsePanel
+              onDispatchUSAR={(cid) => {
+                showToast(`USAR Brigade dispatched to structural collapse #${cid.slice(-6).toUpperCase()}`);
+              }}
+              onFocusCoordinates={(lat, lng) => {
+                if (typeof window !== "undefined") {
+                  window.location.href = `/radar?lat=${lat}&lng=${lng}`;
+                }
+              }}
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left 7 Cols: Citizen Rescue List */}

@@ -72,6 +72,15 @@ export const startGattServer = async (
   }
 };
 
+export const setLocalNodeId = async (nodeId: string): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.setLocalNodeId) return false;
+  try {
+    return await NeerNetraGatt.setLocalNodeId(nodeId);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Send data to ALL phones currently connected to our GATT Server.
  * This is how we push updates/messages to phones that found us via BLE.
@@ -273,4 +282,14 @@ export const showNativeChatNotification = async (senderName: string, messageText
     return false;
   }
 };
+
+export const setLowPowerBeaconMode = async (enable: boolean): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.setLowPowerBeaconMode) return false;
+  try {
+    return await NeerNetraGatt.setLowPowerBeaconMode(enable);
+  } catch {
+    return false;
+  }
+};
+
 

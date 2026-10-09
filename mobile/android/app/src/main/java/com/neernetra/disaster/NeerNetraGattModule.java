@@ -194,8 +194,32 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void setLocalNodeId(String nodeId, Promise promise) {
+        try {
+            android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            sp.edit().putString("local_node_id", nodeId).apply();
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
+    public void setLowPowerBeaconMode(boolean enable, Promise promise) {
+        try {
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).setLowPowerBeaconMode(enable);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
     public void startGattServer(String deviceName, Promise promise) {
         try {
+            android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            sp.edit().putString("local_node_id", deviceName).apply();
+
             // Ensure 24/7 service is active
             NeerNetraMeshService.startService(getReactApplicationContext());
 
@@ -264,7 +288,7 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 mediaRecorder = new MediaRecorder();
             }
 
-            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.AMR_NB);
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
             mediaRecorder.setOutputFile(audioRecordFile.getAbsolutePath());
@@ -345,17 +369,23 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             fos.write(bytes);
             fos.close();
 
+            final AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                audioManager.setSpeakerphoneOn(true);
+            }
+
             mediaPlayer = new MediaPlayer();
             if (android.os.Build.VERSION.SDK_INT >= 21) {
                 mediaPlayer.setAudioAttributes(
                     new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 );
             } else {
                 //noinspection deprecation
-                mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                mediaPlayer.setAudioStreamType(AudioManager.STREAM_VOICE_CALL);
             }
             mediaPlayer.setVolume(1.0f, 1.0f);
             mediaPlayer.setDataSource(tempPlayFile.getAbsolutePath());
@@ -363,11 +393,23 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 try { mp.release(); } catch (Exception ignored) {}
                 tempPlayFile.delete();
                 mediaPlayer = null;
+                if (audioManager != null) {
+                    try {
+                        audioManager.setMode(AudioManager.MODE_NORMAL);
+                        audioManager.setSpeakerphoneOn(false);
+                    } catch (Exception ignored) {}
+                }
             });
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 try { mp.release(); } catch (Exception ignored) {}
                 tempPlayFile.delete();
                 mediaPlayer = null;
+                if (audioManager != null) {
+                    try {
+                        audioManager.setMode(AudioManager.MODE_NORMAL);
+                        audioManager.setSpeakerphoneOn(false);
+                    } catch (Exception ignored) {}
+                }
                 return true;
             });
             mediaPlayer.prepare();
@@ -385,6 +427,13 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             if (mediaPlayer != null) {
                 try { mediaPlayer.stop(); mediaPlayer.release(); } catch (Exception ignored) {}
                 mediaPlayer = null;
+            }
+            AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                try {
+                    audioManager.setMode(AudioManager.MODE_NORMAL);
+                    audioManager.setSpeakerphoneOn(false);
+                } catch (Exception ignored) {}
             }
             promise.resolve(true);
         } catch (Exception e) {

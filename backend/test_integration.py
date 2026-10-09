@@ -36,7 +36,7 @@ def run_integration_tests():
 
     with TestClient(app) as client:
         tests_passed = 0
-        total_tests = 12
+        total_tests = 16
 
     # 1. Health & Status
     print("\n[TEST 1] Verifying Backend Root & Health Status...")
@@ -204,6 +204,86 @@ def run_integration_tests():
     assert "distance_km" in nearest and "bearing_compass" in nearest and "elevation_gain_m" in nearest
     print(f"  --> Nearest Safe Shelter: {nearest['name']}")
     print(f"  --> Distance: {nearest['distance_km']} km ({nearest['distance_m']}m) | Elevation Gain: +{nearest['elevation_gain_m']}m | Bearing: {nearest['bearing_deg']}° ({nearest['bearing_compass']})")
+    tests_passed += 1
+
+    # 13. Edge Building Collapse Ingestion & Initial Cluster Creation
+    print("\n[TEST 13] Verifying Edge Structural Collapse Event Ingestion (/api/collapse/event)...")
+    c_res1 = client.post("/api/collapse/event", json={
+        "device_uuid": "dev_collapse_victim_01",
+        "lat": 30.5573,
+        "lng": 79.5642,
+        "confidence": 0.94,
+        "peak_g": 5.2,
+        "rubble_duration_s": 8.0,
+        "notes": "Satya Niketan structural failure test"
+    })
+    assert c_res1.status_code == 200, f"Expected 200, got {c_res1.status_code}"
+    c_data1 = c_res1.json()
+    assert c_data1["success"] is True
+    assert c_data1["cluster_status"] == "PENDING_QUORUM"
+    assert c_data1["quorum_count"] == 1
+    cluster_id = c_data1["cluster_id"]
+    print(f"  --> First collapse report ingested. Cluster: {cluster_id} [Status: {c_data1['cluster_status']}]")
+    tests_passed += 1
+
+    # 14. 3+ Phone Spatiotemporal Quorum Consensus (Within 100m)
+    print("\n[TEST 14] Verifying 3+ Phone Spatiotemporal Quorum Consensus (Upgrade to CONFIRMED_COLLAPSE)...")
+    # Phone 2 (30 meters away)
+    c_res2 = client.post("/api/collapse/event", json={
+        "device_uuid": "dev_collapse_victim_02",
+        "lat": 30.5575,
+        "lng": 79.5644,
+        "confidence": 0.91,
+        "peak_g": 4.6,
+        "rubble_duration_s": 8.0
+    })
+    assert c_res2.status_code == 200
+    assert c_res2.json()["cluster_id"] == cluster_id
+    assert c_res2.json()["quorum_count"] == 2
+
+    # Phone 3 (50 meters away) -> Reaches Quorum >= 3!
+    c_res3 = client.post("/api/collapse/event", json={
+        "device_uuid": "dev_collapse_victim_03",
+        "lat": 30.5571,
+        "lng": 79.5640,
+        "confidence": 0.96,
+        "peak_g": 6.1,
+        "rubble_duration_s": 8.0
+    })
+    assert c_res3.status_code == 200
+    c_data3 = c_res3.json()
+    assert c_data3["cluster_id"] == cluster_id
+    assert c_data3["quorum_count"] == 3
+    assert c_data3["is_confirmed"] is True
+    assert c_data3["cluster_status"] == "CONFIRMED_COLLAPSE"
+    print(f"  --> Quorum Reached! 3 phones confirmed collapse in 100m. Status: {c_data3['cluster_status']}")
+    tests_passed += 1
+
+    # 15. USAR Active Collapse Clusters Endpoint
+    print("\n[TEST 15] Verifying Active USAR Collapse Clusters Feed (/api/collapse/active-clusters)...")
+    c_list_res = client.get("/api/collapse/active-clusters")
+    assert c_list_res.status_code == 200
+    c_list_data = c_list_res.json()
+    assert c_list_data["confirmed_clusters_count"] >= 1
+    target_cluster = next((c for c in c_list_data["clusters"] if c["cluster_id"] == cluster_id), None)
+    assert target_cluster is not None
+    assert target_cluster["status"] == "CONFIRMED_COLLAPSE"
+    assert target_cluster["trapped_headcount"] == 3
+    print(f"  --> Confirmed Collapse Clusters: {c_list_data['confirmed_clusters_count']} | Trapped Headcount: {target_cluster['trapped_headcount']}")
+    tests_passed += 1
+
+    # 16. Inverted Safety Window "I AM SAFE" User Cancellation
+    print("\n[TEST 16] Verifying User 'I AM SAFE' Cancellation Disarm (/api/collapse/cancel)...")
+    cancel_res = client.post("/api/collapse/cancel", json={
+        "device_uuid": "dev_collapse_victim_01",
+        "lat": 30.5573,
+        "lng": 79.5642
+    })
+    assert cancel_res.status_code == 200
+    cancel_data = cancel_res.json()
+    assert cancel_data["success"] is True
+    assert cancel_data["status"] == "CANCELLED"
+    print(f"  --> Alarm safely cancelled for dev_collapse_victim_01. Affected clusters: {cancel_data['affected_clusters']}")
     tests_passed += 1
 
     print("\n" + "=" * 75)
