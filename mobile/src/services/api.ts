@@ -17,11 +17,14 @@ export const getDeviceModelName = (): string => {
   return 'Mobile Device';
 };
 
-// Candidate URLs for local debugging via USB (adb reverse) or local Wi-Fi
+// Candidate URLs for local debugging via Wi-Fi, USB (adb reverse), or Vercel cloud
 const CANDIDATE_URLS = [
+  'http://192.168.0.185:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3000',
   'http://10.0.2.2:3000',
+  'https://data-sih.vercel.app',
+  'http://192.168.0.185:8000',
   'http://127.0.0.1:8000',
   'http://localhost:8000',
 ];
@@ -186,7 +189,7 @@ export const syncSOSToSupabaseCloud = async (payload: SOSPayload): Promise<boole
           },
         ]),
       },
-      8000
+      1500
     );
     return res.ok;
   } catch (err) {
@@ -204,30 +207,49 @@ export const sendSOSPayload = async (payload: SOSPayload): Promise<{ success: bo
     payload.notes = `${phoneModel} | ${payload.notes || ''}`.trim();
   }
 
-  // 1. Direct Cloud Push to Supabase Cloud (<100ms)
-  cloudSuccess = await syncSOSToSupabaseCloud(payload);
-  if (cloudSuccess) {
+  // Parallel attempt to push to Supabase Cloud and local/cloud web endpoints
+  const [cloudSettled, backendSettled] = await Promise.allSettled([
+    syncSOSToSupabaseCloud(payload),
+    (async () => {
+      // 1. Try Next.js /api/sos/trigger
+      try {
+        const res = await apiFetch('/api/sos/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) return true;
+      } catch {}
+
+      // 2. Try Next.js /api/citizen/sos
+      try {
+        const res = await apiFetch('/api/citizen/sos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) return true;
+      } catch {}
+
+      return false;
+    })(),
+  ]);
+
+  if (cloudSettled.status === 'fulfilled' && cloudSettled.value) {
+    cloudSuccess = true;
     console.log('[API Service] SOS successfully ingested by Supabase Cloud Realtime');
   }
-
-  // 2. Parallel attempt to push to local backend gateway (if reachable)
-  try {
-    const res = await apiFetch('/api/sos/trigger', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      backendSuccess = true;
-    }
-  } catch {}
+  if (backendSettled.status === 'fulfilled' && backendSettled.value) {
+    backendSuccess = true;
+    console.log('[API Service] SOS successfully ingested by Web Portal Gateway');
+  }
 
   if (cloudSuccess || backendSuccess) {
     return {
       success: true,
-      message: cloudSuccess
-        ? 'Broadcast to NDRF via Supabase Cloud Realtime (<100ms)'
-        : 'Acknowledged by Local NDRF Gateway',
+      message: backendSuccess
+        ? 'Acknowledged by NeerNetra Command Gateway (<100ms)'
+        : 'Broadcast to NDRF via Supabase Cloud Realtime',
     };
   }
 
@@ -528,9 +550,11 @@ export const sendHighFrequencyTelemetry = async (payload: TelemetryStreamPayload
 
     // 2. Also forward to local web dashboard & active gateways
     const candidateBases = [
+      'http://192.168.0.185:3000',
       'http://127.0.0.1:3000',
       'http://localhost:3000',
       'http://10.0.2.2:3000',
+      'https://data-sih.vercel.app',
       workingBaseUrl,
     ];
     for (const base of candidateBases) {

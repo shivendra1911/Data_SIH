@@ -104,9 +104,9 @@ export async function POST(req: NextRequest) {
       global.__NEERNETRA_CITIZENS__!.unshift(citizenRecord);
     }
 
-    // Try inserting into Supabase if connected
+    // Try inserting into Supabase if connected (non-blocking)
     try {
-      await supabase.from("sos_alerts").insert([
+      const insertPromise = supabase.from("sos_alerts").insert([
         {
           device_id: eventRecord.device_uuid,
           lat: eventRecord.lat,
@@ -117,6 +117,8 @@ export async function POST(req: NextRequest) {
           notes: name ? `${name} | ${phone || "+91 98765 43210"}` : null,
         },
       ]);
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+      await Promise.race([insertPromise, timeoutPromise]);
     } catch (dbErr) {
       // Resilient local memory sync
     }

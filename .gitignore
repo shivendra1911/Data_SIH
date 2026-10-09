@@ -11,3 +11,4 @@ crash_log.txt
 *.db
 *.apk
 .agents/
+live_*.png

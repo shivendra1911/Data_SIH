@@ -1,5 +1,5 @@
-// End-to-end test simulating mobile APK talking to live Vercel cloud web platform
-const LIVE_URL = "https://data-sih.vercel.app";
+// End-to-end test simulating mobile APK talking to local web platform or live Vercel
+const LIVE_URL = process.env.TARGET_URL || "http://192.168.0.185:3000";
 
 async function testMobileConnection() {
   console.log("=== NEERNETRA MOBILE <-> WEB LIVE INTEGRATION TEST ===");

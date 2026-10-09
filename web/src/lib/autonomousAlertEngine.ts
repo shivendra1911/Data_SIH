@@ -129,9 +129,9 @@ class AutonomousAlertEngine {
         }),
       }).catch((err) => console.warn("[AutonomousAlertEngine] Local dispatch warning:", err));
 
-      // 2. Direct broadcast to Supabase cloud table for all mobile phones
+      // 2. Direct broadcast to Supabase cloud table for all mobile phones (with fast timeout)
       try {
-        await supabase.from("sos_alerts").insert([
+        const insertPromise = supabase.from("sos_alerts").insert([
           {
             device_id: "ADMIN_SIREN_DISPATCH",
             lat: coords ? coords[0] : 27.6015,
@@ -151,6 +151,8 @@ class AutonomousAlertEngine {
             }),
           },
         ]);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+        await Promise.race([insertPromise, timeoutPromise]);
         console.log("[AutonomousAlertEngine] Emergency siren broadcast synced to Supabase Cloud for mobile devices!");
       } catch (cloudErr) {
         console.warn("[AutonomousAlertEngine] Cloud siren broadcast fallback:", cloudErr);
@@ -185,9 +187,9 @@ class AutonomousAlertEngine {
         }),
       }).catch(() => {});
 
-      // Broadcast HALT to Supabase cloud
+      // Broadcast HALT to Supabase cloud (with fast timeout)
       try {
-        await supabase.from("sos_alerts").insert([
+        const insertPromise = supabase.from("sos_alerts").insert([
           {
             device_id: "ADMIN_SIREN_DISPATCH",
             lat: 27.6015,
@@ -203,6 +205,8 @@ class AutonomousAlertEngine {
             }),
           },
         ]);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+        await Promise.race([insertPromise, timeoutPromise]);
         console.log("[AutonomousAlertEngine] Siren HALT command synced to Supabase Cloud!");
       } catch {}
 

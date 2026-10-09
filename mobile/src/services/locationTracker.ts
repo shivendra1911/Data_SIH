@@ -62,58 +62,74 @@ export const syncCurrentLocationToBackend = async (deviceUuid: string, zoneId: s
     // Save locally as last known location
     await saveLastKnownLocation(payload);
 
-    // Direct push to Supabase Cloud Realtime (<100ms)
+    // Parallel push to Supabase Cloud and local/cloud web endpoints
     const SUPABASE_REST_URL = 'https://nratutjgjodkbysxyxem.supabase.co/rest/v1';
     const SUPABASE_ANON_KEY = 'sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN';
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-      await fetch(`${SUPABASE_REST_URL}/sos_alerts`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        signal: controller.signal,
-        body: JSON.stringify([
-          {
-            device_id: deviceUuid,
-            lat,
-            lng,
-            sos_type: 'CHECKIN',
-            status: 'LOCATION_TRACKING',
-            battery_level: payload.battery_level || 88,
-            notes: `${phoneModel} | Periodic live GPS location check-in`,
-          },
-        ]),
-      });
-      clearTimeout(timeoutId);
-    } catch {}
 
-    // Post to local web dashboard and NDRF gateway (if on local network/USB)
     const syncEndpoints = [
+      'http://192.168.0.185:3000/api/location/sync',
       'http://127.0.0.1:3000/api/location/sync',
       'http://localhost:3000/api/location/sync',
+      'http://10.0.2.2:3000/api/location/sync',
+      'https://data-sih.vercel.app/api/location/sync',
       `${BASE_URL}/api/location/sync`,
     ];
-    for (const url of syncEndpoints) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...payload,
-            notes: `${phoneModel} | Periodic live GPS location check-in`,
-          }),
-        });
-        if (response.ok) {
-          console.log('[LocationTracker] Location sync reached gateway:', url);
-          break;
+
+    await Promise.allSettled([
+      // 1. Supabase Cloud push (non-blocking, 1500ms timeout)
+      (async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+          await fetch(`${SUPABASE_REST_URL}/sos_alerts`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
+            signal: controller.signal,
+            body: JSON.stringify([
+              {
+                device_id: deviceUuid,
+                lat,
+                lng,
+                sos_type: 'CHECKIN',
+                status: 'LOCATION_TRACKING',
+                battery_level: payload.battery_level || 88,
+                notes: `${phoneModel} | Periodic live GPS location check-in`,
+              },
+            ]),
+          });
+          clearTimeout(timeoutId);
+        } catch {}
+      })(),
+
+      // 2. Gateway API push to local/Wi-Fi/Vercel web portal
+      (async () => {
+        for (const url of syncEndpoints) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1200);
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+              body: JSON.stringify({
+                ...payload,
+                notes: `${phoneModel} | Periodic live GPS location check-in`,
+              }),
+            });
+            clearTimeout(timeoutId);
+            if (response.ok) {
+              console.log('[LocationTracker] Location sync reached gateway:', url);
+              break;
+            }
+          } catch {}
         }
-      } catch {}
-    }
+      })(),
+    ]);
 
     return true;
   } catch (err) {

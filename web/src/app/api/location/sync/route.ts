@@ -19,6 +19,18 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
+export async function GET() {
+  const citizens = global.__NEERNETRA_CITIZENS__ || [];
+  return NextResponse.json(
+    {
+      status: "success",
+      total: citizens.length,
+      citizens,
+    },
+    { headers: corsHeaders }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -26,23 +38,34 @@ export async function POST(req: NextRequest) {
     const lat = Number(body.lat) || 30.5573;
     const lng = Number(body.lng) || 79.5642;
 
+    let parsedName = body.name;
+    if (!parsedName && body.notes) {
+      const parts = body.notes.split("|");
+      if (parts[0] && parts[0].trim().length > 0) {
+        parsedName = parts[0].trim();
+      }
+    }
+    if (!parsedName) {
+      parsedName = `Citizen [${device_uuid.slice(0, 8)}]`;
+    }
+
     const citizen: CitizenLocation = {
       id: `cit-${device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
       device_uuid,
-      name: body.name || `Citizen [${device_uuid.slice(0, 8)}]`,
+      name: parsedName,
       phone: body.phone || "+91 98765 43210",
       lat,
       lng,
       is_live: true,
       last_seen_minutes_ago: 0,
-      accuracy_radius_m: Number(body.accuracy) || 10,
+      accuracy_radius_m: Number(body.accuracy ?? body.accuracy_radius_m ?? 10),
       drift_radius_m: 0,
-      battery_pct: Number(body.battery_level) || 90,
+      battery_pct: Number(body.battery_pct ?? body.battery_level ?? 90),
       status: body.status || "SAFE",
       sos_type: body.sos_type || "PERIODIC TELEMETRY BEACON",
       mesh_hops: Number(body.mesh_hops) || 0,
       zone_id: body.zone_id || "chamoli_01",
-      medical_distress: "NONE",
+      medical_distress: body.medical_distress || "NONE",
     };
 
     if (!global.__NEERNETRA_CITIZENS__) {
@@ -65,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, message: "Location synced", device_uuid, lat, lng },
+      { success: true, message: "Location synced", device_uuid, lat, lng, total_connected: global.__NEERNETRA_CITIZENS__.length },
       { headers: corsHeaders }
     );
   } catch (err: any) {

@@ -248,14 +248,66 @@ class MobileSirenListener {
 
   private async checkSirenStatus() {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-      // 1. Check local/portal Landslide 1/3rd Quorum Broadcast Directives
-      const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
-      for (const base of candidateUrls) {
+      // 1. Check Web Portal Command Siren Dispatches directly (/api/mobile/siren-dispatch)
+      const webPortalUrls = [
+        'http://192.168.0.185:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3000',
+        'http://10.0.2.2:3000',
+        'https://data-sih.vercel.app',
+      ];
+      for (const base of webPortalUrls) {
         try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 1200);
+          const portalRes = await fetch(`${base}/api/mobile/siren-dispatch`, { signal: controller.signal });
+          clearTimeout(tId);
+          if (portalRes.ok) {
+            const portalData = await portalRes.json();
+            if (portalData.is_siren_active_on_mobile && portalData.active_dispatches && portalData.active_dispatches.length > 0) {
+              const activeDispatch = portalData.latest_dispatch || portalData.active_dispatches[0];
+              const createdAt = activeDispatch.dispatched_at || '';
+              const sirenId = `siren_${activeDispatch.zone_id}_${createdAt}`;
+              if (!this.silencedSirenTimestamps.has(createdAt) && !this.silencedSirenTimestamps.has(sirenId)) {
+                const sirenAge = Date.now() - new Date(createdAt).getTime();
+                if (sirenAge < SIREN_RECENCY_MS) {
+                  if (!this.processedSirenTimestamps.has(createdAt) && !this.processedSirenTimestamps.has(sirenId)) {
+                    this.processedSirenTimestamps.add(createdAt);
+                    this.processedSirenTimestamps.add(sirenId);
+                    this.lastProcessedTimestamp = createdAt;
+                    console.log('[MobileSirenListener] 🚨 Fresh ACTIVE_SIREN broadcast detected from Web Portal Gateway!');
+                    this.triggerAlarm(
+                      activeDispatch.emergency_message || '🚨 EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!',
+                      activeDispatch.zone_name || 'Emergency Zone',
+                      activeDispatch.authorized_by || 'NDRF / SDMA Command',
+                      createdAt
+                    );
+                    return;
+                  }
+                }
+              }
+            } else if (this.isAlarmActive && portalData.status === 'success' && (!portalData.active_dispatches || portalData.active_dispatches.length === 0)) {
+              console.log('[MobileSirenListener] Web Portal reports no active sirens — silencing alarm.');
+              this.silenceAlarm(false);
+            }
+            break;
+          }
+        } catch {}
+      }
+
+      // 2. Check local/portal Landslide 1/3rd Quorum Broadcast Directives
+      const landslideUrls = [
+        'http://192.168.0.185:8000',
+        'http://127.0.0.1:8000',
+        'http://localhost:8000',
+        'http://10.0.2.2:8000',
+      ];
+      for (const base of landslideUrls) {
+        try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 1200);
           const bRes = await fetch(`${base}/api/landslide/active-sectors`, { signal: controller.signal });
+          clearTimeout(tId);
           if (bRes.ok) {
             const bData = await bRes.json();
             const confirmedSector = (bData.sectors || []).find((s: any) => s.status === 'CONFIRMED_LANDSLIDE');
@@ -264,7 +316,6 @@ class MobileSirenListener {
               if (!this.processedSirenTimestamps.has(bCreatedAt) && !this.silencedSirenTimestamps.has(bCreatedAt)) {
                 this.processedSirenTimestamps.add(bCreatedAt);
                 this.lastProcessedTimestamp = bCreatedAt;
-                clearTimeout(timeoutId);
                 this.triggerAlarm(
                   '⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW',
                   confirmedSector.sector_name || 'Landslide Danger Sector',
@@ -274,9 +325,14 @@ class MobileSirenListener {
                 return;
               }
             }
+            break;
           }
         } catch {}
       }
+
+      // 3. Fallback check to Supabase Cloud (1500ms timeout)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
 
       const res = await fetch(
         `${SUPABASE_REST_URL}/sos_alerts?device_id=eq.ADMIN_SIREN_DISPATCH&order=created_at.desc&limit=1`,

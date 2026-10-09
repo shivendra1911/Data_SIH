@@ -39,13 +39,20 @@ export async function GET(req: NextRequest) {
 
   let result = [...(global.__NEERNETRA_CITIZENS__ || [])];
 
-  // Retrieve any cloud-synced alerts from Supabase
+  // Retrieve any cloud-synced alerts from Supabase (with fast failover if offline)
   try {
-    const { data: cloudAlerts } = await supabase
+    const supabasePromise = supabase
       .from("sos_alerts")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
+    const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 1200)
+    );
+    const { data: cloudAlerts } = (await Promise.race([
+      supabasePromise,
+      timeoutPromise,
+    ])) as any;
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       const processedCloudDevIds = new Set<string>();

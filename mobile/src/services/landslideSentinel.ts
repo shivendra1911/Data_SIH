@@ -237,7 +237,7 @@ class LandslideSentinel {
   }
 
   private async reportTremorToBackend(loc: { lat: number; lng: number }, tremorG: number, durationS: number) {
-    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    const candidateUrls = ['http://192.168.0.185:8000', 'http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
     for (const base of candidateUrls) {
       try {
         const res = await fetch(`${base}/api/landslide/report`, {
@@ -275,7 +275,7 @@ class LandslideSentinel {
     meshManager.broadcastSafe().catch(() => {});
 
     // Cancel on backend
-    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    const candidateUrls = ['http://192.168.0.185:8000', 'http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
     for (const base of candidateUrls) {
       fetch(`${base}/api/landslide/cancel`, {
         method: 'POST',
@@ -293,7 +293,7 @@ class LandslideSentinel {
    * Testing & simulation hook: Triggers full 1/3rd Sector Quorum Consensus
    */
   public async simulateOneThirdSectorQuorum() {
-    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    const candidateUrls = ['http://192.168.0.185:8000', 'http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
     for (const base of candidateUrls) {
       try {
         await fetch(`${base}/api/landslide/simulate-quorum`, {

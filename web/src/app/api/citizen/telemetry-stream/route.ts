@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { CitizenLocation } from "@/lib/types";
 
 export interface TelemetryBreadcrumb {
   id: string;
@@ -17,10 +18,14 @@ export interface TelemetryBreadcrumb {
 
 declare global {
   var __NEERNETRA_TELEMETRY_STREAM__: TelemetryBreadcrumb[] | undefined;
+  var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
 }
 
 if (!global.__NEERNETRA_TELEMETRY_STREAM__) {
   global.__NEERNETRA_TELEMETRY_STREAM__ = [];
+}
+if (!global.__NEERNETRA_CITIZENS__) {
+  global.__NEERNETRA_CITIZENS__ = [];
 }
 
 const corsHeaders = {
@@ -43,13 +48,20 @@ export async function GET(req: NextRequest) {
     stream = stream.filter((b) => b.device_uuid === deviceId);
   }
 
-  // Also pull latest breadcrumbs from Supabase sos_alerts
+  // Also pull latest breadcrumbs from Supabase sos_alerts (with fast timeout)
   try {
-    const { data: cloudAlerts } = await supabase
+    const supabasePromise = supabase
       .from("sos_alerts")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(30);
+    const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 1200)
+    );
+    const { data: cloudAlerts } = (await Promise.race([
+      supabasePromise,
+      timeoutPromise,
+    ])) as any;
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       for (const alert of cloudAlerts) {
@@ -190,9 +202,48 @@ export async function POST(req: NextRequest) {
       global.__NEERNETRA_TELEMETRY_STREAM__.pop();
     }
 
-    // Persist point to Supabase sos_alerts table
+    // Mirror to active citizens radar store so dashboard connectedMobileCount updates immediately
+    const citizen: CitizenLocation = {
+      id: `cit-${device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+      device_uuid,
+      name: phone_model || `Citizen [${device_uuid.slice(0, 8)}]`,
+      phone: "+91 98765 43210",
+      lat: Number(lat),
+      lng: Number(lng),
+      is_live: true,
+      last_seen_minutes_ago: 0,
+      accuracy_radius_m: Number(accuracy) || 10,
+      drift_radius_m: 0,
+      battery_pct: 88,
+      status: status === "SOS" ? "SOS" : "SAFE",
+      sos_type: sos_type || "HIGH FREQUENCY TELEMETRY",
+      mesh_hops: 0,
+      zone_id: "chamoli_01",
+      medical_distress: "NONE",
+    };
+
+    if (!global.__NEERNETRA_CITIZENS__) {
+      global.__NEERNETRA_CITIZENS__ = [];
+    }
+
+    const existingIndex = global.__NEERNETRA_CITIZENS__.findIndex(
+      (c) => c.device_uuid === device_uuid
+    );
+
+    if (existingIndex >= 0) {
+      const currentStatus = global.__NEERNETRA_CITIZENS__[existingIndex].status;
+      global.__NEERNETRA_CITIZENS__[existingIndex] = {
+        ...global.__NEERNETRA_CITIZENS__[existingIndex],
+        ...citizen,
+        status: currentStatus === "SOS" ? "SOS" : citizen.status,
+      };
+    } else {
+      global.__NEERNETRA_CITIZENS__.unshift(citizen);
+    }
+
+    // Persist point to Supabase sos_alerts table (non-blocking, fast timeout)
     try {
-      await supabase.from("sos_alerts").insert({
+      const insertPromise = supabase.from("sos_alerts").insert({
         device_id: device_uuid,
         lat: Number(lat),
         lng: Number(lng),
@@ -200,11 +251,13 @@ export async function POST(req: NextRequest) {
         sos_type,
         notes: `${phone_model} | 5s Stream | Acc: ±${Math.round(accuracy)}m | Alt: ${Math.round(altitude)}m`,
       });
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+      await Promise.race([insertPromise, timeoutPromise]);
     } catch (dbErr) {
       console.debug("[TelemetryStream API] Supabase persistence notice:", dbErr);
     }
 
-    return NextResponse.json({ success: true, breadcrumb }, { headers: corsHeaders });
+    return NextResponse.json({ success: true, breadcrumb, active_citizens: global.__NEERNETRA_CITIZENS__.length }, { headers: corsHeaders });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders });
   }

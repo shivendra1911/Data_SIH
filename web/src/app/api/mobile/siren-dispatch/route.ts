@@ -62,8 +62,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(
     {
       status: "success",
+      is_siren_active_on_mobile: allActive.length > 0,
       total_active_mobile_sirens: allActive.length,
       active_dispatches: allActive,
+      latest_dispatch: allActive[0] || null,
     },
     { headers: corsHeaders }
   );
@@ -87,9 +89,9 @@ export async function POST(req: NextRequest) {
         dispatches.set(zoneId, existing);
       }
 
-      // Sync HALT to Supabase cloud
+      // Sync HALT to Supabase cloud (non-blocking)
       try {
-        await supabase.from("sos_alerts").insert([
+        const insertPromise = supabase.from("sos_alerts").insert([
           {
             device_id: "ADMIN_SIREN_DISPATCH",
             lat: 27.6015,
@@ -105,6 +107,8 @@ export async function POST(req: NextRequest) {
             }),
           },
         ]);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+        await Promise.race([insertPromise, timeoutPromise]);
       } catch {}
 
       return NextResponse.json(
@@ -159,9 +163,9 @@ export async function POST(req: NextRequest) {
     dispatches.set(zoneId, record);
     global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = dispatches;
 
-    // Sync ACTIVATE to Supabase cloud
+    // Sync ACTIVATE to Supabase cloud (non-blocking)
     try {
-      await supabase.from("sos_alerts").insert([
+      const insertPromise = supabase.from("sos_alerts").insert([
         {
           device_id: "ADMIN_SIREN_DISPATCH",
           lat: 27.6015,
@@ -180,6 +184,8 @@ export async function POST(req: NextRequest) {
           }),
         },
       ]);
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+      await Promise.race([insertPromise, timeoutPromise]);
     } catch {}
 
     // Also mirror to alert broadcast history for unified logging

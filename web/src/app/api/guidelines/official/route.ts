@@ -48,12 +48,19 @@ export async function GET(req: NextRequest) {
 
   // 1. Check Supabase cloud for real-time government directives issued from Admin Web Panel
   try {
-    const { data: cloudDirectives } = await supabase
+    const supabasePromise = supabase
       .from("sos_alerts")
       .select("*")
       .eq("device_id", "GOVT_DIRECTIVE")
       .order("created_at", { ascending: false })
       .limit(10);
+    const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 1200)
+    );
+    const { data: cloudDirectives } = (await Promise.race([
+      supabasePromise,
+      timeoutPromise,
+    ])) as any;
 
     if (cloudDirectives && Array.isArray(cloudDirectives)) {
       for (const cd of cloudDirectives) {
