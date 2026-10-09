@@ -76,10 +76,51 @@ export async function POST(req: NextRequest) {
   sec.latest_frequency_hz = 18.5;
   sec.has_active_directive = true;
 
+  const directiveEntry = {
+    id: `broad_landslide_${sectorId}`,
+    type: "LANDSLIDE_1_3RD_CONSENSUS",
+    severity: "CRITICAL",
+    title: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+    message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+    sector_id: sectorId,
+    sector_name: sec.sector_name,
+    consensus_count: 3,
+    total_active_phones: 9,
+    quorum_threshold: 3,
+    status: "ACTIVE_SIREN",
+    authorized_by: "SIMULATION_TEST_ENGINE",
+    created_at: nowIso,
+  };
+
+  const existingDirIdx = state.directives.findIndex((d) => d.sector_id === sectorId);
+  if (existingDirIdx >= 0) {
+    state.directives[existingDirIdx] = directiveEntry;
+  } else {
+    state.directives.push(directiveEntry);
+  }
+
+  // Activate mobile siren
+  if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+  }
+  global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
+    zone_id: sectorId,
+    zone_name: sec.sector_name,
+    is_active: true,
+    dispatched_at: nowIso,
+    authorized_by: "SIMULATION_TEST_ENGINE",
+    target_devices_count: 9,
+    cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+    mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+    vibration_pattern: [1000, 400, 1000, 400, 1500],
+    emergency_message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+  });
+
   return NextResponse.json(
     {
       success: true,
       sector_id: sectorId,
+      directive: directiveEntry,
       message: `Simulated 1/3rd quorum in sector ${sectorId}. Evacuation directive active.`,
     },
     { headers: corsHeaders }

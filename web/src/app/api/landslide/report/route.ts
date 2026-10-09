@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
+import { supabase } from "@/lib/supabase";
+import { CitizenLocation } from "@/lib/types";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +34,79 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify(body),
   });
   if (backendData && backendData.success !== undefined) {
+    if (backendData.is_confirmed) {
+      const emergencyMessage = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
+      const nowIso = new Date().toISOString();
+      const secName = backendData.sector_name || body.sector_name || "Sector 4: Chooralmala / Meppadi (Wayanad)";
+      const totalPhones = backendData.total_active_phones || 9;
+
+      if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+      }
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
+        zone_id: sectorId,
+        zone_name: secName,
+        is_active: true,
+        dispatched_at: nowIso,
+        authorized_by: "1/3rd Sector Quorum Consensus Engine",
+        target_devices_count: totalPhones,
+        cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+        mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+        vibration_pattern: [1000, 400, 1000, 400, 1500],
+        emergency_message: emergencyMessage,
+      });
+
+      // Mirror confirmed landslide distress to radar citizens store
+      if (!global.__NEERNETRA_CITIZENS__) {
+        global.__NEERNETRA_CITIZENS__ = [];
+      }
+      const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
+      const lsCitizen: CitizenLocation = {
+        id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+        device_uuid: deviceUuid,
+        name: `Citizen [${deviceUuid.slice(0, 8)}]`,
+        phone: "+91 98765 43210",
+        lat,
+        lng,
+        is_live: true,
+        last_seen_minutes_ago: 0,
+        accuracy_radius_m: 10,
+        drift_radius_m: 0,
+        battery_pct: 85,
+        status: "SOS",
+        sos_type: "LANDSLIDE",
+        mesh_hops: 0,
+        zone_id: "chamoli_01",
+        medical_distress: "WATER_RISING",
+      };
+      if (existingCitIdx >= 0) {
+        global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...lsCitizen };
+      } else {
+        global.__NEERNETRA_CITIZENS__.unshift(lsCitizen);
+      }
+
+      // Automated Cloud Push via Supabase Cloud Realtime
+      try {
+        supabase.from("sos_alerts").insert([
+          {
+            device_id: "ADMIN_SIREN_DISPATCH",
+            lat,
+            lng,
+            sos_type: "CIVIL_DEFENSE_SIREN",
+            status: "ACTIVE_SIREN",
+            battery_level: 100,
+            notes: JSON.stringify({
+              zone_id: sectorId,
+              zone_name: secName,
+              action: "BROADCAST_ALL",
+              flood_pct: 95.0,
+              message: emergencyMessage,
+              created_at: nowIso,
+            }),
+          },
+        ]).then(() => {});
+      } catch {}
+    }
     return NextResponse.json(backendData, { headers: corsHeaders });
   }
 
@@ -89,10 +164,102 @@ export async function POST(req: NextRequest) {
   sec.quorum_threshold = quorumThreshold;
 
   const isConfirmed = uniqueDevices.length >= quorumThreshold;
+  const emergencyMessage = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
+
   if (isConfirmed) {
     sec.status = "CONFIRMED_LANDSLIDE";
     if (!sec.confirmed_at) sec.confirmed_at = nowIso;
     sec.has_active_directive = true;
+
+    // 1. Append active directive to in-memory state
+    const directiveEntry = {
+      id: `broad_landslide_${sectorId}`,
+      type: "LANDSLIDE_1_3RD_CONSENSUS",
+      severity: "CRITICAL",
+      title: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+      message: emergencyMessage,
+      sector_id: sectorId,
+      sector_name: sec.sector_name,
+      consensus_count: uniqueDevices.length,
+      quorum_threshold: quorumThreshold,
+      status: "ACTIVE_SIREN",
+      authorized_by: "1/3rd Sector Quorum Consensus Engine",
+      created_at: nowIso,
+    };
+    const existingDirIdx = state.directives.findIndex((d) => d.sector_id === sectorId);
+    if (existingDirIdx >= 0) {
+      state.directives[existingDirIdx] = directiveEntry;
+    } else {
+      state.directives.push(directiveEntry);
+    }
+
+    // 2. Automated Siren Dispatch: Activate mobile sirens via /api/mobile/siren-dispatch store
+    if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+    }
+    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
+      zone_id: sectorId,
+      zone_name: sec.sector_name,
+      is_active: true,
+      dispatched_at: nowIso,
+      authorized_by: "1/3rd Sector Quorum Consensus Engine",
+      target_devices_count: totalPhones,
+      cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+      mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+      vibration_pattern: [1000, 400, 1000, 400, 1500],
+      emergency_message: emergencyMessage,
+    });
+
+    // 3. Automated Cloud Push via Supabase Cloud Realtime
+    try {
+      supabase.from("sos_alerts").insert([
+        {
+          device_id: "ADMIN_SIREN_DISPATCH",
+          lat,
+          lng,
+          sos_type: "CIVIL_DEFENSE_SIREN",
+          status: "ACTIVE_SIREN",
+          battery_level: 100,
+          notes: JSON.stringify({
+            zone_id: sectorId,
+            zone_name: sec.sector_name,
+            action: "BROADCAST_ALL",
+            flood_pct: 95.0,
+            message: emergencyMessage,
+            created_at: nowIso,
+          }),
+        },
+      ]).then(() => {});
+    } catch {}
+
+    // 4. Mirror confirmed landslide distress to radar citizens store
+    if (!global.__NEERNETRA_CITIZENS__) {
+      global.__NEERNETRA_CITIZENS__ = [];
+    }
+    const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
+    const lsCitizen: CitizenLocation = {
+      id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+      device_uuid: deviceUuid,
+      name: `Citizen [${deviceUuid.slice(0, 8)}]`,
+      phone: "+91 98765 43210",
+      lat,
+      lng,
+      is_live: true,
+      last_seen_minutes_ago: 0,
+      accuracy_radius_m: 10,
+      drift_radius_m: 0,
+      battery_pct: 85,
+      status: "SOS",
+      sos_type: "LANDSLIDE",
+      mesh_hops: 0,
+      zone_id: "chamoli_01",
+      medical_distress: "WATER_RISING",
+    };
+    if (existingCitIdx >= 0) {
+      global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...lsCitizen };
+    } else {
+      global.__NEERNETRA_CITIZENS__.unshift(lsCitizen);
+    }
   } else {
     sec.status = "PENDING_QUORUM";
   }

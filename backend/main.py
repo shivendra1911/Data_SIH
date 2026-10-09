@@ -1,5 +1,11 @@
 import os
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import time
 import uuid
 import json
@@ -955,6 +961,7 @@ def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float
 # ── Domain 4: Building Collapse Spatiotemporal Consensus Endpoints ──────────
 
 @app.post("/api/collapse/event")
+@app.post("/api/collapse/report")
 def report_collapse_event(payload: CollapseEventPayload, background_tasks: BackgroundTasks):
     """
     Ingests structural collapse reports from edge smartphones.
@@ -1279,7 +1286,7 @@ def report_landslide_event(payload: LandslideReportPayload, background_tasks: Ba
                     "notes": f"⛰️ LANDSLIDE CONFIRMED: {len(unique_devices)}/{total_phones} devices (1/3rd consensus), {payload.frequency_hz}Hz tremor"
                 })
 
-            print(f"[Landslide Consensus] ⛰️ CONFIRMED in {sector_id}: {len(unique_devices)}/{total_phones} devices reported ({round(consensus_ratio*100, 1)}% >= 33.3%). Broadcast directive dispatched!")
+            print(f"[Landslide Consensus] CONFIRMED in {sector_id}: {len(unique_devices)}/{total_phones} devices reported ({round(consensus_ratio*100, 1)}% >= 33.3%). Broadcast directive dispatched!")
         else:
             sec["status"] = "PENDING_QUORUM"
             print(f"[Landslide Report] Ingested from {payload.device_uuid[:8]} in {sector_id}. Progress: {len(unique_devices)}/{quorum_threshold} devices needed for 1/3rd quorum.")

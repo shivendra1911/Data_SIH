@@ -40,6 +40,44 @@ export async function GET(req: NextRequest) {
 
   const dispatches = global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ || new Map();
 
+  // Synchronize with FastAPI active broadcasts engine if available
+  try {
+    const { proxyToBackend } = await import("@/lib/sentinelState");
+    const activeBroadcastsData = await proxyToBackend<any>("/api/alerts/active");
+    if (activeBroadcastsData && Array.isArray(activeBroadcastsData.alerts)) {
+      for (const alert of activeBroadcastsData.alerts) {
+        const targetId = alert.sector_id || alert.zone_id;
+        if (!targetId) continue;
+
+        if (alert.status === "ACTIVE_SIREN") {
+          const existing = dispatches.get(targetId);
+          if (!existing || existing.is_active) {
+            dispatches.set(targetId, {
+              zone_id: targetId,
+              zone_name: alert.sector_name || alert.zone_name || targetId,
+              is_active: true,
+              dispatched_at: alert.created_at || new Date().toISOString(),
+              authorized_by: alert.authorized_by || "1/3rd Sector Quorum Consensus Engine",
+              target_devices_count: alert.total_active_phones || 9,
+              cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+              mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+              vibration_pattern: [1000, 400, 1000, 400, 1500],
+              emergency_message: alert.message || "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+            });
+          }
+        } else if (alert.status === "SILENCED") {
+          const existing = dispatches.get(targetId);
+          if (existing && existing.is_active) {
+            existing.is_active = false;
+            dispatches.set(targetId, existing);
+          }
+        }
+      }
+    }
+  } catch {}
+
+  global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = dispatches;
+
   if (zoneId) {
     const record = dispatches.get(zoneId);
     return NextResponse.json(

@@ -27,7 +27,7 @@ export default function MobilePairingModal({
 
   if (!isOpen) return null;
 
-  const localIp = "172.16.182.5";
+  const localIp = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" ? window.location.hostname : "192.168.0.185";
   const triggerUrl = `http://${localIp}:3000/api/sos/trigger`;
   const predictionUrl = `http://${localIp}:3000/api/prediction/current?zone_id=chamoli_01`;
   const safeRoutesUrl = `http://${localIp}:3000/api/routes/safe?zone_id=chamoli_01`;

@@ -54,9 +54,9 @@ export async function GET(req: NextRequest) {
       .from("sos_alerts")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(30);
+      .limit(150);
     const timeoutPromise = new Promise<{ data: null }>((resolve) =>
-      setTimeout(() => resolve({ data: null }), 1200)
+      setTimeout(() => resolve({ data: null }), 3500)
     );
     const { data: cloudAlerts } = (await Promise.race([
       supabasePromise,

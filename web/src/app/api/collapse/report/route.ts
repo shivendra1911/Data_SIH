@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (backendData && backendData.status !== undefined) {
+  if (backendData && (backendData.status !== undefined || backendData.cluster_status !== undefined || backendData.success !== undefined)) {
     return NextResponse.json(backendData, { headers: corsHeaders });
   }
 
@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
   if (!state.collapseClusters[clusterId]) {
     state.collapseClusters[clusterId] = {
       cluster_id: clusterId,
-      status: "CONFIRMED_COLLAPSE",
-      priority: "P1-CRITICAL",
+      status: "PENDING_QUORUM",
+      priority: "P2-HIGH",
       centroid_lat: lat,
       centroid_lng: lng,
       radius_meters: 65,
@@ -66,15 +66,56 @@ export async function POST(req: NextRequest) {
     cl.max_peak_g = Math.max(cl.max_peak_g, peakG);
   }
 
+  const cl = state.collapseClusters[clusterId];
+  const quorumCount = cl.reporting_devices.length;
+  const isConfirmed = quorumCount >= 3;
+  cl.status = isConfirmed ? "CONFIRMED_COLLAPSE" : "PENDING_QUORUM";
+  cl.priority = isConfirmed ? "P1-CRITICAL" : "P2-HIGH";
+
+  // Mirror into active citizen radar
+  if (!global.__NEERNETRA_CITIZENS__) {
+    global.__NEERNETRA_CITIZENS__ = [];
+  }
+  const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
+  const collCit = {
+    id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    device_uuid: deviceUuid,
+    name: `Citizen [${deviceUuid.slice(0, 8)}]`,
+    phone: "+91 98765 43210",
+    lat,
+    lng,
+    is_live: true,
+    last_seen_minutes_ago: 0,
+    accuracy_radius_m: 10,
+    drift_radius_m: 0,
+    battery_pct: 85,
+    status: "SOS" as const,
+    sos_type: "COLLAPSE",
+    mesh_hops: 0,
+    zone_id: "chamoli_01",
+    medical_distress: "TRAPPED" as any,
+  };
+  if (existingCitIdx >= 0) {
+    global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...collCit };
+  } else {
+    global.__NEERNETRA_CITIZENS__.unshift(collCit);
+  }
+
   return NextResponse.json(
     {
       success: true,
       cluster_id: clusterId,
-      status: "CONFIRMED_COLLAPSE",
-      reporting_devices_count: state.collapseClusters[clusterId].reporting_devices.length,
+      status: cl.status,
+      cluster_status: cl.status,
+      quorum_count: quorumCount,
+      quorum_threshold: 3,
+      is_confirmed: isConfirmed,
+      reporting_devices_count: quorumCount,
       peak_g: peakG,
       free_fall_ms: freeFallMs,
-      message: "Collapse kinetic impact registered into spatiotemporal cluster",
+      message: isConfirmed
+        ? "🏛️ 3+ Phones Confirmed Structural Collapse Quorum! Cluster marked CONFIRMED_COLLAPSE"
+        : `Kinetic shock registered (${quorumCount}/3 devices needed for collapse quorum confirmation)`,
     },
     { headers: corsHeaders }
   );

@@ -473,6 +473,17 @@ class BuildingCollapseDetector {
         timestamp: now - (i * 300),
         peakG: 4.0 + (Math.random() * 1.5),
       });
+    for (const p of this.recentPeerReports) {
+      postCollapseApi('/api/collapse/report', {
+        device_uuid: p.deviceId,
+        lat: p.lat,
+        lng: p.lng,
+        confidence: 0.94,
+        peak_g: p.peakG || 4.5,
+        rubble_duration_s: 8.0,
+        timestamp: new Date().toISOString(),
+        notes: `Simulated structural collapse kinetic impact (${p.deviceId})`,
+      }).catch(() => {});
     }
 
     if (this.callbacks.onQuorumConfirmed) {

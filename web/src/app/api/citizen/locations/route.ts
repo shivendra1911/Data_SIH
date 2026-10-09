@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CitizenLocation } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import { proxyToBackend } from "@/lib/sentinelState";
 
 // Unified global in-memory store for citizen telemetry (0 demo data)
 declare global {
@@ -39,15 +40,49 @@ export async function GET(req: NextRequest) {
 
   let result = [...(global.__NEERNETRA_CITIZENS__ || [])];
 
-  // Retrieve any cloud-synced alerts from Supabase (with fast failover if offline)
+  // 1. Retrieve any connected devices from FastAPI backend (/api/location/live)
+  try {
+    const backendData = await proxyToBackend<any>("/api/location/live");
+    if (backendData && Array.isArray(backendData.devices)) {
+      for (const dev of backendData.devices) {
+        if (!dev.device_uuid) continue;
+        const existingIdx = result.findIndex((c) => c.device_uuid === dev.device_uuid);
+        const citObj: CitizenLocation = {
+          id: `cit-${dev.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+          device_uuid: dev.device_uuid,
+          name: dev.name || `Citizen [${dev.device_uuid.slice(0, 8)}]`,
+          phone: dev.phone || "+91 98765 43210",
+          lat: Number(dev.lat) || 30.5573,
+          lng: Number(dev.lng) || 79.5642,
+          is_live: true,
+          last_seen_minutes_ago: 0,
+          accuracy_radius_m: Number(dev.accuracy) || 10,
+          drift_radius_m: 0,
+          battery_pct: Number(dev.battery_level) || 85,
+          status: dev.status === "SOS" ? "SOS" : "SAFE",
+          sos_type: dev.status === "SOS" ? "MOBILE DISTRESS" : "LOCATION_TRACKING",
+          mesh_hops: 0,
+          zone_id: dev.zone_id || "chamoli_01",
+          medical_distress: "NONE",
+        };
+        if (existingIdx >= 0) {
+          result[existingIdx] = { ...result[existingIdx], ...citObj };
+        } else {
+          result.push(citObj);
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Retrieve any cloud-synced alerts from Supabase (with fast failover if offline)
   try {
     const supabasePromise = supabase
       .from("sos_alerts")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(500);
     const timeoutPromise = new Promise<{ data: null }>((resolve) =>
-      setTimeout(() => resolve({ data: null }), 1200)
+      setTimeout(() => resolve({ data: null }), 3500)
     );
     const { data: cloudAlerts } = (await Promise.race([
       supabasePromise,
@@ -128,6 +163,14 @@ export async function GET(req: NextRequest) {
           parsedSosType = "LOCATION_TRACKING";
         }
 
+        const isExplicitSos =
+          alert.status === "SOS" ||
+          alert.sos_type === "HIGH_WATER_EVACUATION" ||
+          alert.sos_type === "TRAPPED" ||
+          alert.sos_type === "LANDSLIDE" ||
+          alert.sos_type === "COLLAPSE" ||
+          parsedMedical !== "NONE";
+
         const parsedCitizen: CitizenLocation = {
           id: `cit-${devId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: devId,
@@ -140,7 +183,7 @@ export async function GET(req: NextRequest) {
           accuracy_radius_m: 10,
           drift_radius_m: 0,
           battery_pct: Number(alert.battery_level) || 84,
-          status: alert.status === "SAFE" || parsedSosType === "TOUCH_FREE_MOTION_SAFE" ? "SAFE" : "SOS",
+          status: isExplicitSos ? "SOS" : "SAFE",
           sos_type: parsedSosType,
           mesh_hops: 0,
           zone_id: "chamoli_01",

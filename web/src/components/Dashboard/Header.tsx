@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Volume2,
   VolumeX,
+  Smartphone,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -189,6 +190,24 @@ export default function Header({
             </button>
           )}
 
+
+          {/* Connected Field Devices Counter */}
+          <button
+            type="button"
+            onClick={onOpenMobileModal}
+            aria-label="View connected field mobile devices"
+            className="h-10 sm:h-11 min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-[#0f172a] hover:bg-[#1e293b] text-[#f8fafc] border border-emerald-500/40 text-xs font-bold flex items-center gap-2 shadow-sm transition duration-200 cursor-pointer active:scale-[0.98] whitespace-nowrap"
+            title={`${connectedMobileCount || 0} Mobile Devices Connected to Command Center`}
+          >
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className={`absolute inline-flex h-full w-full rounded-full ${(connectedMobileCount || 0) > 0 ? "bg-emerald-400 animate-ping opacity-75" : "bg-amber-400 opacity-50"}`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${(connectedMobileCount || 0) > 0 ? "bg-emerald-500" : "bg-amber-500"}`} />
+            </span>
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="font-extrabold text-[11px] sm:text-xs tracking-wide">
+              {connectedMobileCount || 0} Connected
+            </span>
+          </button>
 
           {/* Indian Disaster Helpline */}
           <a
