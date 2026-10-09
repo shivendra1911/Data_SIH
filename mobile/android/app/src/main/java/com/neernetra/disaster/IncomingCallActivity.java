@@ -139,10 +139,17 @@ public class IncomingCallActivity extends Activity {
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(dp(24), dp(48), dp(24), dp(48));
 
-        boolean isSiren = "SIREN".equalsIgnoreCase(emergencyType) || "EVACUATION".equalsIgnoreCase(emergencyType);
+        boolean isLandslide = "LANDSLIDE".equalsIgnoreCase(emergencyType);
+        boolean isCollapse = "COLLAPSE".equalsIgnoreCase(emergencyType);
+        boolean isSiren = "SIREN".equalsIgnoreCase(emergencyType) || "EVACUATION".equalsIgnoreCase(emergencyType) || isLandslide || isCollapse;
+        boolean isVoiceCall = "CALL_REQ".equalsIgnoreCase(emergencyType) || "GROUP_CALL".equalsIgnoreCase(emergencyType);
 
         TextView topPill = new TextView(this);
-        if (isSiren) {
+        if (isLandslide) {
+            topPill.setText("⛰️ LANDSLIDE CONFIRMED (1/3RD QUORUM)");
+        } else if (isCollapse) {
+            topPill.setText("🚨 STRUCTURAL COLLAPSE DETECTED");
+        } else if (isSiren) {
             topPill.setText("🚨 EMERGENCY CIVIL DEFENSE SIREN");
         } else if (isGroupCall) {
             topPill.setText("🚨 GROUP EMERGENCY INTERCOM");
@@ -150,15 +157,15 @@ public class IncomingCallActivity extends Activity {
             topPill.setText("📞 DIRECT BLE MESH CALL");
         }
         topPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        topPill.setTextColor((isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#38bdf8"));
+        topPill.setTextColor(isLandslide ? Color.parseColor("#f59e0b") : ((isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#38bdf8")));
         topPill.setTypeface(Typeface.DEFAULT_BOLD);
         topPill.setGravity(Gravity.CENTER);
         topPill.setPadding(dp(16), dp(8), dp(16), dp(8));
 
         GradientDrawable pillBg = new GradientDrawable();
-        pillBg.setColor((isSiren || isGroupCall) ? Color.parseColor("#2a1215") : Color.parseColor("#0c2340"));
+        pillBg.setColor(isLandslide ? Color.parseColor("#291b00") : ((isSiren || isGroupCall) ? Color.parseColor("#2a1215") : Color.parseColor("#0c2340")));
         pillBg.setCornerRadius(dp(20));
-        pillBg.setStroke(dp(1), (isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#0284c7"));
+        pillBg.setStroke(dp(1), isLandslide ? Color.parseColor("#f59e0b") : ((isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#0284c7")));
         topPill.setBackground(pillBg);
         root.addView(topPill);
 
@@ -179,7 +186,7 @@ public class IncomingCallActivity extends Activity {
         GradientDrawable waveBg = new GradientDrawable();
         waveBg.setShape(GradientDrawable.OVAL);
         waveBg.setColor(Color.TRANSPARENT);
-        waveBg.setStroke(dp(2), (isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#10b981"));
+        waveBg.setStroke(dp(2), isLandslide ? Color.parseColor("#f59e0b") : ((isSiren || isGroupCall) ? Color.parseColor("#ef4444") : Color.parseColor("#10b981")));
         waveRing.setBackground(waveBg);
 
         ScaleAnimation pulse = new ScaleAnimation(
@@ -198,12 +205,12 @@ public class IncomingCallActivity extends Activity {
         coreParams.gravity = Gravity.CENTER;
         coreAvatar.setLayoutParams(coreParams);
         coreAvatar.setGravity(Gravity.CENTER);
-        coreAvatar.setText((isSiren || isGroupCall) ? "🚨" : "👤");
+        coreAvatar.setText(isLandslide ? "⛰️" : (isCollapse ? "🏚️" : ((isSiren || isGroupCall) ? "🚨" : "👤")));
         coreAvatar.setTextSize(TypedValue.COMPLEX_UNIT_SP, 48);
 
         GradientDrawable coreBg = new GradientDrawable();
         coreBg.setShape(GradientDrawable.OVAL);
-        coreBg.setColor((isSiren || isGroupCall) ? Color.parseColor("#991b1b") : Color.parseColor("#0369a1"));
+        coreBg.setColor(isLandslide ? Color.parseColor("#78350f") : (isCollapse ? Color.parseColor("#7f1d1d") : ((isSiren || isGroupCall) ? Color.parseColor("#991b1b") : Color.parseColor("#0369a1"))));
         coreBg.setStroke(dp(3), Color.parseColor("#ffffff"));
         coreAvatar.setBackground(coreBg);
         avatarContainer.addView(coreAvatar);
@@ -211,7 +218,7 @@ public class IncomingCallActivity extends Activity {
         root.addView(avatarContainer);
 
         TextView nameView = new TextView(this);
-        nameView.setText(isSiren ? "CIVIL DEFENSE ALARM" : callerName);
+        nameView.setText(isLandslide ? "⛰️ LANDSLIDE CONFIRMED" : (isCollapse ? "STRUCTURAL COLLAPSE ALERT" : (isSiren ? "CIVIL DEFENSE ALARM" : callerName)));
         nameView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
         nameView.setTextColor(Color.WHITE);
         nameView.setTypeface(Typeface.DEFAULT_BOLD);
@@ -224,7 +231,11 @@ public class IncomingCallActivity extends Activity {
         root.addView(nameView);
 
         TextView subView = new TextView(this);
-        if (isSiren) {
+        if (isLandslide) {
+            subView.setText("⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW");
+        } else if (isCollapse) {
+            subView.setText("Kinetic impact & rubble entrapment detected! Safety triage active.");
+        } else if (isSiren) {
             subView.setText("Immediate High-Ground Evacuation Ordered • Civil Defense Directive");
         } else if (isGroupCall) {
             subView.setText("Broadcast Alert • Rings all nearby mesh nodes");
@@ -318,7 +329,7 @@ public class IncomingCallActivity extends Activity {
         LinearLayout.LayoutParams btnParams2 = new LinearLayout.LayoutParams(dp(76), dp(76));
         answerBtn.setLayoutParams(btnParams2);
         answerBtn.setGravity(Gravity.CENTER);
-        answerBtn.setText(isSiren ? "▲" : "📞");
+        answerBtn.setText(isLandslide ? "▲" : (isCollapse ? "🛡️" : (isSiren ? "▲" : "📞")));
         answerBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
         answerBtn.setTextColor(Color.WHITE);
 
@@ -344,7 +355,7 @@ public class IncomingCallActivity extends Activity {
         });
 
         TextView answerLabel = new TextView(this);
-        answerLabel.setText(isSiren ? "Evacuate" : "Answer");
+        answerLabel.setText(isLandslide ? "Evacuate" : (isCollapse ? "I'm Safe" : (isSiren ? "Evacuate" : "Answer")));
         answerLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         answerLabel.setTextColor(Color.parseColor("#4ade80"));
         answerLabel.setTypeface(Typeface.DEFAULT_BOLD);
@@ -432,7 +443,9 @@ public class IncomingCallActivity extends Activity {
 
     private void answerCall() {
         stopRinging();
-        NeerNetraConnectionService.answerCall();
+        if ("CALL_REQ".equalsIgnoreCase(emergencyType) || "GROUP_CALL".equalsIgnoreCase(emergencyType)) {
+            NeerNetraConnectionService.answerCall();
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
@@ -461,7 +474,9 @@ public class IncomingCallActivity extends Activity {
 
     private void dismissCall() {
         stopRinging();
-        NeerNetraConnectionService.rejectCall();
+        if ("CALL_REQ".equalsIgnoreCase(emergencyType) || "GROUP_CALL".equalsIgnoreCase(emergencyType)) {
+            NeerNetraConnectionService.rejectCall();
+        }
         NeerNetraMeshService.stopEmergencyAlarm();
         try {
             android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -473,7 +488,9 @@ public class IncomingCallActivity extends Activity {
     @Override
     protected void onDestroy() {
         stopRinging();
-        NeerNetraConnectionService.disconnectCall();
+        if ("CALL_REQ".equalsIgnoreCase(emergencyType) || "GROUP_CALL".equalsIgnoreCase(emergencyType)) {
+            NeerNetraConnectionService.disconnectCall();
+        }
         if (dismissReceiver != null) {
             try {
                 unregisterReceiver(dismissReceiver);

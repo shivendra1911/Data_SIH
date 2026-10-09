@@ -45,8 +45,14 @@ class LandslideSentinel {
     // Hook into Android native background foreground service landslide detection (runs in lock screen / Doze)
     if (!this.nativeLandslideUnsub) {
       this.nativeLandslideUnsub = subscribeToNativeLandslide(({ tremorG, durationMs }) => {
-        console.warn(`[LandslideSentinel] 🚨 Native background sensor triggered landslide: tremor=${tremorG}g, duration=${durationMs}ms`);
-        this.triggerLandslideAlarm(Math.floor(durationMs / 1000));
+        console.warn(`[LandslideSentinel] 📡 Native background sensor observed tremor: tremor=${tremorG}g, duration=${durationMs}ms. Dispatching to 1/3rd quorum pipeline.`);
+        // Single-phone tremor detection MUST NEVER trigger a local siren!
+        // Only dispatch telemetry to the 1/3rd sector quorum pipeline!
+        getCurrentDeviceLocation().then((loc) => {
+          this.reportTremorToBackend(loc, tremorG, Math.floor(durationMs / 1000)).catch(() => {});
+        }).catch(() => {
+          this.reportTremorToBackend({ lat: 11.5273, lng: 76.1242 }, tremorG, Math.floor(durationMs / 1000)).catch(() => {});
+        });
       });
     }
 
@@ -144,7 +150,14 @@ class LandslideSentinel {
 
       // If continuous pre-landslide harmonic vibrations persist >= 30 seconds:
       if (elapsedMs >= 30000) {
-        this.triggerLandslideAlarm(elapsedSeconds);
+        // Single-phone tremor detection MUST NEVER trigger a local siren!
+        // It must only dispatch telemetry to the 1/3rd sector quorum pipeline
+        this.tremorStartTime = 0;
+        getCurrentDeviceLocation().then((loc) => {
+          this.reportTremorToBackend(loc, 0.20, elapsedSeconds).catch(() => {});
+        }).catch(() => {
+          this.reportTremorToBackend({ lat: 11.5273, lng: 76.1242 }, 0.20, elapsedSeconds).catch(() => {});
+        });
       }
     } else {
       // Small gap tolerance (allow up to 2 seconds of momentary pause in tremors)
@@ -157,19 +170,27 @@ class LandslideSentinel {
   /**
    * High-urgency Landslide Wake Alarm
    */
-  public async triggerLandslideAlarm(durationSeconds: number = 30) {
+  public async triggerLandslideAlarm(durationSeconds: number = 30, isOneThirdConsensus: boolean = true) {
     if (this.alertActive) return;
     this.alertActive = true;
 
-    let loc = { lat: 30.5573, lng: 79.5642 };
+    let loc = { lat: 11.5273, lng: 76.1242 };
     try {
       loc = await getCurrentDeviceLocation();
     } catch {}
 
+    const title = isOneThirdConsensus
+      ? '⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW'
+      : '⛰️ LANDSLIDE TREMOR WARNING — EVACUATE TO HIGH GROUND';
+
+    const message = isOneThirdConsensus
+      ? '⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW'
+      : `Sustained ${durationSeconds}s sub-surface acoustic harmonic tremors (10–50 Hz) detected. Move to high ground immediately.`;
+
     const alert: LandslideAlert = {
-      title: '⛰️ LANDSLIDE IMMINENT — EVACUATE NOW',
-      message: `Sustained ${durationSeconds}s sub-surface acoustic harmonic tremors (10–50 Hz) detected. Hillside shearing imminent! Move to high ground immediately.`,
-      tremorFrequencyHz: 28,
+      title,
+      message,
+      tremorFrequencyHz: 18.5,
       durationSeconds,
       timestamp: Date.now(),
       location: loc,
@@ -184,7 +205,7 @@ class LandslideSentinel {
 
     // 2. High-volume Text-to-Speech Wake Warning
     try {
-      Speech.speak('Landslide warning! Evacuate now! Move to high ground immediately!', {
+      Speech.speak('Landslide confirmed by one-third sector consensus. Evacuate to high ground immediately!', {
         rate: 1.05,
         pitch: 1.1,
       });
@@ -197,7 +218,7 @@ class LandslideSentinel {
       lng: loc.lng,
       status: 'SOS' as const,
       sos_type: 'LANDSLIDE' as any,
-      notes: `WAYANAD SENTINEL: 10-50Hz seismic harmonic tremor detected for ${durationSeconds}s. Evacuate immediately!`,
+      notes: `⛰️ 1/3RD QUORUM LANDSLIDE CONFIRMED: ${durationSeconds}s 10-50Hz harmonic tremor. Evacuate now!`,
       is_mesh_relayed: true,
       timestamp: new Date().toISOString(),
     };
@@ -205,11 +226,43 @@ class LandslideSentinel {
     saveSOSToOfflineQueue(landslidePayload).catch(() => {});
     meshManager.broadcastMultiHopSOS(landslidePayload).catch(() => {});
 
+    // Report to central API portal
+    this.reportTremorToBackend(loc, 0.20, durationSeconds).catch(() => {});
+
     if (this.callbacks.onLandslideTriggered) {
       this.callbacks.onLandslideTriggered(alert);
     }
 
-    console.warn('[LandslideSentinel] 🚨 WAYANAD SENTINEL DISPATCHED LANDSLIDE EVACUATION ALARM!');
+    console.warn('[LandslideSentinel] 🚨 1/3RD SECTOR CONSENSUS LANDSLIDE ALARM TRIGGERED!');
+  }
+
+  private async reportTremorToBackend(loc: { lat: number; lng: number }, tremorG: number, durationS: number) {
+    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    for (const base of candidateUrls) {
+      try {
+        const res = await fetch(`${base}/api/landslide/report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_uuid: meshManager.getMyDeviceId(),
+            sector_id: 'sector_wayanad_04',
+            sector_name: 'Sector 4: Chooralmala / Meppadi (Wayanad)',
+            lat: loc.lat,
+            lng: loc.lng,
+            tremor_g: tremorG,
+            frequency_hz: 18.5,
+            duration_s: durationS,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.is_confirmed && !this.alertActive) {
+            this.triggerLandslideAlarm(durationS, true);
+          }
+          break;
+        }
+      } catch {}
+    }
   }
 
   public cancelAlert() {
@@ -221,16 +274,40 @@ class LandslideSentinel {
 
     meshManager.broadcastSafe().catch(() => {});
 
+    // Cancel on backend
+    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    for (const base of candidateUrls) {
+      fetch(`${base}/api/landslide/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sector_id: 'sector_wayanad_04' }),
+      }).catch(() => {});
+    }
+
     if (this.callbacks.onAlertCancelled) {
       this.callbacks.onAlertCancelled();
     }
   }
 
   /**
-   * Testing & simulation hook
+   * Testing & simulation hook: Triggers full 1/3rd Sector Quorum Consensus
    */
+  public async simulateOneThirdSectorQuorum() {
+    const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+    for (const base of candidateUrls) {
+      try {
+        await fetch(`${base}/api/landslide/simulate-quorum`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sector_id: 'sector_wayanad_04' }),
+        });
+      } catch {}
+    }
+    this.triggerLandslideAlarm(30, true);
+  }
+
   public simulateLandslideTremor() {
-    this.triggerLandslideAlarm(35);
+    this.simulateOneThirdSectorQuorum();
   }
 }
 

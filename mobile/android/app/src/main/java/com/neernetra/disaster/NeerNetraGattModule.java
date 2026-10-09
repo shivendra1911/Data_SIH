@@ -13,7 +13,11 @@ import com.facebook.react.bridge.*;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -491,6 +495,95 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             promise.resolve(map);
         } catch (Exception e) {
             promise.reject("SENSOR_STATUS_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void isIgnoringBatteryOptimizations(Promise promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) getReactApplicationContext().getSystemService(Context.POWER_SERVICE);
+                boolean ignoring = pm != null && pm.isIgnoringBatteryOptimizations(getReactApplicationContext().getPackageName());
+                promise.resolve(ignoring);
+            } else {
+                promise.resolve(true);
+            }
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
+    public void requestIgnoreBatteryOptimizations(Promise promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getReactApplicationContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getReactApplicationContext().startActivity(intent);
+                promise.resolve(true);
+            } else {
+                promise.resolve(true);
+            }
+        } catch (Exception e) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.parse("package:" + getReactApplicationContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getReactApplicationContext().startActivity(intent);
+                promise.resolve(true);
+            } catch (Exception ex) {
+                promise.reject("BATTERY_OPT_ERROR", ex.getMessage());
+            }
+        }
+    }
+
+    @ReactMethod
+    public void openUnusedAppRestrictionsSettings(Promise promise) {
+        try {
+            // Android 11+ (API 30+) "Pause app activity if unused" settings
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getReactApplicationContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getReactApplicationContext().startActivity(intent);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("UNUSED_APP_RESTRICTIONS_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void getBatteryOptimizationStatus(Promise promise) {
+        try {
+            WritableMap map = Arguments.createMap();
+            boolean isIgnoring = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) getReactApplicationContext().getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    isIgnoring = pm.isIgnoringBatteryOptimizations(getReactApplicationContext().getPackageName());
+                }
+            }
+            map.putBoolean("isIgnoringBatteryOptimizations", isIgnoring);
+            map.putString("manufacturer", Build.MANUFACTURER);
+            map.putString("model", Build.MODEL);
+            promise.resolve(map);
+        } catch (Exception e) {
+            promise.reject("STATUS_ERROR", e.getMessage());
+        }
+    }
+
+    public static void notifyNativeSensorUpdate(float vm, float gyro, float pressure) {
+        if (staticReactContext != null && staticReactContext.hasActiveReactInstance()) {
+            try {
+                WritableMap map = Arguments.createMap();
+                map.putDouble("lastVectorMagnitudeG", (double) vm);
+                map.putDouble("lastGyroOmega", (double) gyro);
+                map.putDouble("lastPressureHpa", (double) pressure);
+                map.putDouble("timestamp", (double) System.currentTimeMillis());
+                staticReactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("onHardwareSensorUpdate", map);
+            } catch (Exception ignored) {}
         }
     }
 

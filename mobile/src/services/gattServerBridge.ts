@@ -349,5 +349,56 @@ export const subscribeToNativeStorm = (
   return () => sub.remove();
 };
 
+export const subscribeToNativeSensorUpdates = (
+  callback: (event: { lastVectorMagnitudeG: number; lastGyroOmega: number; lastPressureHpa: number; timestamp: number }) => void
+) => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt) return () => {};
+  if (!emitter) {
+    emitter = new NativeEventEmitter(NeerNetraGatt);
+  }
+  const sub = emitter.addListener('onHardwareSensorUpdate', callback);
+  return () => sub.remove();
+};
+
+export const isIgnoringBatteryOptimizations = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.isIgnoringBatteryOptimizations) return true;
+  try {
+    return await NeerNetraGatt.isIgnoringBatteryOptimizations();
+  } catch {
+    return false;
+  }
+};
+
+export const requestIgnoreBatteryOptimizations = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.requestIgnoreBatteryOptimizations) return true;
+  try {
+    return await NeerNetraGatt.requestIgnoreBatteryOptimizations();
+  } catch {
+    return false;
+  }
+};
+
+export const openUnusedAppRestrictionsSettings = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.openUnusedAppRestrictionsSettings) return true;
+  try {
+    return await NeerNetraGatt.openUnusedAppRestrictionsSettings();
+  } catch {
+    return false;
+  }
+};
+
+export const getBatteryOptimizationStatus = async (): Promise<{
+  isIgnoringBatteryOptimizations: boolean;
+  manufacturer: string;
+  model: string;
+} | null> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.getBatteryOptimizationStatus) return null;
+  try {
+    return await NeerNetraGatt.getBatteryOptimizationStatus();
+  } catch {
+    return null;
+  }
+};
+
 
 

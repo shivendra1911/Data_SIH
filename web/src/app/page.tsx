@@ -11,6 +11,7 @@ import NationalSentinelRadar from "@/components/Dashboard/NationalSentinelRadar"
 import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix";
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
 import BuildingCollapsePanel from "@/components/Dashboard/BuildingCollapsePanel";
+import LandslideConsensusPanel from "@/components/Dashboard/LandslideConsensusPanel";
 import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
@@ -695,6 +696,16 @@ export default function NationalSentinelPage() {
               onDispatchUSAR={(cid) => {
                 showToast(`USAR Brigade dispatched to structural collapse #${cid.slice(-6).toUpperCase()}`);
               }}
+              onFocusCoordinates={(lat, lng) => {
+                if (typeof window !== "undefined") {
+                  window.location.href = `/radar?lat=${lat}&lng=${lng}`;
+                }
+              }}
+            />
+
+            {/* Wayanad & Himalayan Landslide 1/3rd Sector Quorum Consensus Panel */}
+            <LandslideConsensusPanel
+              onShowToast={(msg) => showToast(msg)}
               onFocusCoordinates={(lat, lng) => {
                 if (typeof window !== "undefined") {
                   window.location.href = `/radar?lat=${lat}&lng=${lng}`;

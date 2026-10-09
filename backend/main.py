@@ -80,6 +80,43 @@ active_broadcasts_db: List[Dict[str, Any]] = []
 collapse_events_db: List[Dict[str, Any]] = []
 collapse_clusters_db: Dict[str, Dict[str, Any]] = {}
 
+# Spatiotemporal Landslide Quorum Database (1/3rd Sector Consensus Pipeline)
+landslide_reports_db: List[Dict[str, Any]] = []
+landslide_sectors_db: Dict[str, Dict[str, Any]] = {
+    "sector_wayanad_04": {
+        "sector_id": "sector_wayanad_04",
+        "sector_name": "Sector 4: Chooralmala / Meppadi (Wayanad)",
+        "lat": 11.5273,
+        "lng": 76.1242,
+        "total_active_phones": 9,
+        "quorum_threshold": 3,
+        "status": "MONITORING",
+        "reporting_devices": [],
+        "reports": [],
+        "first_detected_at": None,
+        "last_report_at": None,
+        "latest_tremor_g": 0.0,
+        "latest_frequency_hz": 0.0,
+        "confirmed_at": None,
+    },
+    "sector_joshimath_01": {
+        "sector_id": "sector_joshimath_01",
+        "sector_name": "Sector 1: Joshimath Central Valley",
+        "lat": 30.5573,
+        "lng": 79.5642,
+        "total_active_phones": 9,
+        "quorum_threshold": 3,
+        "status": "MONITORING",
+        "reporting_devices": [],
+        "reports": [],
+        "first_detected_at": None,
+        "last_report_at": None,
+        "latest_tremor_g": 0.0,
+        "latest_frequency_hz": 0.0,
+        "confirmed_at": None,
+    }
+}
+
 # Registered Firebase Cloud Messaging (FCM) push tokens
 registered_push_tokens: Dict[str, Dict[str, Any]] = {}
 FIREBASE_KEY_PATH = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
@@ -503,6 +540,28 @@ class CollapseCancelPayload(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     timestamp: Optional[str] = None
+
+class LandslideReportPayload(BaseModel):
+    device_uuid: str = Field(..., min_length=1, max_length=128)
+    sector_id: str = Field(default="sector_wayanad_04")
+    sector_name: Optional[str] = None
+    lat: float = Field(default=11.5273, ge=-90.0, le=90.0)
+    lng: float = Field(default=76.1242, ge=-180.0, le=180.0)
+    tremor_g: float = Field(default=0.18, ge=0.0)
+    frequency_hz: float = Field(default=18.5, ge=0.0)
+    duration_s: float = Field(default=30.0, ge=0.0)
+    timestamp: Optional[str] = None
+    notes: Optional[str] = None
+
+class LandslideCancelPayload(BaseModel):
+    sector_id: str = Field(default="sector_wayanad_04")
+    device_uuid: Optional[str] = None
+    notes: Optional[str] = None
+
+class LandslideDirectivePayload(BaseModel):
+    sector_id: str = Field(default="sector_wayanad_04")
+    message: Optional[str] = None
+    authorized_by: str = Field(default="COMMAND_CENTER_PORTAL")
 
 @app.on_event("startup")
 def startup_services():
@@ -1092,6 +1151,361 @@ def get_active_collapse_clusters():
         "clusters": active_list
     }
 
+# ── Domain 5: Wayanad & Himalayan Landslide 1/3rd Sector Consensus Pipeline ──
+
+@app.post("/api/landslide/report")
+def report_landslide_event(payload: LandslideReportPayload, background_tasks: BackgroundTasks):
+    """
+    Ingests sub-surface harmonic tremor reports from edge smartphones.
+    Aggregates reports by sector within a 60-second window.
+    Strict Consensus Rule: When >= 1/3rd of total active mobiles in the sector
+    report matching tremor data, the portal confirms the disaster,
+    displays it on the rescue command map, and broadcasts an emergency directive siren
+    back to all phones in that sector.
+    """
+    now_ts = time.time()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sector_id = payload.sector_id or "sector_wayanad_04"
+
+    report_entry = {
+        "id": f"lsr_{uuid.uuid4().hex[:10]}",
+        "device_uuid": payload.device_uuid,
+        "sector_id": sector_id,
+        "sector_name": payload.sector_name,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "tremor_g": payload.tremor_g,
+        "frequency_hz": payload.frequency_hz,
+        "duration_s": payload.duration_s,
+        "received_at": now_iso,
+        "timestamp_sec": now_ts,
+        "notes": payload.notes or "Sub-surface harmonic ground tremor reported"
+    }
+
+    with db_lock:
+        landslide_reports_db.append(report_entry)
+
+        # Get or initialize sector
+        if sector_id not in landslide_sectors_db:
+            landslide_sectors_db[sector_id] = {
+                "sector_id": sector_id,
+                "sector_name": payload.sector_name or f"Sector: {sector_id}",
+                "lat": payload.lat,
+                "lng": payload.lng,
+                "total_active_phones": 9,
+                "quorum_threshold": 3,
+                "status": "MONITORING",
+                "reporting_devices": [],
+                "reports": [],
+                "first_detected_at": now_iso,
+                "last_report_at": now_iso,
+                "latest_tremor_g": payload.tremor_g,
+                "latest_frequency_hz": payload.frequency_hz,
+                "confirmed_at": None,
+            }
+
+        sec = landslide_sectors_db[sector_id]
+        if not sec.get("first_detected_at"):
+            sec["first_detected_at"] = now_iso
+        sec["last_report_at"] = now_iso
+        sec["latest_tremor_g"] = payload.tremor_g
+        sec["latest_frequency_hz"] = payload.frequency_hz
+        sec["lat"] = payload.lat
+        sec["lng"] = payload.lng
+
+        # Append report to sector and prune older than 60s
+        sec["reports"].append(report_entry)
+        sec["reports"] = [r for r in sec["reports"] if now_ts - r.get("timestamp_sec", now_ts) <= 60.0]
+
+        # Calculate unique reporting devices
+        unique_devices = list(set(r["device_uuid"] for r in sec["reports"]))
+        sec["reporting_devices"] = unique_devices
+
+        total_phones = sec.get("total_active_phones", 9)
+        # Strict 1/3rd Consensus Threshold: N >= max(2, ceil(total_phones / 3))
+        quorum_threshold = max(2, math.ceil(total_phones / 3.0))
+        sec["quorum_threshold"] = quorum_threshold
+        consensus_ratio = len(unique_devices) / float(total_phones)
+        sec["consensus_ratio"] = consensus_ratio
+
+        is_confirmed = len(unique_devices) >= quorum_threshold
+
+        if is_confirmed:
+            sec["status"] = "CONFIRMED_LANDSLIDE"
+            if not sec.get("confirmed_at"):
+                sec["confirmed_at"] = now_iso
+
+            # Create area-wide broadcast directive in that sector
+            broadcast_id = f"broad_landslide_{sector_id}"
+            directive = {
+                "id": broadcast_id,
+                "type": "LANDSLIDE_1_3RD_CONSENSUS",
+                "severity": "CRITICAL",
+                "title": "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+                "message": "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+                "sector_id": sector_id,
+                "sector_name": sec.get("sector_name", sector_id),
+                "lat": sec["lat"],
+                "lng": sec["lng"],
+                "consensus_count": len(unique_devices),
+                "total_active_phones": total_phones,
+                "quorum_threshold": quorum_threshold,
+                "consensus_ratio_percent": round(consensus_ratio * 100, 1),
+                "status": "ACTIVE_SIREN",
+                "created_at": now_iso
+            }
+
+            # Update or append to active broadcasts
+            existing = [b for b in active_broadcasts_db if b.get("sector_id") == sector_id and b.get("type") == "LANDSLIDE_1_3RD_CONSENSUS"]
+            if existing:
+                existing[0].update(directive)
+            else:
+                active_broadcasts_db.append(directive)
+
+            # Mirror to live SOS alerts feed
+            sos_id = f"sos_ls_{sector_id}"
+            sos_existing = [s for s in sos_events_db if s.get("id") == sos_id]
+            if not sos_existing:
+                sos_events_db.append({
+                    "id": sos_id,
+                    "device_uuid": payload.device_uuid,
+                    "lat": sec["lat"],
+                    "lng": sec["lng"],
+                    "zone_id": find_nearest_zone(sec["lat"], sec["lng"]),
+                    "status": "SOS",
+                    "sos_type": "LANDSLIDE",
+                    "is_mesh_relayed": True,
+                    "received_at": now_iso,
+                    "notes": f"⛰️ LANDSLIDE CONFIRMED: {len(unique_devices)}/{total_phones} devices (1/3rd consensus), {payload.frequency_hz}Hz tremor"
+                })
+
+            print(f"[Landslide Consensus] ⛰️ CONFIRMED in {sector_id}: {len(unique_devices)}/{total_phones} devices reported ({round(consensus_ratio*100, 1)}% >= 33.3%). Broadcast directive dispatched!")
+        else:
+            sec["status"] = "PENDING_QUORUM"
+            print(f"[Landslide Report] Ingested from {payload.device_uuid[:8]} in {sector_id}. Progress: {len(unique_devices)}/{quorum_threshold} devices needed for 1/3rd quorum.")
+
+    return {
+        "success": True,
+        "sector_id": sector_id,
+        "sector_name": sec.get("sector_name"),
+        "status": sec["status"],
+        "reporting_count": len(unique_devices),
+        "quorum_threshold": quorum_threshold,
+        "total_active_phones": total_phones,
+        "consensus_ratio_percent": round(consensus_ratio * 100, 1),
+        "is_confirmed": is_confirmed,
+        "directive_broadcast_active": is_confirmed
+    }
+
+@app.get("/api/landslide/active-sectors")
+def get_active_landslide_sectors():
+    """
+    Supplies active Landslide monitoring sectors, tremor metrics, and 1/3rd consensus quorum state.
+    """
+    sectors_list = []
+
+    with db_lock:
+        now_ts = time.time()
+        for sec in landslide_sectors_db.values():
+            # Clean up stale reports older than 60s
+            sec["reports"] = [r for r in sec.get("reports", []) if now_ts - r.get("timestamp_sec", now_ts) <= 60.0]
+            sec["reporting_devices"] = list(set(r["device_uuid"] for r in sec["reports"]))
+            total_phones = sec.get("total_active_phones", 9)
+            thresh = max(2, math.ceil(total_phones / 3.0))
+            sec["quorum_threshold"] = thresh
+            
+            if len(sec["reporting_devices"]) >= thresh:
+                sec["status"] = "CONFIRMED_LANDSLIDE"
+            elif len(sec["reporting_devices"]) > 0:
+                sec["status"] = "PENDING_QUORUM"
+            else:
+                sec["status"] = "MONITORING"
+
+            item = dict(sec)
+            item["reporting_count"] = len(sec["reporting_devices"])
+            item["consensus_ratio_percent"] = round((item["reporting_count"] / float(total_phones)) * 100, 1)
+            
+            # Check if active broadcast exists
+            active_b = [b for b in active_broadcasts_db if b.get("sector_id") == sec["sector_id"] and b.get("status") == "ACTIVE_SIREN"]
+            item["has_active_directive"] = len(active_b) > 0
+            item["directive"] = active_b[0] if active_b else None
+
+            sectors_list.append(item)
+
+    sectors_list.sort(key=lambda s: (s["status"] == "CONFIRMED_LANDSLIDE", s["reporting_count"]), reverse=True)
+
+    return {
+        "total_monitored_sectors": len(sectors_list),
+        "confirmed_landslides_count": len([s for s in sectors_list if s["status"] == "CONFIRMED_LANDSLIDE"]),
+        "sectors": sectors_list
+    }
+
+@app.post("/api/landslide/broadcast-directive")
+def broadcast_landslide_directive(payload: LandslideDirectivePayload):
+    """
+    Web portal command to manually broadcast the Area-Wide Evacuation Siren & Directive
+    to all mobile devices in the specified sector.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sector_id = payload.sector_id or "sector_wayanad_04"
+
+    with db_lock:
+        sec = landslide_sectors_db.get(sector_id)
+        if not sec:
+            raise HTTPException(status_code=404, detail="Sector not found")
+
+        sec["status"] = "CONFIRMED_LANDSLIDE"
+        sec["confirmed_at"] = now_iso
+
+        broadcast_id = f"broad_landslide_{sector_id}"
+        directive = {
+            "id": broadcast_id,
+            "type": "LANDSLIDE_1_3RD_CONSENSUS",
+            "severity": "CRITICAL",
+            "title": "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+            "message": payload.message or "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+            "sector_id": sector_id,
+            "sector_name": sec.get("sector_name", sector_id),
+            "lat": sec["lat"],
+            "lng": sec["lng"],
+            "consensus_count": len(sec.get("reporting_devices", [])),
+            "total_active_phones": sec.get("total_active_phones", 9),
+            "quorum_threshold": sec.get("quorum_threshold", 3),
+            "status": "ACTIVE_SIREN",
+            "authorized_by": payload.authorized_by,
+            "created_at": now_iso
+        }
+
+        existing = [b for b in active_broadcasts_db if b.get("sector_id") == sector_id and b.get("type") == "LANDSLIDE_1_3RD_CONSENSUS"]
+        if existing:
+            existing[0].update(directive)
+        else:
+            active_broadcasts_db.append(directive)
+
+    return {
+        "success": True,
+        "message": f"Area-wide emergency directive broadcast dispatched to sector {sector_id}",
+        "directive": directive
+    }
+
+@app.post("/api/landslide/cancel")
+def cancel_landslide_sector(payload: LandslideCancelPayload):
+    """
+    Disarms a landslide sector alarm after rescue verification or simulation.
+    """
+    sector_id = payload.sector_id or "sector_wayanad_04"
+    with db_lock:
+        if sector_id in landslide_sectors_db:
+            sec = landslide_sectors_db[sector_id]
+            sec["status"] = "MONITORING"
+            sec["reports"] = []
+            sec["reporting_devices"] = []
+            sec["confirmed_at"] = None
+
+        # Deactivate corresponding broadcasts
+        for b in active_broadcasts_db:
+            if b.get("sector_id") == sector_id and b.get("type") == "LANDSLIDE_1_3RD_CONSENSUS":
+                b["status"] = "SILENCED"
+
+    return {
+        "success": True,
+        "sector_id": sector_id,
+        "message": f"Landslide alert cancelled and sector {sector_id} restored to MONITORING"
+    }
+
+@app.post("/api/landslide/simulate-quorum")
+def simulate_landslide_quorum(payload: LandslideDirectivePayload):
+    """
+    Simulation Hook: Ingests 3 distinct peer reports into the sector to reach 1/3rd quorum
+    and triggers the area-wide evacuation broadcast directive.
+    """
+    sector_id = payload.sector_id or "sector_wayanad_04"
+    now_ts = time.time()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    simulated_peers = [
+        {"device_uuid": "SIM_PEER_ALPHA", "tremor_g": 0.18, "frequency_hz": 18.2},
+        {"device_uuid": "SIM_PEER_BETA", "tremor_g": 0.22, "frequency_hz": 18.5},
+        {"device_uuid": "SIM_PEER_GAMMA", "tremor_g": 0.19, "frequency_hz": 18.1},
+    ]
+
+    with db_lock:
+        if sector_id not in landslide_sectors_db:
+            landslide_sectors_db[sector_id] = {
+                "sector_id": sector_id,
+                "sector_name": "Sector 4: Chooralmala / Meppadi (Wayanad)",
+                "lat": 11.5273,
+                "lng": 76.1242,
+                "total_active_phones": 9,
+                "quorum_threshold": 3,
+                "status": "MONITORING",
+                "reporting_devices": [],
+                "reports": [],
+                "first_detected_at": now_iso,
+                "last_report_at": now_iso,
+                "latest_tremor_g": 0.20,
+                "latest_frequency_hz": 18.4,
+                "confirmed_at": None,
+            }
+
+        sec = landslide_sectors_db[sector_id]
+        sec["reports"] = []
+        for p in simulated_peers:
+            sec["reports"].append({
+                "id": f"lsr_{uuid.uuid4().hex[:8]}",
+                "device_uuid": p["device_uuid"],
+                "sector_id": sector_id,
+                "sector_name": sec.get("sector_name"),
+                "lat": sec["lat"],
+                "lng": sec["lng"],
+                "tremor_g": p["tremor_g"],
+                "frequency_hz": p["frequency_hz"],
+                "duration_s": 32.0,
+                "received_at": now_iso,
+                "timestamp_sec": now_ts,
+                "notes": "Simulated sub-surface harmonic tremor"
+            })
+        sec["reporting_devices"] = [p["device_uuid"] for p in simulated_peers]
+        sec["status"] = "CONFIRMED_LANDSLIDE"
+        sec["confirmed_at"] = now_iso
+        sec["latest_tremor_g"] = 0.20
+        sec["latest_frequency_hz"] = 18.4
+
+        # Add area-wide broadcast directive
+        broadcast_id = f"broad_landslide_{sector_id}"
+        directive = {
+            "id": broadcast_id,
+            "type": "LANDSLIDE_1_3RD_CONSENSUS",
+            "severity": "CRITICAL",
+            "title": "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+            "message": payload.message or "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+            "sector_id": sector_id,
+            "sector_name": sec.get("sector_name", sector_id),
+            "lat": sec["lat"],
+            "lng": sec["lng"],
+            "consensus_count": 3,
+            "total_active_phones": sec.get("total_active_phones", 9),
+            "quorum_threshold": 3,
+            "consensus_ratio_percent": 33.3,
+            "status": "ACTIVE_SIREN",
+            "authorized_by": payload.authorized_by,
+            "created_at": now_iso
+        }
+        existing = [b for b in active_broadcasts_db if b.get("sector_id") == sector_id and b.get("type") == "LANDSLIDE_1_3RD_CONSENSUS"]
+        if existing:
+            existing[0].update(directive)
+        else:
+            active_broadcasts_db.append(directive)
+
+    return {
+        "success": True,
+        "sector_id": sector_id,
+        "status": "CONFIRMED_LANDSLIDE",
+        "simulated_peers_count": 3,
+        "message": "Simulated 1/3rd sector quorum confirmed and directive broadcast dispatched",
+        "directive": directive
+    }
+
 @app.post("/api/rescue/dispatch")
 def dispatch_rescue_squad(payload: RescueDispatchPayload, background_tasks: BackgroundTasks):
     """
@@ -1606,6 +2020,7 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
             "rainfall_mm": 25.0, "soil_moisture": 0.40,
             "slope_angle_deg": 30.0, "river_discharge_m3s": 250.0, "seismic_mag": 0.5
         })
+        zinference = run_zone_inference(zid, zsensors)
         water_level = zsensors.get("river_water_level_m", 0.0)
         cwc_gauge = get_cwc_gauge_info(zid, water_level)
         zones_output.append({
@@ -1649,6 +2064,7 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
         "live_devices": enriched_devices,
         "clusters": clusters_res.get("clusters", []),
         "collapse_clusters": get_active_collapse_clusters().get("clusters", []),
+        "landslide_sectors": get_active_landslide_sectors().get("sectors", []),
         "dispatches": dispatched_rescues_db[::-1],
         "active_broadcasts": active_broadcasts_db[::-1],
         "shelters": [s for s in REGIONAL_SHELTERS_DB if s["zone_id"] == zone_key] or REGIONAL_SHELTERS_DB[:2]

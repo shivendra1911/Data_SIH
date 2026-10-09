@@ -7,6 +7,7 @@ import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix"
 import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
 import BuildingCollapsePanel from "@/components/Dashboard/BuildingCollapsePanel";
+import LandslideConsensusPanel from "@/components/Dashboard/LandslideConsensusPanel";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
@@ -499,6 +500,18 @@ export default function RescueCitizenGridPage() {
               <BuildingCollapsePanel
                 onDispatchUSAR={(cid) => {
                   setDispatchNotice(`🚨 Heavy USAR Rescue Squad deployed to Structural Collapse #${cid.slice(-6).toUpperCase()}`);
+                  setTimeout(() => setDispatchNotice(null), 5000);
+                }}
+                onFocusCoordinates={(lat, lng) => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = `/radar?lat=${lat}&lng=${lng}`;
+                  }
+                }}
+              />
+
+              <LandslideConsensusPanel
+                onShowToast={(msg) => {
+                  setDispatchNotice(msg);
                   setTimeout(() => setDispatchNotice(null), 5000);
                 }}
                 onFocusCoordinates={(lat, lng) => {

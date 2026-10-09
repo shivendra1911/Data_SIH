@@ -70,10 +70,12 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     public static final String ACTION_TRIGGER_INCOMING_CALL = "com.neernetra.disaster.TRIGGER_INCOMING_CALL";
     public static final String ACTION_TRIGGER_EMERGENCY_SIREN = "com.neernetra.disaster.TRIGGER_EMERGENCY_SIREN";
     public static final String ACTION_TRIGGER_COLLAPSE = "com.neernetra.disaster.TRIGGER_COLLAPSE";
+    public static final String ACTION_TRIGGER_LANDSLIDE = "com.neernetra.disaster.TRIGGER_LANDSLIDE";
 
     private PowerManager.WakeLock partialWakeLock;
     private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
+    private long lastSensorTelemetryEmitTime = 0;
 
     // ── Native Hardware Sensor Sentinel Subsystem ──────────────────────────
     private SensorManager sensorManager;
@@ -293,6 +295,28 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 Log.i(TAG, "[MeshService] ACTION_TRIGGER_COLLAPSE received via Intent/ADB (Peak: " + peakG + "g)");
                 triggerNativeCollapseAlarm(peakG, freeFallMs);
                 return START_STICKY;
+            } else if (ACTION_TRIGGER_LANDSLIDE.equals(action)) {
+                String title = intent.getStringExtra("title");
+                if (title == null || title.trim().isEmpty()) title = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS";
+                String message = intent.getStringExtra("message");
+                if (message == null || message.trim().isEmpty()) message = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
+                String emergencyType = "LANDSLIDE";
+
+                Bundle extras = new Bundle();
+                extras.putString("title", title);
+                extras.putString("message", message);
+                extras.putString("emergency_type", emergencyType);
+                extras.putString("sector_id", intent.getStringExtra("sector_id"));
+
+                Log.i(TAG, "[MeshService] ⛰️ ACTION_TRIGGER_LANDSLIDE received — waking screen and sounding evacuation alarm!");
+                wakeScreenAndShowNotification(
+                    this,
+                    title,
+                    message,
+                    emergencyType,
+                    extras
+                );
+                return START_STICKY;
             }
         }
 
@@ -406,11 +430,13 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
         String callerId = extras != null ? extras.getString("caller_id", "unknown") : "unknown";
         boolean isGroup = extras != null && extras.getBoolean("is_group_call", false);
 
+        boolean isVoiceCall = "CALL_REQ".equalsIgnoreCase(emergencyType) || "GROUP_CALL".equalsIgnoreCase(emergencyType);
+        boolean isSiren = "SIREN".equalsIgnoreCase(emergencyType) || "EVACUATION".equalsIgnoreCase(emergencyType) || "LANDSLIDE".equalsIgnoreCase(emergencyType);
+
         boolean telecomHandled = false;
-        boolean isSiren = "SIREN".equalsIgnoreCase(emergencyType) || "EVACUATION".equalsIgnoreCase(emergencyType);
-        String displayName = isSiren ? title : callerName;
-        String displayId = isSiren ? "CIVIL_DEFENSE_SIREN" : callerId;
-        telecomHandled = NeerNetraConnectionService.triggerIncomingCall(context, displayName, displayId, isGroup, emergencyType);
+        if (isVoiceCall) {
+            telecomHandled = NeerNetraConnectionService.triggerIncomingCall(context, callerName, callerId, isGroup, emergencyType);
+        }
 
         try {
             // 1. Wake physical phone screen
@@ -486,7 +512,7 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 pFlags
             );
 
-            // 5. Build high-priority Heads-up / Lock-screen CallStyle Notification
+            // 5. Build high-priority Heads-up / Lock-screen Notification
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -510,15 +536,35 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                     .setContentTitle(title)
                     .setContentText(message)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .setAutoCancel(true)
-                    .setFullScreenIntent(fullScreenPendingIntent, true) // Guarantees lock-screen wakeup
-                    .setContentIntent(fullScreenPendingIntent)
-                    .addAction(R.mipmap.ic_launcher, "DECLINE", declinePendingIntent)
-                    .addAction(R.mipmap.ic_launcher, "ANSWER", answerPendingIntent)
-                    .setVibrate(new long[]{0, 1000, 1000, 1000})
-                    .setColor(Color.RED);
+                    .setAutoCancel(true);
+
+                if (isVoiceCall) {
+                    builder.setCategory(NotificationCompat.CATEGORY_CALL)
+                        .setFullScreenIntent(fullScreenPendingIntent, true)
+                        .setContentIntent(fullScreenPendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "DECLINE", declinePendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "ANSWER", answerPendingIntent)
+                        .setVibrate(new long[]{0, 1000, 1000, 1000})
+                        .setColor(Color.parseColor("#0EA5E9"));
+                } else if (isSiren) {
+                    builder.setCategory(NotificationCompat.CATEGORY_ALARM)
+                        .setFullScreenIntent(fullScreenPendingIntent, true)
+                        .setContentIntent(fullScreenPendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "SILENCE ALARM", declinePendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "EVACUATE", answerPendingIntent)
+                        .setVibrate(new long[]{0, 1000, 500, 1000})
+                        .setColor(Color.RED)
+                        .setOngoing(true);
+                } else {
+                    builder.setCategory(NotificationCompat.CATEGORY_ALARM)
+                        .setFullScreenIntent(fullScreenPendingIntent, true)
+                        .setContentIntent(fullScreenPendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "DISMISS", declinePendingIntent)
+                        .addAction(R.mipmap.ic_launcher, "VIEW ALERT", answerPendingIntent)
+                        .setVibrate(new long[]{0, 800, 400, 800})
+                        .setColor(Color.parseColor("#DC2626"));
+                }
 
                 nm.notify(EMERGENCY_NOTIFICATION_ID, builder.build());
             }
@@ -530,6 +576,11 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 } catch (Exception balErr) {
                     Log.d(TAG, "Direct startActivity blocked by BAL, FullScreenIntent handles lockscreen: " + balErr.getMessage());
                 }
+            }
+
+            // 7. For verified disaster evacuation sirens, play continuous emergency siren audio
+            if (isSiren) {
+                playEmergencyAlarm(context);
             }
 
         } catch (Exception e) {
@@ -830,6 +881,12 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             lastPressureHpa = hPa;
             processNativeBarometricSquall(hPa, now);
         }
+
+        // Live 25Hz telemetry stream to React Native bridge
+        if (now - lastSensorTelemetryEmitTime >= 40) {
+            lastSensorTelemetryEmitTime = now;
+            NeerNetraGattModule.notifyNativeSensorUpdate(lastVectorMagnitudeG, lastGyroOmega, lastPressureHpa);
+        }
     }
 
     @Override
@@ -935,7 +992,9 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             } else if (now - landslideTremorStartTime >= LANDSLIDE_DURATION_MS) {
                 landslideTremorStartTime = 0;
                 lastLandslideTriggerTime = now;
-                triggerNativeLandslideAlarm();
+                Log.i(TAG, "📡 [Native Landslide Sentinel] Single-device tremor detected (delta=" + delta + "g, duration=30s). Dispatching telemetry to 1/3rd quorum consensus pipeline without sounding local alarm.");
+                // Dispatch telemetry to the 1/3rd sector quorum pipeline (never trigger local alarm/siren on 1 phone!)
+                NeerNetraGattModule.notifyNativeLandslideEvent(delta, LANDSLIDE_DURATION_MS);
             }
         } else {
             if (delta > 0.5f) {
@@ -946,23 +1005,19 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     }
 
     private void triggerNativeLandslideAlarm() {
-        Log.w(TAG, "🚨🚨 [Native Landslide Sentinel] Continuous 10-50Hz acoustic harmonic tremor detected for >= 30s!");
+        Log.i(TAG, "⛰️ [Native Landslide Sentinel] Confirmed sector landslide directive received — alerting user.");
         Bundle extras = new Bundle();
-        extras.putString("title", "🚨 WAYANAD LANDSLIDE SENTINEL");
-        extras.putString("message", "Continuous 10-50Hz bedrock acoustic harmonic tremors detected for 30s! Evacuate uphill immediately.");
-        extras.putString("emergency_type", "SIREN");
+        extras.putString("title", "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS");
+        extras.putString("message", "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW");
+        extras.putString("emergency_type", "LANDSLIDE");
 
         wakeScreenAndShowNotification(
             this,
-            "🚨 WAYANAD LANDSLIDE SENTINEL",
-            "Continuous 10-50Hz bedrock acoustic harmonic tremors detected for 30s! Evacuate uphill immediately.",
-            "SIREN",
+            "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+            "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+            "LANDSLIDE",
             extras
         );
-        playEmergencyAlarm(this);
-
-        // Notify React Native bridge
-        NeerNetraGattModule.notifyNativeLandslideEvent(0.18f, 30000L);
     }
 
     private void processNativeBarometricSquall(float hPa, long now) {
@@ -991,21 +1046,8 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     }
 
     private void triggerNativeStormAlarm(float dropHpa, float currentHpa) {
-        Log.w(TAG, "⚠️ [Native Barometer Sentinel] Rapid 3-hour pressure drop detected: " + dropHpa + " hPa (Current: " + currentHpa + " hPa)");
-        Bundle extras = new Bundle();
-        boolean isCritical = dropHpa >= 6.0f;
-        String title = isCritical ? "⛈️ RAPID CYCLONIC PRESSURE COLLAPSE" : "⚠️ SEVERE SQUALL / MONSOON DROP DETECTED";
-        String message = isCritical
-            ? "Atmospheric pressure plunged by " + String.format(Locale.US, "%.1f", dropHpa) + " hPa in <=3h! Extreme cloudburst imminent."
-            : "Atmospheric pressure dropped by " + String.format(Locale.US, "%.1f", dropHpa) + " hPa in <=3h. Severe convective thunderstorm approaching.";
-        extras.putString("title", title);
-        extras.putString("message", message);
-        extras.putString("emergency_type", "SIREN");
-
-        wakeScreenAndShowNotification(this, title, message, "SIREN", extras);
-        playEmergencyAlarm(this);
-
-        // Notify React Native bridge
+        Log.i(TAG, "⚠️ [Native Barometer Sentinel] Rapid 3-hour pressure drop detected: " + dropHpa + " hPa (Current: " + currentHpa + " hPa). Dispatching telemetry to React Native bridge (no siren).");
+        // Notify React Native bridge (no local siren or call notification)
         NeerNetraGattModule.notifyNativeStormEvent(dropHpa, currentHpa);
     }
 }

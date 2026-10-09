@@ -17,6 +17,7 @@ public class EmergencyTriggerReceiver extends BroadcastReceiver {
     public static final String ACTION_TRIGGER_INCOMING_CALL = "com.neernetra.disaster.TRIGGER_INCOMING_CALL";
     public static final String ACTION_TRIGGER_EMERGENCY_SIREN = "com.neernetra.disaster.TRIGGER_EMERGENCY_SIREN";
     public static final String ACTION_TRIGGER_COLLAPSE = "com.neernetra.disaster.TRIGGER_COLLAPSE";
+    public static final String ACTION_TRIGGER_LANDSLIDE = "com.neernetra.disaster.TRIGGER_LANDSLIDE";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -95,6 +96,30 @@ public class EmergencyTriggerReceiver extends BroadcastReceiver {
             } catch (Exception e) {
                 Log.e(TAG, "Failed to dispatch collapse trigger to MeshService: " + e.getMessage());
             }
+        } else if (ACTION_TRIGGER_LANDSLIDE.equals(action)) {
+            String title = intent.getStringExtra("title");
+            if (title == null || title.trim().isEmpty()) {
+                title = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS";
+            }
+            String message = intent.getStringExtra("message");
+            if (message == null || message.trim().isEmpty()) {
+                message = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
+            }
+            String emergencyType = "LANDSLIDE";
+
+            Bundle extras = new Bundle();
+            extras.putString("title", title);
+            extras.putString("message", message);
+            extras.putString("emergency_type", emergencyType);
+            extras.putString("sector_id", intent.getStringExtra("sector_id"));
+
+            NeerNetraMeshService.wakeScreenAndShowNotification(
+                context,
+                title,
+                message,
+                emergencyType,
+                extras
+            );
         }
     }
 }

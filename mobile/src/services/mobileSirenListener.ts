@@ -251,6 +251,33 @@ class MobileSirenListener {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
+      // 1. Check local/portal Landslide 1/3rd Quorum Broadcast Directives
+      const candidateUrls = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://10.0.2.2:8000'];
+      for (const base of candidateUrls) {
+        try {
+          const bRes = await fetch(`${base}/api/landslide/active-sectors`, { signal: controller.signal });
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            const confirmedSector = (bData.sectors || []).find((s: any) => s.status === 'CONFIRMED_LANDSLIDE');
+            if (confirmedSector) {
+              const bCreatedAt = confirmedSector.confirmed_at || confirmedSector.last_report_at || `landslide_${confirmedSector.sector_id}`;
+              if (!this.processedSirenTimestamps.has(bCreatedAt) && !this.silencedSirenTimestamps.has(bCreatedAt)) {
+                this.processedSirenTimestamps.add(bCreatedAt);
+                this.lastProcessedTimestamp = bCreatedAt;
+                clearTimeout(timeoutId);
+                this.triggerAlarm(
+                  '⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW',
+                  confirmedSector.sector_name || 'Landslide Danger Sector',
+                  '1/3rd Sector Quorum Consensus',
+                  bCreatedAt
+                );
+                return;
+              }
+            }
+          }
+        } catch {}
+      }
+
       const res = await fetch(
         `${SUPABASE_REST_URL}/sos_alerts?device_id=eq.ADMIN_SIREN_DISPATCH&order=created_at.desc&limit=1`,
         {

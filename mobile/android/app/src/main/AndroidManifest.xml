@@ -131,6 +131,7 @@
         <action android:name="com.neernetra.disaster.TRIGGER_INCOMING_CALL"/>
         <action android:name="com.neernetra.disaster.TRIGGER_EMERGENCY_SIREN"/>
         <action android:name="com.neernetra.disaster.TRIGGER_COLLAPSE"/>
+        <action android:name="com.neernetra.disaster.TRIGGER_LANDSLIDE"/>
       </intent-filter>
     </receiver>
   </application>

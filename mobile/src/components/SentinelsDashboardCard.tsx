@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Accelerometer, Gyroscope } from 'expo-sensors';
 import {
   ShieldAlert,
   Mountain,
@@ -14,7 +15,11 @@ import {
   ChevronUp,
 } from 'lucide-react-native';
 
-import { HardwareSensorStatus } from '../services/gattServerBridge';
+import {
+  HardwareSensorStatus,
+  requestIgnoreBatteryOptimizations,
+  openUnusedAppRestrictionsSettings,
+} from '../services/gattServerBridge';
 
 interface SentinelsDashboardCardProps {
   onSimulateCollapse: () => void;
@@ -42,6 +47,43 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
   hardwareSensorStatus,
 }) => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [localImu, setLocalImu] = useState<number>(0.99);
+  const [localGyro, setLocalGyro] = useState<number>(0.02);
+
+  useEffect(() => {
+    let accelSub: any = null;
+    let gyroSub: any = null;
+
+    try {
+      Accelerometer.setUpdateInterval(40); // 25Hz live stream
+      accelSub = Accelerometer.addListener(({ x, y, z }) => {
+        const rawMagnitude = Math.sqrt(x * x + y * y + z * z);
+        // expo-sensors Accelerometer provides values in g units (~1.0 at rest)
+        setLocalImu(rawMagnitude);
+      });
+    } catch (e) {
+      console.warn('[SentinelsDashboardCard] Accelerometer listener error:', e);
+    }
+
+    try {
+      Gyroscope.setUpdateInterval(40); // 25Hz live stream
+      gyroSub = Gyroscope.addListener(({ x, y, z }) => {
+        const omega = Math.sqrt(x * x + y * y + z * z);
+        setLocalGyro(omega);
+      });
+    } catch (e) {
+      console.warn('[SentinelsDashboardCard] Gyroscope listener error:', e);
+    }
+
+    return () => {
+      if (accelSub) {
+        try { accelSub.remove(); } catch {}
+      }
+      if (gyroSub) {
+        try { gyroSub.remove(); } catch {}
+      }
+    };
+  }, []);
 
   return (
     <View style={styles.cardContainer}>
@@ -91,13 +133,13 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.itemHeader}>
-              <Text style={styles.itemName}>Landslide Vibration Warning</Text>
+              <Text style={styles.itemName}>1/3rd Sector Landslide Sentinel</Text>
               <Text style={[styles.statusTag, { color: landslideAlertActive ? '#DC2626' : '#D97706', borderColor: '#FDE68A' }]}>
-                {landslideAlertActive ? 'ALERT ACTIVE' : 'NIGHT MODE'}
+                {landslideAlertActive ? '1/3RD QUORUM CONFIRMED' : '1/3RD CONSENSUS ARMED'}
               </Text>
             </View>
             <Text style={styles.itemSub}>
-              Sub-surface ground tremor detection • Validated across 1/3rd area population
+              Sub-surface harmonic tremors • Confirmed when &ge; 1/3rd of area devices report
             </Text>
           </View>
         </View>
@@ -171,7 +213,9 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
             <View style={styles.hwChip}>
               <Text style={styles.hwChipLabel}>IMU VECTOR</Text>
               <Text style={styles.hwChipValue}>
-                {hardwareSensorStatus?.lastVectorMagnitudeG !== undefined
+                {localImu !== undefined
+                  ? `${localImu.toFixed(2)}g`
+                  : hardwareSensorStatus?.lastVectorMagnitudeG !== undefined
                   ? `${hardwareSensorStatus.lastVectorMagnitudeG.toFixed(2)}g`
                   : '0.99g'}
               </Text>
@@ -179,7 +223,9 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
             <View style={styles.hwChip}>
               <Text style={styles.hwChipLabel}>GYROSCOPE</Text>
               <Text style={styles.hwChipValue}>
-                {hardwareSensorStatus?.lastGyroOmega !== undefined
+                {localGyro !== undefined
+                  ? `${localGyro.toFixed(2)} rad/s`
+                  : hardwareSensorStatus?.lastGyroOmega !== undefined
                   ? `${hardwareSensorStatus.lastGyroOmega.toFixed(2)} rad/s`
                   : '0.01 rad/s'}
               </Text>
@@ -219,8 +265,8 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
               onPress={onSimulateLandslide}
               activeOpacity={0.8}
             >
-              <Play size={11} color="#D97706" />
-              <Text style={[styles.simBtnText, { color: '#D97706' }]}>Landslide Quorum Alarm</Text>
+              <Radio size={11} color="#D97706" />
+              <Text style={[styles.simBtnText, { color: '#D97706' }]}>1/3rd Sector Landslide Quorum</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -244,6 +290,23 @@ export const SentinelsDashboardCard: React.FC<SentinelsDashboardCardProps> = ({
               <Activity size={11} color="#7E22CE" />
               <Text style={[styles.simBtnText, { color: '#7E22CE' }]}>
                 {isLowPowerBeaconActive ? 'Deactivate Low-Power Beacon' : 'Test 100+ Hr Beacon Mode'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.simBtn,
+                { borderColor: '#10B981', width: '100%', marginTop: 2, backgroundColor: 'rgba(16, 185, 129, 0.04)' },
+              ]}
+              onPress={async () => {
+                await requestIgnoreBatteryOptimizations();
+                await openUnusedAppRestrictionsSettings();
+              }}
+              activeOpacity={0.8}
+            >
+              <ShieldCheck size={11} color="#059669" />
+              <Text style={[styles.simBtnText, { color: '#059669' }]}>
+                WhatsApp-Grade 24/7 Shield (Disable Battery & Unused App Pause)
               </Text>
             </TouchableOpacity>
           </View>
