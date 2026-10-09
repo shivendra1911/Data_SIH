@@ -936,10 +936,22 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
         }
         sos_events_db.append(sos_entry)
 
-        # Spatiotemporal clustering: Match against active clusters within 100 meters
+        # Spatiotemporal clustering: Match against active clusters within 100 meters AND 15 seconds
         matched_cluster_id = None
+        curr_dt = datetime.fromisoformat(now_iso)
         for cid, cl in collapse_clusters_db.items():
             if cl.get("status") in ["PENDING_QUORUM", "CONFIRMED_COLLAPSE"]:
+                # Check temporal correlation: unconfirmed reports must arrive within 15 seconds
+                try:
+                    last_dt = datetime.fromisoformat(cl["last_report_at"].replace("Z", "+00:00"))
+                    elapsed_s = abs((curr_dt - last_dt).total_seconds())
+                except Exception:
+                    elapsed_s = 0.0
+
+                if cl.get("status") == "PENDING_QUORUM" and elapsed_s > 15.0:
+                    cl["status"] = "EXPIRED_NO_QUORUM"
+                    continue
+
                 dist_m = haversine_distance_meters(payload.lat, payload.lng, cl["centroid_lat"], cl["centroid_lng"])
                 if dist_m <= 100.0:
                     matched_cluster_id = cid

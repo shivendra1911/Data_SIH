@@ -415,6 +415,7 @@ public class IncomingCallActivity extends Activity {
 
     private void answerCall() {
         stopRinging();
+        NeerNetraConnectionService.answerCall();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
@@ -443,6 +444,7 @@ public class IncomingCallActivity extends Activity {
 
     private void dismissCall() {
         stopRinging();
+        NeerNetraConnectionService.rejectCall();
         NeerNetraMeshService.stopEmergencyAlarm();
         try {
             android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -454,6 +456,7 @@ public class IncomingCallActivity extends Activity {
     @Override
     protected void onDestroy() {
         stopRinging();
+        NeerNetraConnectionService.disconnectCall();
         if (dismissReceiver != null) {
             try {
                 unregisterReceiver(dismissReceiver);

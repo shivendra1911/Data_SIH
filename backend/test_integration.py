@@ -10,7 +10,7 @@ import os
 import sys
 import time
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Add backend directory and repo root to sys.path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +36,7 @@ def run_integration_tests():
 
     with TestClient(app) as client:
         tests_passed = 0
-        total_tests = 16
+        total_tests = 17
 
     # 1. Health & Status
     print("\n[TEST 1] Verifying Backend Root & Health Status...")
@@ -284,6 +284,47 @@ def run_integration_tests():
     assert cancel_data["success"] is True
     assert cancel_data["status"] == "CANCELLED"
     print(f"  --> Alarm safely cancelled for dev_collapse_victim_01. Affected clusters: {cancel_data['affected_clusters']}")
+    tests_passed += 1
+
+    # 17. False Alarm Prevention: Uncorrelated phone drop > 15s later starts fresh cluster and does NOT form false quorum
+    print("\n[TEST 17] Verifying False Alarm Prevention (Phone Drops > 15s Apart Do NOT Accrue Into Quorum)...")
+    # First isolated drop
+    iso_res1 = client.post("/api/collapse/event", json={
+        "device_uuid": "dev_single_drop_user_A",
+        "lat": 29.3950,
+        "lng": 79.4580,
+        "confidence": 0.88,
+        "peak_g": 3.8,
+        "rubble_duration_s": 8.0,
+        "notes": "Accidental phone drop on street"
+    })
+    assert iso_res1.status_code == 200
+    iso_data1 = iso_res1.json()
+    assert iso_data1["cluster_status"] == "PENDING_QUORUM"
+    assert iso_data1["quorum_count"] == 1
+    c_id_iso1 = iso_data1["cluster_id"]
+
+    # Manually backdate cluster 1 last_report_at by 20 seconds to simulate time lapse > 15s
+    from main import collapse_clusters_db
+    collapse_clusters_db[c_id_iso1]["last_report_at"] = (datetime.now(timezone.utc) - timedelta(seconds=20)).isoformat()
+
+    # Second isolated drop at same location 20s later -> MUST NOT merge with expired cluster, must start fresh!
+    iso_res2 = client.post("/api/collapse/event", json={
+        "device_uuid": "dev_single_drop_user_B",
+        "lat": 29.3952,
+        "lng": 79.4581,
+        "confidence": 0.86,
+        "peak_g": 3.6,
+        "rubble_duration_s": 8.0,
+        "notes": "Independent phone drop later in the day"
+    })
+    assert iso_res2.status_code == 200
+    iso_data2 = iso_res2.json()
+    assert iso_data2["cluster_id"] != c_id_iso1, "Uncorrelated phone drop > 15s later should not merge into previous cluster!"
+    assert iso_data2["cluster_status"] == "PENDING_QUORUM"
+    assert iso_data2["quorum_count"] == 1
+    assert collapse_clusters_db[c_id_iso1]["status"] == "EXPIRED_NO_QUORUM"
+    print(f"  --> False alarm prevention verified! Past drop expired; new drop started fresh cluster {iso_data2['cluster_id']} (Quorum: 1).")
     tests_passed += 1
 
     print("\n" + "=" * 75)

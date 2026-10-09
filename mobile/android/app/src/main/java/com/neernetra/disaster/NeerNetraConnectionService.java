@@ -27,6 +27,47 @@ public class NeerNetraConnectionService extends ConnectionService {
     private static final String TAG = "NeerNetraTelecom";
     public static final String PHONE_ACCOUNT_ID = "neernetra_telecom_account";
 
+    private static volatile NeerNetraConnection activeConnection = null;
+
+    public static void answerCall() {
+        if (activeConnection != null) {
+            try {
+                activeConnection.setActive();
+                Log.i(TAG, "Telecom activeConnection set to ACTIVE");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to set active connection active: " + e.getMessage());
+            }
+        }
+    }
+
+    public static void rejectCall() {
+        if (activeConnection != null) {
+            try {
+                activeConnection.setDisconnected(new DisconnectCause(DisconnectCause.REJECTED));
+                activeConnection.destroy();
+                Log.i(TAG, "Telecom activeConnection REJECTED and destroyed");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to reject active connection: " + e.getMessage());
+            } finally {
+                activeConnection = null;
+            }
+        }
+    }
+
+    public static void disconnectCall() {
+        if (activeConnection != null) {
+            try {
+                activeConnection.setDisconnected(new DisconnectCause(DisconnectCause.LOCAL));
+                activeConnection.destroy();
+                Log.i(TAG, "Telecom activeConnection DISCONNECTED and destroyed");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to disconnect active connection: " + e.getMessage());
+            } finally {
+                activeConnection = null;
+            }
+        }
+    }
+
     public static PhoneAccountHandle getPhoneAccountHandle(Context context) {
         ComponentName componentName = new ComponentName(context, NeerNetraConnectionService.class);
         return new PhoneAccountHandle(componentName, PHONE_ACCOUNT_ID);
@@ -60,6 +101,11 @@ public class NeerNetraConnectionService extends ConnectionService {
 
             registerPhoneAccount(context);
             PhoneAccountHandle handle = getPhoneAccountHandle(context);
+
+            if (!tm.isIncomingCallPermitted(handle)) {
+                Log.w(TAG, "TelecomManager reports incoming call is not currently permitted for this PhoneAccount");
+                return false;
+            }
 
             Bundle extras = new Bundle();
             Uri callerUri = Uri.fromParts("tel", callerId != null ? callerId : "mesh_caller", null);
@@ -103,6 +149,7 @@ public class NeerNetraConnectionService extends ConnectionService {
 
         connection.setCallerDisplayName(callerName, TelecomManager.PRESENTATION_ALLOWED);
         connection.setRinging();
+        activeConnection = connection;
         connection.showIncomingCallUi(callerName, callerId, isGroup);
         return connection;
     }
@@ -154,6 +201,9 @@ public class NeerNetraConnectionService extends ConnectionService {
             Log.i(TAG, "Call rejected via Telecom framework");
             setDisconnected(new DisconnectCause(DisconnectCause.REJECTED));
             destroy();
+            if (activeConnection == this) {
+                activeConnection = null;
+            }
         }
 
         @Override
@@ -161,6 +211,9 @@ public class NeerNetraConnectionService extends ConnectionService {
             Log.i(TAG, "Call disconnected via Telecom framework");
             setDisconnected(new DisconnectCause(DisconnectCause.LOCAL));
             destroy();
+            if (activeConnection == this) {
+                activeConnection = null;
+            }
         }
 
         @Override

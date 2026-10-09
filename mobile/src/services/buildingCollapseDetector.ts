@@ -5,6 +5,32 @@ import { meshManager } from './bluetoothMesh';
 import { getCurrentDeviceLocation } from './locationService';
 import { saveSOSToOfflineQueue } from './offlineStorage';
 
+const CANDIDATE_URLS = [
+  'http://127.0.0.1:8000',
+  'http://localhost:8000',
+  'http://10.0.2.2:8000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3000',
+];
+
+async function postCollapseApi(endpoint: string, bodyObj: any) {
+  const jsonBody = JSON.stringify(bodyObj);
+  for (const base of CANDIDATE_URLS) {
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`${base}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonBody,
+        signal: controller.signal,
+      });
+      clearTimeout(tId);
+      if (res.ok) return res;
+    } catch {}
+  }
+}
+
 export type CollapsePhase = 'IDLE' | 'FREE_FALL' | 'IMPACT' | 'RUBBLE_STILLNESS' | 'COUNTDOWN_ACTIVE' | 'DISPATCHED';
 
 export interface CollapseEventData {
@@ -297,19 +323,12 @@ class BuildingCollapseDetector {
     meshManager.broadcastSafe().catch(() => {});
 
     // 2. Transmit cancellation to Backend API
-    try {
-      const BASE_URL = 'http://10.0.2.2:8000'; // Standard Android emulator loopback / LAN
-      fetch(`${BASE_URL}/api/collapse/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          device_uuid: deviceId,
-          lat: loc?.lat,
-          lng: loc?.lng,
-          timestamp: new Date().toISOString(),
-        }),
-      }).catch(() => {});
-    } catch {}
+    postCollapseApi('/api/collapse/cancel', {
+      device_uuid: deviceId,
+      lat: loc?.lat,
+      lng: loc?.lng,
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
 
     if (this.callbacks.onAlarmCancelled) {
       this.callbacks.onAlarmCancelled();
@@ -351,23 +370,16 @@ class BuildingCollapseDetector {
     meshManager.broadcastMultiHopSOS(collapsePayload).catch(() => {});
 
     // 3. Post to backend collapse cluster API
-    try {
-      const BASE_URL = 'http://10.0.2.2:8000';
-      fetch(`${BASE_URL}/api/collapse/event`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          device_uuid: deviceId,
-          lat: loc.lat,
-          lng: loc.lng,
-          confidence: conf,
-          peak_g: peak,
-          rubble_duration_s: 8.0,
-          timestamp: new Date().toISOString(),
-          notes: collapsePayload.notes,
-        }),
-      }).catch(() => {});
-    } catch {}
+    postCollapseApi('/api/collapse/event', {
+      device_uuid: deviceId,
+      lat: loc.lat,
+      lng: loc.lng,
+      confidence: conf,
+      peak_g: peak,
+      rubble_duration_s: 8.0,
+      timestamp: new Date().toISOString(),
+      notes: collapsePayload.notes,
+    }).catch(() => {});
 
     if (this.callbacks.onEmergencyDispatched && this.lastTriggeredData) {
       this.callbacks.onEmergencyDispatched(this.lastTriggeredData);

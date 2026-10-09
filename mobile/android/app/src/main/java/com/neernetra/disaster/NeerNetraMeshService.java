@@ -159,6 +159,7 @@ public class NeerNetraMeshService extends Service {
             } else if (ACTION_DECLINE_CALL.equals(action)) {
                 Log.i(TAG, "[MeshService] ACTION_DECLINE_CALL received, stopping alarm and cancelling notification");
                 stopEmergencyAlarm();
+                NeerNetraConnectionService.rejectCall();
                 NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm != null) {
                     nm.cancel(EMERGENCY_NOTIFICATION_ID);

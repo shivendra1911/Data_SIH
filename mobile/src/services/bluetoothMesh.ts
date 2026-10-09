@@ -1155,6 +1155,25 @@ class NeerNetraBLEMesh {
       if (this.onSOSReceived) {
         this.onSOSReceived(senderId, data.lat || 0, data.lng || 0);
       }
+
+      // 3+ Phone Mesh Quorum Consensus: Ingest collapse report into edge sentinel
+      if (data.sosType === 'COLLAPSE' || data.sos_type === 'COLLAPSE' || (data.notes && data.notes.includes('COLLAPSE'))) {
+        try {
+          const { buildingCollapseDetector } = require('./buildingCollapseDetector');
+          if (buildingCollapseDetector?.handlePeerCollapseReport) {
+            buildingCollapseDetector.handlePeerCollapseReport({
+              deviceId: senderId || data.deviceId || data.device_uuid || 'peer_collapse_node',
+              lat: Number(data.lat || 0),
+              lng: Number(data.lng || 0),
+              timestamp: Date.now(),
+              peakG: Number(data.peakG || data.peak_g || 4.2),
+            });
+          }
+        } catch (e) {
+          console.warn('[BLE Mesh] Failed to forward collapse report to sentinel:', e);
+        }
+      }
+
       triggerNativeSosAlert(
         data.senderName || `Citizen (${senderId.substring(0, 6)})`,
         `🚨 Critical Emergency Distress Beacon received! Lat: ${data.lat || 0}, Lng: ${data.lng || 0}`,

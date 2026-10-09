@@ -165,6 +165,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL
             );
             ctx.sendBroadcast(dismissIntent);
+            // Disconnect Telecom connection
+            NeerNetraConnectionService.disconnectCall();
             // Also silence any alarm that's playing
             NeerNetraMeshService.stopEmergencyAlarm();
             // Cancel emergency notification
@@ -218,7 +220,12 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     public void startGattServer(String deviceName, Promise promise) {
         try {
             android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
-            sp.edit().putString("local_node_id", deviceName).apply();
+            android.content.SharedPreferences.Editor editor = sp.edit();
+            editor.putString("local_node_name", deviceName);
+            if (!sp.contains("local_node_id") || sp.getString("local_node_id", "").isEmpty()) {
+                editor.putString("local_node_id", deviceName);
+            }
+            editor.apply();
 
             // Ensure 24/7 service is active
             NeerNetraMeshService.startService(getReactApplicationContext());

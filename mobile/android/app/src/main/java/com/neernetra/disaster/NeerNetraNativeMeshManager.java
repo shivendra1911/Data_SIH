@@ -725,6 +725,7 @@ public class NeerNetraNativeMeshManager {
                 Log.i(TAG, "📴 Remote CALL_END/DECLINE received — dismissing IncomingCallActivity immediately");
                 Intent dismissIntent = new Intent(IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL);
                 appContext.sendBroadcast(dismissIntent);
+                NeerNetraConnectionService.disconnectCall();
                 NeerNetraMeshService.stopEmergencyAlarm();
                 try {
                     android.app.NotificationManager nm =
@@ -761,9 +762,11 @@ public class NeerNetraNativeMeshManager {
                 if (!isGroup && targetId != null && !targetId.isEmpty() && !"BROADCAST".equals(targetId)) {
                     android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
                     String myNodeId = sp.getString("local_node_id", "");
-                    if (!myNodeId.isEmpty() && !targetId.equalsIgnoreCase(myNodeId) &&
-                        !targetId.contains(myNodeId) && !myNodeId.contains(targetId)) {
-                        Log.i(TAG, "Private intercom call addressed to " + targetId + " (not us: " + myNodeId + "). Suppressing lock-screen wake.");
+                    String myNodeName = sp.getString("local_node_name", "");
+                    boolean matchesId = !myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId));
+                    boolean matchesName = !myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName) || myNodeName.contains(targetId));
+                    if (!myNodeId.isEmpty() && !matchesId && !matchesName) {
+                        Log.i(TAG, "Private intercom call addressed to " + targetId + " (not us: id=" + myNodeId + ", name=" + myNodeName + "). Suppressing lock-screen wake.");
                         return;
                     }
                 }
