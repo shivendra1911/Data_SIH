@@ -87,6 +87,25 @@ export async function POST(req: NextRequest) {
       global.__NEERNETRA_CITIZENS__.unshift(citizen);
     }
 
+    // Mirror to FastAPI backend asynchronously to maintain active sector quorum nodes
+    try {
+      const { proxyToBackend } = await import("@/lib/sentinelState");
+      proxyToBackend("/api/location/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_uuid,
+          lat,
+          lng,
+          altitude: Number(body.altitude) || 1450,
+          accuracy: Number(body.accuracy ?? body.accuracy_radius_m ?? 5.0),
+          battery_level: Number(body.battery_pct ?? body.battery_level ?? 85),
+          last_synced_at: body.last_synced_at || new Date().toISOString(),
+          zone_id: body.zone_id || "chamoli_01",
+        }),
+      }).catch(() => {});
+    } catch {}
+
     return NextResponse.json(
       { success: true, message: "Location synced", device_uuid, lat, lng, total_connected: global.__NEERNETRA_CITIZENS__.length },
       { headers: corsHeaders }

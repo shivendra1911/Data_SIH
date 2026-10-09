@@ -209,6 +209,10 @@ export async function GET(req: NextRequest) {
       !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
       !c.device_uuid?.includes("cell-broadcast")
   );
+
+  // Synchronize unified global store for cross-route radar and connected device counters
+  global.__NEERNETRA_CITIZENS__ = result;
+
   if (zoneIdFilter) {
     result = result.filter((c) => !c.zone_id || c.zone_id === zoneIdFilter);
   }

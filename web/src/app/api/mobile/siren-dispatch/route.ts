@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const activeBroadcastsData = await proxyToBackend<any>("/api/alerts/active");
     if (activeBroadcastsData && Array.isArray(activeBroadcastsData.alerts)) {
       for (const alert of activeBroadcastsData.alerts) {
-        const targetId = alert.sector_id || alert.zone_id;
+        const targetId = alert.sector_id || alert.zone_id || alert.cluster_id;
         if (!targetId) continue;
 
         if (alert.status === "ACTIVE_SIREN") {
@@ -54,15 +54,15 @@ export async function GET(req: NextRequest) {
           if (!existing || existing.is_active) {
             dispatches.set(targetId, {
               zone_id: targetId,
-              zone_name: alert.sector_name || alert.zone_name || targetId,
+              zone_name: alert.sector_name || alert.zone_name || (alert.cluster_id ? "Structural Collapse Hazard Vicinity (USAR Sector)" : targetId),
               is_active: true,
               dispatched_at: alert.created_at || new Date().toISOString(),
-              authorized_by: alert.authorized_by || "1/3rd Sector Quorum Consensus Engine",
-              target_devices_count: alert.total_active_phones || 9,
+              authorized_by: alert.authorized_by || (alert.type === "STRUCTURAL_COLLAPSE_QUORUM" ? "3+ Phone USAR Structural Collapse Quorum Engine" : "1/3rd Sector Quorum Consensus Engine"),
+              target_devices_count: alert.total_active_phones || alert.trapped_headcount || 9,
               cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
               mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
               vibration_pattern: [1000, 400, 1000, 400, 1500],
-              emergency_message: alert.message || "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+              emergency_message: alert.message || (alert.type === "STRUCTURAL_COLLAPSE_QUORUM" ? "🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES — USAR RESCUE DISPATCHED — EVACUATE VICINITY" : "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW"),
             });
           }
         } else if (alert.status === "SILENCED") {

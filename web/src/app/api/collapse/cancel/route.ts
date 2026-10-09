@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
+import { supabase } from "@/lib/supabase";
+import { CitizenLocation } from "@/lib/types";
+import type { MobileSirenRecord } from "@/app/api/mobile/siren-dispatch/route";
+
+declare global {
+  var __NEERNETRA_MOBILE_SIREN_DISPATCHES__: Map<string, MobileSirenRecord> | undefined;
+  var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,21 +27,7 @@ export async function POST(req: NextRequest) {
 
   const deviceUuid = body.device_uuid;
 
-  // 1. Forward to FastAPI backend if running
-  const backendData = await proxyToBackend<any>("/api/collapse/cancel", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (backendData && backendData.success !== undefined) {
-    return NextResponse.json(backendData, { headers: corsHeaders });
-  }
-
-  // 2. Fallback to in-memory state
-  const state = getGlobalState();
-  const affectedClusters: string[] = [];
-
-  // Update citizen status in active radar store
+  // 1. Update citizen status in active radar store
   if (global.__NEERNETRA_CITIZENS__ && deviceUuid) {
     const citIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
     if (citIdx >= 0) {
@@ -43,7 +37,50 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Remove from active collapse clusters
+  // 2. Silence corresponding mobile siren dispatches
+  if (global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.forEach((rec, key) => {
+      if (key.includes("clp_cluster") || key.includes("collapse")) {
+        rec.is_active = false;
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__!.set(key, rec);
+      }
+    });
+  }
+
+  // 3. Post HALTED_SIREN to Supabase cloud
+  try {
+    supabase.from("sos_alerts").insert([
+      {
+        device_id: "ADMIN_SIREN_DISPATCH",
+        lat: 27.6015,
+        lng: 77.5975,
+        sos_type: "CIVIL_DEFENSE_SIREN",
+        status: "HALTED_SIREN",
+        battery_level: 100,
+        notes: JSON.stringify({
+          zone_id: "collapse_sectors",
+          action: "HALT",
+          authorized_by: "User SAFE Confirmation",
+          halted_at: new Date().toISOString(),
+        }),
+      },
+    ]).then(() => {});
+  } catch {}
+
+  // 4. Forward to FastAPI backend if running
+  const backendData = await proxyToBackend<any>("/api/collapse/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (backendData && backendData.success !== undefined) {
+    return NextResponse.json(backendData, { headers: corsHeaders });
+  }
+
+  // 5. Fallback to in-memory state
+  const state = getGlobalState();
+  const affectedClusters: string[] = [];
+
   for (const [cid, cl] of Object.entries(state.collapseClusters)) {
     if (deviceUuid && cl.reporting_devices.includes(deviceUuid)) {
       cl.reporting_devices = cl.reporting_devices.filter((d) => d !== deviceUuid);

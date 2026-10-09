@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
+import { supabase } from "@/lib/supabase";
+import { CitizenLocation } from "@/lib/types";
+import type { MobileSirenRecord } from "@/app/api/mobile/siren-dispatch/route";
+
+declare global {
+  var __NEERNETRA_MOBILE_SIREN_DISPATCHES__: Map<string, MobileSirenRecord> | undefined;
+  var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +39,89 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify(body),
   });
   if (backendData && (backendData.status !== undefined || backendData.cluster_status !== undefined || backendData.success !== undefined)) {
-    return NextResponse.json(backendData, { headers: corsHeaders });
+    const isConfirmed = backendData.is_confirmed || backendData.cluster_status === "CONFIRMED_COLLAPSE";
+    const clusterId = backendData.cluster_id || "clp_cluster_chm01";
+    const nowIso = new Date().toISOString();
+    const emergencyMessage = "🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES — USAR RESCUE DISPATCHED — EVACUATE VICINITY";
+
+    // Mirror reporting phone to citizen radar store
+    if (!global.__NEERNETRA_CITIZENS__) {
+      global.__NEERNETRA_CITIZENS__ = [];
+    }
+    const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
+    const collCitizen: CitizenLocation = {
+      id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+      device_uuid: deviceUuid,
+      name: `Citizen [${deviceUuid.slice(0, 8)}]`,
+      phone: "+91 98765 43210",
+      lat,
+      lng,
+      is_live: true,
+      last_seen_minutes_ago: 0,
+      accuracy_radius_m: 10,
+      drift_radius_m: 0,
+      battery_pct: 85,
+      status: "SOS",
+      sos_type: "COLLAPSE",
+      mesh_hops: 0,
+      zone_id: "chamoli_01",
+      medical_distress: "CRITICAL_INJURY",
+    };
+    if (existingCitIdx >= 0) {
+      global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...collCitizen };
+    } else {
+      global.__NEERNETRA_CITIZENS__.unshift(collCitizen);
+    }
+
+    if (isConfirmed) {
+      if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+      }
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(clusterId, {
+        zone_id: clusterId,
+        zone_name: "Structural Collapse Hazard Vicinity (USAR Cluster)",
+        is_active: true,
+        dispatched_at: nowIso,
+        authorized_by: "3+ Phone USAR Structural Collapse Quorum Engine",
+        target_devices_count: 500,
+        cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+        mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+        vibration_pattern: [1000, 400, 1000, 400, 1500],
+        emergency_message: emergencyMessage,
+      });
+
+      // Synchronize to Supabase Cloud
+      try {
+        supabase.from("sos_alerts").insert([
+          {
+            device_id: "ADMIN_SIREN_DISPATCH",
+            lat,
+            lng,
+            sos_type: "CIVIL_DEFENSE_SIREN",
+            status: "ACTIVE_SIREN",
+            battery_level: 100,
+            notes: JSON.stringify({
+              zone_id: clusterId,
+              zone_name: "Structural Collapse Hazard Vicinity (USAR Cluster)",
+              action: "BROADCAST_ALL",
+              is_universal: true,
+              authorized_by: "3+ Phone USAR Structural Collapse Quorum Engine",
+              message: emergencyMessage,
+              dispatched_at: nowIso,
+            }),
+          },
+        ]).then(() => {});
+      } catch {}
+    }
+
+    return NextResponse.json(
+      {
+        ...backendData,
+        is_confirmed: isConfirmed,
+        directive_broadcast_active: isConfirmed,
+      },
+      { headers: corsHeaders }
+    );
   }
 
   // 2. Ingest into in-memory state
@@ -101,6 +191,47 @@ export async function POST(req: NextRequest) {
     global.__NEERNETRA_CITIZENS__.unshift(collCit);
   }
 
+  if (isConfirmed) {
+    const emergencyMessage = "🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES — USAR RESCUE DISPATCHED — EVACUATE VICINITY";
+    if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+    }
+    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(clusterId, {
+      zone_id: clusterId,
+      zone_name: "Structural Collapse Hazard Vicinity (USAR Cluster)",
+      is_active: true,
+      dispatched_at: nowIso,
+      authorized_by: "3+ Phone USAR Structural Collapse Quorum Engine",
+      target_devices_count: 500,
+      cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+      mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+      vibration_pattern: [1000, 400, 1000, 400, 1500],
+      emergency_message: emergencyMessage,
+    });
+
+    try {
+      supabase.from("sos_alerts").insert([
+        {
+          device_id: "ADMIN_SIREN_DISPATCH",
+          lat,
+          lng,
+          sos_type: "CIVIL_DEFENSE_SIREN",
+          status: "ACTIVE_SIREN",
+          battery_level: 100,
+          notes: JSON.stringify({
+            zone_id: clusterId,
+            zone_name: "Structural Collapse Hazard Vicinity (USAR Cluster)",
+            action: "BROADCAST_ALL",
+            is_universal: true,
+            authorized_by: "3+ Phone USAR Structural Collapse Quorum Engine",
+            message: emergencyMessage,
+            dispatched_at: nowIso,
+          }),
+        },
+      ]).then(() => {});
+    } catch {}
+  }
+
   return NextResponse.json(
     {
       success: true,
@@ -110,6 +241,7 @@ export async function POST(req: NextRequest) {
       quorum_count: quorumCount,
       quorum_threshold: 3,
       is_confirmed: isConfirmed,
+      directive_broadcast_active: isConfirmed,
       reporting_devices_count: quorumCount,
       peak_g: peakG,
       free_fall_ms: freeFallMs,

@@ -335,7 +335,47 @@ class MobileSirenListener {
         } catch {}
       }
 
-      // 3. Fallback check to Supabase Cloud (1500ms timeout)
+      // 3. Check local/portal Structural Collapse Quorum Directives
+      const collapseUrls = [
+        'http://192.168.0.185:3000',
+        'http://192.168.0.185:8000',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8000',
+        'http://localhost:3000',
+        'http://localhost:8000',
+        'http://10.0.2.2:3000',
+        'http://10.0.2.2:8000',
+        'https://data-sih.vercel.app',
+      ];
+      for (const base of collapseUrls) {
+        try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 1200);
+          const cRes = await fetch(`${base}/api/collapse/active-clusters`, { signal: controller.signal });
+          clearTimeout(tId);
+          if (cRes.ok) {
+            const cData = await cRes.json();
+            const confirmedCluster = (cData.clusters || []).find((c: any) => c.status === 'CONFIRMED_COLLAPSE');
+            if (confirmedCluster) {
+              const cCreatedAt = confirmedCluster.last_report_at || confirmedCluster.first_detected_at || `collapse_${confirmedCluster.cluster_id}`;
+              if (!this.processedSirenTimestamps.has(cCreatedAt) && !this.silencedSirenTimestamps.has(cCreatedAt)) {
+                this.processedSirenTimestamps.add(cCreatedAt);
+                this.lastProcessedTimestamp = cCreatedAt;
+                this.triggerAlarm(
+                  '🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES — USAR RESCUE DISPATCHED — EVACUATE VICINITY',
+                  'Structural Collapse Hazard Vicinity',
+                  '3+ Phone USAR Structural Collapse Quorum Engine',
+                  cCreatedAt
+                );
+                return;
+              }
+            }
+            break;
+          }
+        } catch {}
+      }
+
+      // 4. Fallback check to Supabase Cloud (1500ms timeout)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500);
 

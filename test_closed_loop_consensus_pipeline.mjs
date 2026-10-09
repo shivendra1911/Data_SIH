@@ -207,6 +207,7 @@ async function runConsensusPipelineTest() {
   const col3Data = await col3Res.json();
   assert(col3Data.cluster_status === "CONFIRMED_COLLAPSE" || col3Data.status === "CONFIRMED_COLLAPSE", "3rd collapse drop: Cluster transitions to CONFIRMED_COLLAPSE!");
   assert(col3Data.is_confirmed === true, "3rd collapse drop: Quorum consensus confirmed (3/3 devices within 100m)");
+  assert(col3Data.directive_broadcast_active === true, "3rd collapse drop: Automated Directive Broadcast dispatched!");
 
   // 2.5 Verify Web Active Clusters Panel API
   console.log("\n[2.4] Verifying Web Active Clusters Panel API (/api/collapse/active-clusters)...");
@@ -216,8 +217,19 @@ async function runConsensusPipelineTest() {
   assert(confirmedCluster !== undefined, "Web Command Center displays CONFIRMED_COLLAPSE cluster in USAR panel");
   assert(confirmedCluster?.trapped_headcount >= 3, `Trapped headcount verified: ${confirmedCluster?.trapped_headcount} victims`);
 
-  // 2.6 User confirms "I AM SAFE" within 60s grace window
-  console.log("\n[2.5] Phone #1 user taps 'I AM SAFE' (POST /api/collapse/cancel)...");
+  // 2.6 Verify Mobile Siren Listener receives Emergency Collapse Directive
+  console.log("\n[2.5] Verifying Mobile Siren Listener detects active collapse directive...");
+  const colSirenCheck = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const colSirenData = await colSirenCheck.json();
+  assert(colSirenData.is_siren_active_on_mobile === true, "Mobile Siren Listener receives ACTIVE_SIREN for structural collapse");
+  assert(
+    colSirenData.latest_dispatch?.emergency_message?.includes("STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES") ||
+    colSirenData.active_dispatches?.some((d) => d.emergency_message?.includes("STRUCTURAL COLLAPSE")),
+    "Mobile lock-screen siren message matches 3+ Phone Collapse Quorum Directive"
+  );
+
+  // 2.7 User confirms "I AM SAFE" within 60s grace window
+  console.log("\n[2.6] Phone #1 user taps 'I AM SAFE' (POST /api/collapse/cancel)...");
   const safeRes = await fetch(`${TARGET_URL}/api/collapse/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -225,6 +237,14 @@ async function runConsensusPipelineTest() {
   });
   const safeData = await safeRes.json();
   assert(safeData.success === true, "Phone #1 safely disarmed collapse alarm");
+
+  // Verify collapse sirens silenced on mobile
+  const colSirenCheckAfter = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const colSirenDataAfter = await colSirenCheckAfter.json();
+  const hasActiveCollapseSiren = (colSirenDataAfter.active_dispatches || []).some(
+    (d) => d.is_active && (d.zone_id?.includes("clp_cluster") || d.zone_id?.includes("collapse"))
+  );
+  assert(!hasActiveCollapseSiren, "Mobile phones safely disarmed from collapse siren after cancellation");
 
   // --------------------------------------------------------------------------
   // TEST SUITE 3: RADAR CITIZEN LOCATIONS & MULTI-DEVICE TELEMETRY STREAM

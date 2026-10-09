@@ -1050,6 +1050,23 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
             if n >= quorum_threshold:
                 cl["status"] = "CONFIRMED_COLLAPSE"
                 cl["priority"] = "P1-CRITICAL"
+                directive = {
+                    "id": f"bc_clp_{matched_cluster_id}",
+                    "cluster_id": matched_cluster_id,
+                    "zone_id": matched_cluster_id,
+                    "type": "STRUCTURAL_COLLAPSE_QUORUM",
+                    "title": "🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES",
+                    "message": "🏛️ STRUCTURAL COLLAPSE CONFIRMED BY 3+ PHONES — USAR RESCUE DISPATCHED — EVACUATE VICINITY",
+                    "status": "ACTIVE_SIREN",
+                    "trapped_headcount": n,
+                    "created_at": now_iso,
+                    "centroid": {"lat": cl["centroid_lat"], "lng": cl["centroid_lng"]}
+                }
+                existing_b = [b for b in active_broadcasts_db if b.get("cluster_id") == matched_cluster_id]
+                if existing_b:
+                    existing_b[0].update(directive)
+                else:
+                    active_broadcasts_db.append(directive)
         else:
             nearby_nodes = [
                 d for d in location_history_db.values()
@@ -1092,6 +1109,7 @@ def report_collapse_event(payload: CollapseEventPayload, background_tasks: Backg
         "quorum_threshold": cluster.get("quorum_threshold", 3),
         "active_sector_nodes": cluster.get("active_sector_nodes", 3),
         "is_confirmed": is_confirmed,
+        "directive_broadcast_active": is_confirmed,
         "centroid": {"lat": cluster["centroid_lat"], "lng": cluster["centroid_lng"]}
     }
 
@@ -1121,6 +1139,10 @@ def cancel_collapse_alarm(payload: CollapseCancelPayload):
                 if len(cl["reporting_devices"]) == 0:
                     cl["status"] = "RESOLVED_SAFE"
                 affected_clusters.append(cid)
+                if cl["status"] != "CONFIRMED_COLLAPSE":
+                    for b in active_broadcasts_db:
+                        if b.get("cluster_id") == cid:
+                            b["status"] = "SILENCED"
 
     print(f"[Collapse Cancel] User {payload.device_uuid[:8]} confirmed SAFE. Disarmed from clusters: {affected_clusters}")
 
