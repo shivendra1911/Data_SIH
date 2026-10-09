@@ -423,6 +423,21 @@ class BuildingCollapseDetector {
     this.triggerInvertedSafetyCountdown(peakG);
   }
 
+  public simulateQuorumConsensus(peerCount: number = 3, peakG: number = 4.8) {
+    this.peakG = peakG;
+    this.freeFallDurationMs = 350;
+    const now = Date.now();
+    this.recentPeerReports = [
+      { deviceId: 'NODE_ALPHA', lat: 30.5573, lng: 79.5642, timestamp: now - 1000, peakG: 4.5 },
+      { deviceId: 'NODE_BETA', lat: 30.5574, lng: 79.5643, timestamp: now - 2000, peakG: 4.2 },
+      { deviceId: 'NODE_GAMMA', lat: 30.5572, lng: 79.5641, timestamp: now - 500, peakG: 4.9 },
+    ];
+    if (this.callbacks.onQuorumConfirmed) {
+      this.callbacks.onQuorumConfirmed(peerCount, ['NODE_ALPHA', 'NODE_BETA', 'NODE_GAMMA']);
+    }
+    this.triggerInvertedSafetyCountdown(peakG);
+  }
+
   private resetStateMachine(targetPhase: CollapsePhase = 'IDLE') {
     this.phase = targetPhase;
     this.freeFallStartTime = 0;

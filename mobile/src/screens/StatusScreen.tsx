@@ -28,6 +28,7 @@ import {
   CheckCircle2,
 } from 'lucide-react-native';
 import { NearbyVictimsHelpCard } from '../components/NearbyVictimsHelpCard';
+import { SentinelsDashboardCard } from '../components/SentinelsDashboardCard';
 import { ZonePrediction, SOSType } from '../types';
 import { updateSafetyStatus } from '../services/api';
 import Constants from 'expo-constants';
@@ -41,6 +42,15 @@ interface StatusScreenProps {
   onRefresh?: () => void;
   onNavigate?: (tab: 'map' | 'mesh' | 'directives', targetCoords?: { lat: number; lng: number }) => void;
   onConfirmSafe?: () => void;
+  onSimulateCollapse?: () => void;
+  onSimulateQuorumCollapse?: () => void;
+  onSimulateLandslide?: () => void;
+  onSimulateStormDrop?: () => void;
+  onToggleLowPowerBeacon?: () => void;
+  isLowPowerBeaconActive?: boolean;
+  quorumCount?: number;
+  stormAlertActive?: boolean;
+  landslideAlertActive?: boolean;
 }
 
 export const StatusScreen: React.FC<StatusScreenProps> = ({
@@ -51,6 +61,15 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
   onRefresh,
   onNavigate,
   onConfirmSafe,
+  onSimulateCollapse,
+  onSimulateQuorumCollapse,
+  onSimulateLandslide,
+  onSimulateStormDrop,
+  onToggleLowPowerBeacon,
+  isLowPowerBeaconActive = false,
+  quorumCount = 0,
+  stormAlertActive = false,
+  landslideAlertActive = false,
 }) => {
   const [safetyStatus, setSafetyStatus] = useState<'UNKNOWN' | 'SAFE' | 'DANGER'>('UNKNOWN');
   const [activeDistress, setActiveDistress] = useState<SOSType | null>(null);
@@ -344,6 +363,19 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
             </View>
           </View>
         </View>
+
+        {/* 2.5. Kinetic & Environmental Sentinels Dashboard Card */}
+        <SentinelsDashboardCard
+          onSimulateCollapse={onSimulateCollapse || (() => {})}
+          onSimulateQuorumCollapse={onSimulateQuorumCollapse || (() => {})}
+          onSimulateLandslide={onSimulateLandslide || (() => {})}
+          onSimulateStormDrop={onSimulateStormDrop || (() => {})}
+          onToggleLowPowerBeacon={onToggleLowPowerBeacon || (() => {})}
+          isLowPowerBeaconActive={isLowPowerBeaconActive}
+          quorumCount={quorumCount}
+          stormAlertActive={stormAlertActive}
+          landslideAlertActive={landslideAlertActive}
+        />
 
         {/* 3. Food & Water Emergency Relief Strip */}
         <TouchableOpacity

@@ -61,6 +61,10 @@ import {
   StormAlert,
 } from '../services/barometerStormDetector';
 import { batteryPreservationManager } from '../services/batteryPreservationManager';
+import {
+  landslideSentinel,
+  LandslideAlert,
+} from '../services/landslideSentinel';
 
 const Tab = createBottomTabNavigator();
 const DEVICE_UUID_KEY = '@neernetra_device_uuid_v1';
@@ -93,13 +97,14 @@ export const HomeScreen: React.FC = () => {
   const [sosStatus, setSosStatus] = useState<'SOS' | 'SAFE' | 'HELPING' | null>(null);
   const [forcedSiren, setForcedSiren] = useState<MobileSirenEvent | null>(null);
 
-  // Sentinel States: Collapse, Barometer Storm, Battery
+  // Sentinel States: Collapse, Barometer Storm, Battery, Landslide
   const [showCollapseModal, setShowCollapseModal] = useState<boolean>(false);
   const [collapseCountdown, setCollapseCountdown] = useState<number>(60);
   const [collapseEventData, setCollapseEventData] = useState<CollapseEventData | null>(null);
   const [quorumCount, setQuorumCount] = useState<number>(0);
   const [stormAlert, setStormAlert] = useState<StormAlert | null>(null);
   const [isLowPowerBeaconActive, setIsLowPowerBeaconActive] = useState<boolean>(false);
+  const [landslideAlert, setLandslideAlert] = useState<LandslideAlert | null>(null);
 
   // Active top navigation tab state
   const [currentTab, setCurrentTab] = useState<CitizenTab>('status');
@@ -231,6 +236,16 @@ export const HomeScreen: React.FC = () => {
       },
     });
 
+    // 4. Wayanad Night-Mode Landslide Harmonic Tremor Sentinel
+    landslideSentinel.startMonitoring({
+      onLandslideTriggered: (alert) => {
+        setLandslideAlert(alert);
+      },
+      onAlertCancelled: () => {
+        setLandslideAlert(null);
+      },
+    });
+
     return () => {
       mobileSirenListener.stop();
       unsubscribeWake();
@@ -239,6 +254,7 @@ export const HomeScreen: React.FC = () => {
       buildingCollapseDetector.stopMonitoring();
       barometerStormDetector.stopMonitoring();
       batteryPreservationManager.stopMonitoring();
+      landslideSentinel.stopMonitoring();
     };
   }, []);
 
@@ -440,6 +456,30 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  const handleSimulateCollapse = () => {
+    buildingCollapseDetector.simulateCollapseEvent(4.8);
+  };
+
+  const handleSimulateQuorumCollapse = () => {
+    buildingCollapseDetector.simulateQuorumConsensus(3, 4.8);
+  };
+
+  const handleSimulateLandslide = () => {
+    landslideSentinel.simulateLandslideTremor();
+  };
+
+  const handleSimulateStormDrop = () => {
+    barometerStormDetector.simulatePressureDrop(4.5);
+  };
+
+  const handleToggleLowPowerBeacon = () => {
+    if (isLowPowerBeaconActive) {
+      batteryPreservationManager.simulateBatteryRestored();
+    } else {
+      batteryPreservationManager.simulateCriticalBattery(12);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Top Header with App Logo, Phone Model, Network Status, and Tab Switcher */}
@@ -491,6 +531,33 @@ export const HomeScreen: React.FC = () => {
           >
             <Text style={styles.stormDismissText}>ACKNOWLEDGE STORM ALERT</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Wayanad Night Landslide Harmonic Tremor Alert Banner */}
+      {landslideAlert && (
+        <View style={styles.landslideBanner}>
+          <Text style={styles.landslideTitle}>{landslideAlert.title}</Text>
+          <Text style={styles.landslideSubtitle}>{landslideAlert.message}</Text>
+          <View style={styles.landslideBtnRow}>
+            <TouchableOpacity
+              style={styles.landslideEvacBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setCurrentTab('map');
+                setLandslideAlert(null);
+              }}
+            >
+              <Text style={styles.landslideBtnText}>EVACUATE TO HIGH GROUND</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.landslideSafeBtn}
+              activeOpacity={0.8}
+              onPress={() => landslideSentinel.cancelAlert()}
+            >
+              <Text style={styles.landslideSafeBtnText}>SILENCE & CANCEL</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -554,6 +621,15 @@ export const HomeScreen: React.FC = () => {
               setCurrentTab(tab);
             }}
             onConfirmSafe={() => handleConfirmSafe(false)}
+            onSimulateCollapse={handleSimulateCollapse}
+            onSimulateQuorumCollapse={handleSimulateQuorumCollapse}
+            onSimulateLandslide={handleSimulateLandslide}
+            onSimulateStormDrop={handleSimulateStormDrop}
+            onToggleLowPowerBeacon={handleToggleLowPowerBeacon}
+            isLowPowerBeaconActive={isLowPowerBeaconActive}
+            quorumCount={quorumCount}
+            stormAlertActive={Boolean(stormAlert)}
+            landslideAlertActive={Boolean(landslideAlert)}
           />
         )}
 
@@ -738,5 +814,57 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     textAlign: 'center',
+  },
+  landslideBanner: {
+    backgroundColor: '#78350F',
+    borderBottomWidth: 2,
+    borderBottomColor: '#F59E0B',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  landslideTitle: {
+    color: '#FDE68A',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.4,
+  },
+  landslideSubtitle: {
+    color: '#FEF3C7',
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 15,
+  },
+  landslideBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  landslideEvacBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  landslideSafeBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  landslideBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  landslideSafeBtnText: {
+    color: '#78350F',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 });
