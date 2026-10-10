@@ -62,14 +62,17 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
 
   const handleSendMessage = async () => {
     if (!inputMsg.trim()) return;
-    const text = inputMsg;
+    const text = inputMsg.trim();
     setInputMsg('');
     try {
-      // Sends via real BLE to all connected peers
-      const newMsg = await meshEngine.sendChatMessage('You', text);
+      if (selectedRadio === 'wifi') {
+        await meshEngine.sendWifiDirectMessage(text);
+      } else {
+        await meshEngine.sendChatMessage('You', text);
+      }
       setMessages([...meshEngine.getMeshChatMessages()]);
     } catch (e) {
-      Alert.alert('Send Failed', 'Could not send message via BLE mesh. Are you connected to any peers?');
+      Alert.alert('Send Failed', 'Could not send message. Please ensure radio is active.');
     }
   };
 
@@ -378,13 +381,28 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       <View style={styles.inputRow}>
         <TextInput
           style={styles.textInput}
-          placeholder="Broadcast text over BLE mesh chain..."
+          placeholder={
+            selectedRadio === 'wifi'
+              ? 'Broadcast text over Wi-Fi Direct (250m)...'
+              : 'Broadcast text over BLE mesh (50m)...'
+          }
           placeholderTextColor="#64748b"
           value={inputMsg}
           onChangeText={setInputMsg}
         />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage} activeOpacity={0.8}>
-          <Send size={18} color="#ffffff" />
+        <TouchableOpacity
+          style={[
+            styles.sendBtn,
+            selectedRadio === 'wifi' ? { backgroundColor: '#059669' } : { backgroundColor: '#2563eb' }
+          ]}
+          onPress={handleSendMessage}
+          activeOpacity={0.8}
+        >
+          {selectedRadio === 'wifi' ? (
+            <Wifi size={17} color="#ffffff" />
+          ) : (
+            <Send size={18} color="#ffffff" />
+          )}
         </TouchableOpacity>
       </View>
     </View>

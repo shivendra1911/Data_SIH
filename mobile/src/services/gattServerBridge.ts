@@ -119,6 +119,19 @@ export const broadcastWifiBeacon = async (): Promise<boolean> => {
 };
 
 /**
+ * Triggers an explicit long-range Wi-Fi Direct / Local Hotspot message burst (up to 250m)
+ */
+export const triggerWifiDirectMessage = async (targetNodeId: string, messageText: string): Promise<boolean> => {
+  if (!NeerNetraGatt?.triggerWifiDirectMessage) return false;
+  try {
+    return await NeerNetraGatt.triggerWifiDirectMessage(targetNodeId, messageText);
+  } catch (err: any) {
+    console.warn('[GattBridge] triggerWifiDirectMessage error:', err?.message);
+    return false;
+  }
+};
+
+/**
  * Native Voice Walkie-Talkie Recording:
  * Records hardware microphone audio compressed to AMR-NB 8kHz (~1.2 KB/sec)
  */

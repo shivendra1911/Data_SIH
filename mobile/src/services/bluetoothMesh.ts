@@ -26,6 +26,7 @@ import {
   showNativeChatNotification,
   setLocalNodeId,
   triggerWifiDirectCall,
+  triggerWifiDirectMessage,
   broadcastWifiBeacon,
 } from './gattServerBridge';
 import { startBLEAdvertising } from './bleAdvertiser';
@@ -1571,6 +1572,18 @@ class NeerNetraBLEMesh {
 
     console.log(`[BLE Mesh] Broadcast chat "${text}" across mesh (id=${msgId})`);
     return msg;
+  }
+
+  /** Send explicit long-range Wi-Fi Direct message (up to 250m) */
+  async sendWifiDirectMessage(text: string, targetPeerId?: string): Promise<MeshChatMessage> {
+    console.log(`[Mesh Engine] 📶 SENDING LONG-RANGE WI-FI DIRECT MESSAGE: "${text}" to ${targetPeerId || 'BROADCAST'}`);
+    const peer = targetPeerId ? (this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId)) : undefined;
+    const targetNodeId = peer?.nodeId || (targetPeerId ? (this.macToNodeId.get(targetPeerId) || targetPeerId) : 'BROADCAST');
+
+    // 1. Dispatch native Wi-Fi Direct socket burst on port 8765
+    await triggerWifiDirectMessage(targetNodeId, text);
+    // 2. Also register in local chat and broadcast via standard mesh for multi-hop resilience
+    return this.sendChatMessage('You', text, targetPeerId);
   }
 
   /** Broadcast SOS beacon via BLE mesh (all hops, TTL=32) */

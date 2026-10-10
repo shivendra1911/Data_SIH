@@ -88,6 +88,7 @@ const BLEMessageModal: React.FC<{
   const [selectedPeer, setSelectedPeer] = useState<MeshPeer | null>(initialPeer || null);
   const [message, setMessage] = useState('');
   const [sectorCitizens, setSectorCitizens] = useState<NearbyCitizen[]>([]);
+  const [radioMode, setRadioMode] = useState<'wifi' | 'ble'>('wifi');
 
   useEffect(() => {
     if (initialPeer) {
@@ -105,13 +106,25 @@ const BLEMessageModal: React.FC<{
 
   const handleSend = async () => {
     if (!message.trim()) return;
+    const text = message.trim();
     if (!selectedPeer) {
       // Broadcast to all
-      await meshEngine.sendChatMessage('You', message.trim());
-      Alert.alert('Sent!', `Message broadcast to all ${displayPeers.length} nearby citizens via Dual-Radio Mesh (BLE + Wi-Fi Direct).`);
+      if (radioMode === 'wifi') {
+        await meshEngine.sendWifiDirectMessage(text);
+        Alert.alert('📶 Sent via Wi-Fi Direct', `Message broadcast over Wi-Fi Direct socket mesh (250m direct range, 2km+ via relays).`);
+      } else {
+        await meshEngine.sendChatMessage('You', text);
+        Alert.alert('🔵 Sent via BLE', `Message broadcast over Bluetooth Low Energy mesh (50m range).`);
+      }
     } else {
-      await meshEngine.sendChatMessage('You', `[To ${selectedPeer.name}]: ${message.trim()}`);
-      Alert.alert('Sent!', `Message sent to ${selectedPeer.name} via Dual-Radio Mesh.`);
+      const fullText = `[To ${selectedPeer.name}]: ${text}`;
+      if (radioMode === 'wifi') {
+        await meshEngine.sendWifiDirectMessage(fullText, selectedPeer.id);
+        Alert.alert('📶 Sent via Wi-Fi Direct', `Message sent to ${selectedPeer.name} over Wi-Fi Direct (250m range).`);
+      } else {
+        await meshEngine.sendChatMessage('You', fullText, selectedPeer.id);
+        Alert.alert('🔵 Sent via BLE', `Message sent to ${selectedPeer.name} over BLE (50m range).`);
+      }
     }
     setMessage('');
     setSelectedPeer(null);
@@ -126,12 +139,78 @@ const BLEMessageModal: React.FC<{
             <View style={modalStyles.sheet}>
               {/* Header */}
               <View style={modalStyles.header}>
-                <MessageCircle size={18} color="#0ea5e9" />
-                <Text style={modalStyles.title}>Dual-Radio Mesh Message</Text>
+                <MessageCircle size={18} color="#059669" />
+                <Text style={modalStyles.title}>Offline Mesh Message</Text>
                 <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn}>
                   <X size={18} color="#64748b" />
                 </TouchableOpacity>
               </View>
+
+              {/* Radio Mode Selector Toggle */}
+              <View style={modalStyles.modeToggle}>
+                <TouchableOpacity
+                  style={[modalStyles.modeBtn, radioMode === 'wifi' && modalStyles.modeBtnActiveWifi]}
+                  onPress={() => setRadioMode('wifi')}
+                  activeOpacity={0.8}
+                >
+                  <Wifi size={13} color={radioMode === 'wifi' ? '#fff' : '#059669'} />
+                  <Text
+                    style={[modalStyles.modeBtnText, radioMode === 'wifi' && { color: '#fff', fontWeight: '800' }]}
+                  >
+                    Wi-Fi Direct (250m)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[modalStyles.modeBtn, radioMode === 'ble' && modalStyles.modeBtnActiveBle]}
+                  onPress={() => setRadioMode('ble')}
+                  activeOpacity={0.8}
+                >
+                  <Bluetooth size={13} color={radioMode === 'ble' ? '#fff' : '#2563eb'} />
+                  <Text
+                    style={[modalStyles.modeBtnText, radioMode === 'ble' && { color: '#fff', fontWeight: '800' }]}
+                  >
+                    Bluetooth BLE (50m)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Informative Radio Banner */}
+              {radioMode === 'wifi' ? (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#ecfdf5',
+                  borderWidth: 1,
+                  borderColor: '#a7f3d0',
+                  borderRadius: 12,
+                  padding: 8,
+                  marginBottom: 10,
+                  gap: 8,
+                }}>
+                  <Wifi size={14} color="#059669" />
+                  <Text style={{ flex: 1, color: '#065f46', fontSize: 11, fontWeight: '600' }}>
+                    <Text style={{ fontWeight: '800' }}>Wi-Fi Direct Mode:</Text> 250m high-speed socket mesh (port 8765) with zero internet or cellular network.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#eff6ff',
+                  borderWidth: 1,
+                  borderColor: '#bfdbfe',
+                  borderRadius: 12,
+                  padding: 8,
+                  marginBottom: 10,
+                  gap: 8,
+                }}>
+                  <Bluetooth size={14} color="#2563eb" />
+                  <Text style={{ flex: 1, color: '#1e40af', fontSize: 11, fontWeight: '600' }}>
+                    <Text style={{ fontWeight: '800' }}>BLE Low Energy Mode:</Text> Conserves battery for close-range (under 50m) communication.
+                  </Text>
+                </View>
+              )}
 
               <Text style={modalStyles.sectionLabel}>
                 Select Recipient ({displayPeers.length} available):
@@ -140,10 +219,16 @@ const BLEMessageModal: React.FC<{
               {/* Peer List */}
               {displayPeers.length === 0 ? (
                 <View style={modalStyles.emptyBox}>
-                  <Radio size={24} color="#475569" />
-                  <Text style={modalStyles.emptyText}>No peers detected nearby.</Text>
+                  {radioMode === 'wifi' ? (
+                    <Wifi size={24} color="#059669" />
+                  ) : (
+                    <Bluetooth size={24} color="#2563eb" />
+                  )}
+                  <Text style={modalStyles.emptyText}>No mesh peers detected nearby.</Text>
                   <Text style={modalStyles.emptySubText}>
-                    Message will be queued and sent when a BLE peer is found.
+                    {radioMode === 'wifi'
+                      ? 'Message will broadcast over local Wi-Fi Direct socket (250m range).'
+                      : 'Message will be queued and sent when a BLE peer is in range.'}
                   </Text>
                 </View>
               ) : (
@@ -151,41 +236,45 @@ const BLEMessageModal: React.FC<{
                   data={displayPeers}
                   keyExtractor={(p) => p.id}
                   style={modalStyles.peerList}
-                      renderItem={({ item }) => {
-                        const hop = getHopBadge(item);
-                        return (
-                          <TouchableOpacity
-                            style={[
-                              modalStyles.peerRow,
-                              selectedPeer?.id === item.id && modalStyles.peerRowSelected,
-                            ]}
-                            onPress={() =>
-                              setSelectedPeer(selectedPeer?.id === item.id ? null : item)
-                            }
-                            activeOpacity={0.8}
-                          >
-                            <View style={modalStyles.peerAvatar}>
-                              <Text style={modalStyles.peerInitial}>
-                                {item.name.charAt(0).toUpperCase()}
-                              </Text>
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={modalStyles.peerName}>{item.name}</Text>
-                              <View style={[modalStyles.peerHopBadge, { backgroundColor: hop.bg, borderColor: hop.border }]}>
-                                <Text style={[modalStyles.peerHopBadgeText, { color: hop.text }]}>{hop.label}</Text>
-                              </View>
-                              <Text style={modalStyles.peerMeta}>
-                                {item.signalStrength} dBm • {item.status || 'SAFE'}
-                              </Text>
-                            </View>
-                            {selectedPeer?.id === item.id && (
-                              <View style={modalStyles.selectedBadge}>
-                                <Text style={modalStyles.selectedBadgeText}>Selected</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      }}
+                  renderItem={({ item }) => {
+                    const hop = getHopBadge(item);
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          modalStyles.peerRow,
+                          selectedPeer?.id === item.id && modalStyles.peerRowSelected,
+                        ]}
+                        onPress={() =>
+                          setSelectedPeer(selectedPeer?.id === item.id ? null : item)
+                        }
+                        activeOpacity={0.8}
+                      >
+                        <View style={[modalStyles.peerAvatar, { backgroundColor: radioMode === 'wifi' ? '#059669' : '#1d4ed8' }]}>
+                          {radioMode === 'wifi' ? (
+                            <Wifi size={14} color="#fff" />
+                          ) : (
+                            <Bluetooth size={14} color="#fff" />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={modalStyles.peerName}>{item.name}</Text>
+                          <View style={[modalStyles.peerHopBadge, { backgroundColor: hop.bg, borderColor: hop.border }]}>
+                            <Text style={[modalStyles.peerHopBadgeText, { color: hop.text }]}>
+                              {radioMode === 'wifi' ? '📶 Wi-Fi Direct' : '🔵 BLE'} • {hop.label}
+                            </Text>
+                          </View>
+                          <Text style={modalStyles.peerMeta}>
+                            {item.signalStrength} dBm • {item.status || 'SAFE'}
+                          </Text>
+                        </View>
+                        {selectedPeer?.id === item.id && (
+                          <View style={[modalStyles.selectedBadge, { backgroundColor: radioMode === 'wifi' ? '#059669' : '#1d4ed8' }]}>
+                            <Text style={modalStyles.selectedBadgeText}>Selected</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
                 />
               )}
 
@@ -195,15 +284,25 @@ const BLEMessageModal: React.FC<{
                 onPress={() => setSelectedPeer(null)}
                 activeOpacity={0.8}
               >
-                <View style={[modalStyles.peerAvatar, { backgroundColor: '#1d4ed8' }]}>
-                  <Radio size={14} color="#fff" />
+                <View style={[modalStyles.peerAvatar, { backgroundColor: radioMode === 'wifi' ? '#059669' : '#1d4ed8' }]}>
+                  {radioMode === 'wifi' ? (
+                    <Wifi size={14} color="#fff" />
+                  ) : (
+                    <Radio size={14} color="#fff" />
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={modalStyles.peerName}>📡 Broadcast to ALL ({displayPeers.length})</Text>
-                  <Text style={modalStyles.peerMeta}>Sends emergency mesh packet to everyone</Text>
+                  <Text style={modalStyles.peerName}>
+                    {radioMode === 'wifi' ? '📶 Wi-Fi Broadcast to ALL' : '🔵 BLE Broadcast to ALL'} ({displayPeers.length})
+                  </Text>
+                  <Text style={modalStyles.peerMeta}>
+                    {radioMode === 'wifi'
+                      ? 'Transmits high-speed packet over Wi-Fi Direct (250m range)'
+                      : 'Sends BLE mesh broadcast packet to everyone nearby'}
+                  </Text>
                 </View>
                 {!selectedPeer && (
-                  <View style={[modalStyles.selectedBadge, { backgroundColor: '#1d4ed8' }]}>
+                  <View style={[modalStyles.selectedBadge, { backgroundColor: radioMode === 'wifi' ? '#059669' : '#1d4ed8' }]}>
                     <Text style={modalStyles.selectedBadgeText}>Default</Text>
                   </View>
                 )}
@@ -215,8 +314,8 @@ const BLEMessageModal: React.FC<{
                   style={modalStyles.input}
                   placeholder={
                     selectedPeer
-                      ? `Message to ${selectedPeer.name}...`
-                      : 'Broadcast message...'
+                      ? `${radioMode === 'wifi' ? '📶 Wi-Fi' : '🔵 BLE'} to ${selectedPeer.name}...`
+                      : `${radioMode === 'wifi' ? '📶 Wi-Fi Broadcast (250m)...' : '🔵 BLE Broadcast (50m)...'}`
                   }
                   placeholderTextColor="#64748b"
                   value={message}
@@ -224,7 +323,11 @@ const BLEMessageModal: React.FC<{
                   multiline
                 />
                 <TouchableOpacity
-                  style={[modalStyles.sendBtn, !message.trim() && { opacity: 0.4 }]}
+                  style={[
+                    modalStyles.sendBtn,
+                    radioMode === 'wifi' ? { backgroundColor: '#059669' } : { backgroundColor: '#2563eb' },
+                    !message.trim() && { opacity: 0.4 },
+                  ]}
                   onPress={handleSend}
                   disabled={!message.trim()}
                   activeOpacity={0.8}
