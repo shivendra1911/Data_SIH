@@ -15,6 +15,7 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
+import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.hardware.Sensor;
@@ -28,6 +29,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.Settings;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -82,6 +86,7 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     private PowerManager.WakeLock partialWakeLock;
     private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
+    private static Ringtone emergencyRingtone;
     private long lastSensorTelemetryEmitTime = 0;
 
     // ── 24/7 Native Background Siren Polling Subsystem ───────────────────────
@@ -617,28 +622,66 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
 
     public static void playEmergencyAlarm(Context context) {
         try {
-            stopEmergencyAlarm();
-            Uri alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            if (alertUri == null) alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            stopEmergencyAlarm(context);
+            Uri alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (alertUri == null) alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
             if (alertUri == null) alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
-            emergencyPlayer = new MediaPlayer();
-            emergencyPlayer.setDataSource(context, alertUri);
-            emergencyPlayer.setAudioAttributes(
-                new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            );
-            emergencyPlayer.setLooping(true);
-            emergencyPlayer.prepare();
-            emergencyPlayer.start();
+            boolean played = false;
+            try {
+                if (alertUri != null) {
+                    emergencyPlayer = new MediaPlayer();
+                    emergencyPlayer.setDataSource(context, alertUri);
+                    emergencyPlayer.setAudioAttributes(
+                        new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    );
+                    emergencyPlayer.setLooping(true);
+                    emergencyPlayer.prepare();
+                    emergencyPlayer.start();
+                    played = true;
+                }
+            } catch (Exception me) {
+                Log.w(TAG, "[MeshService] MediaPlayer fallback to Ringtone: " + me.getMessage());
+            }
+
+            if (!played) {
+                try {
+                    Ringtone rt = RingtoneManager.getRingtone(context, alertUri != null ? alertUri : Settings.System.DEFAULT_ALARM_ALERT_URI);
+                    if (rt != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            rt.setLooping(true);
+                        }
+                        rt.play();
+                        emergencyRingtone = rt;
+                        played = true;
+                        Log.i(TAG, "🚨 [MeshService] Emergency ringtone active on device");
+                    }
+                } catch (Exception re) {
+                    Log.w(TAG, "[MeshService] Ringtone fallback error: " + re.getMessage());
+                }
+            }
+
+            // Visceral hardware vibration for emergency alerts
+            try {
+                Vibrator vib = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                if (vib != null) {
+                    long[] pattern = new long[]{0, 800, 300, 800, 300, 1000};
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vib.vibrate(VibrationEffect.createWaveform(pattern, 0));
+                    } else {
+                        vib.vibrate(pattern, 0);
+                    }
+                }
+            } catch (Exception ignored) {}
         } catch (Exception e) {
-            Log.w(TAG, "[MeshService] Could not play alert ringtone: " + e.getMessage());
+            Log.w(TAG, "[MeshService] Could not play alert alarm: " + e.getMessage());
         }
     }
 
-    public static void stopEmergencyAlarm() {
+    public static void stopEmergencyAlarm(Context context) {
         if (activeScreenLock != null && activeScreenLock.isHeld()) {
             try {
                 activeScreenLock.release();
@@ -652,6 +695,22 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             } catch (Exception ignored) {}
             emergencyPlayer = null;
         }
+        if (emergencyRingtone != null) {
+            try {
+                if (emergencyRingtone.isPlaying()) emergencyRingtone.stop();
+            } catch (Exception ignored) {}
+            emergencyRingtone = null;
+        }
+        if (context != null) {
+            try {
+                Vibrator vib = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                if (vib != null) vib.cancel();
+            } catch (Exception ignored) {}
+        }
+    }
+
+    public static void stopEmergencyAlarm() {
+        stopEmergencyAlarm(null);
     }
 
     private void createNotificationChannels() {
@@ -1108,14 +1167,13 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     }
 
     private void pollSirenEndpoints() {
-        boolean handled = false;
+        boolean activeSirenFound = false;
 
-        // 1. Try local Wi-Fi Next.js Web Portal: http://192.168.0.185:3000/api/mobile/siren-dispatch
+        // 1. Try local Wi-Fi / ADB Reverse endpoints (port 3000)
         String[] localUrls = new String[]{
-            "http://192.168.0.185:3000/api/mobile/siren-dispatch",
-            "http://10.0.2.2:3000/api/mobile/siren-dispatch",
             "http://127.0.0.1:3000/api/mobile/siren-dispatch",
-            "https://data-sih.vercel.app/api/mobile/siren-dispatch"
+            "http://localhost:3000/api/mobile/siren-dispatch",
+            "http://192.168.0.185:3000/api/mobile/siren-dispatch"
         };
 
         for (String localUrl : localUrls) {
@@ -1124,8 +1182,8 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 URL url = new URL(localUrl);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
-                conn.setConnectTimeout(2000);
-                conn.setReadTimeout(2000);
+                conn.setConnectTimeout(800);
+                conn.setReadTimeout(800);
                 conn.setRequestProperty("Accept", "application/json");
 
                 int code = conn.getResponseCode();
@@ -1157,24 +1215,17 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
 
                             if (!dispatchedAt.isEmpty() && isTimestampRecent(dispatchedAt, 10 * 60 * 1000L)) {
                                 if (!dispatchedAt.equals(lastSilencedSirenTimestamp)) {
+                                    activeSirenFound = true;
                                     if (!dispatchedAt.equals(lastHandledSirenTimestamp) || !isNativeSirenSounding) {
                                         lastHandledSirenTimestamp = dispatchedAt;
                                         isNativeSirenSounding = true;
+                                        Log.i(TAG, "🚨 [Native Siren Poller] Triggering alert from local gateway: " + localUrl);
                                         triggerNativeEmergencySiren(zoneName, msg, zoneId, dispatchedAt);
                                     }
-                                    handled = true;
                                     break;
                                 }
                             }
                         }
-                    } else {
-                        // Web portal reports no active siren
-                        if (isNativeSirenSounding && !lastHandledSirenTimestamp.isEmpty()) {
-                            isNativeSirenSounding = false;
-                            stopEmergencyAlarm();
-                        }
-                        handled = true;
-                        break;
                     }
                 }
             } catch (Exception ignored) {
@@ -1183,9 +1234,9 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             }
         }
 
-        if (handled) return;
+        if (activeSirenFound) return;
 
-        // 2. Fallback: Query Supabase Cloud REST directly
+        // 2. Online Cellular / Internet Supabase Cloud REST API
         HttpURLConnection supaConn = null;
         try {
             URL url = new URL(SUPABASE_REST_URL + "/sos_alerts?device_id=eq.ADMIN_SIREN_DISPATCH&order=created_at.desc&limit=1");
@@ -1213,9 +1264,10 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                     String status = latest.optString("status", "");
                     String createdAt = latest.optString("created_at", "");
 
-                    if ("ACTIVE_SIREN".equalsIgnoreCase(status)) {
+                    if ("ACTIVE_SIREN".equalsIgnoreCase(status) || "ACTIVE".equalsIgnoreCase(status)) {
                         if (!createdAt.isEmpty() && isTimestampRecent(createdAt, 10 * 60 * 1000L)) {
                             if (!createdAt.equals(lastSilencedSirenTimestamp)) {
+                                activeSirenFound = true;
                                 if (!createdAt.equals(lastHandledSirenTimestamp) || !isNativeSirenSounding) {
                                     String zoneName = "Emergency Zone";
                                     String zoneId = "universal";
@@ -1233,21 +1285,32 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
 
                                     lastHandledSirenTimestamp = createdAt;
                                     isNativeSirenSounding = true;
+                                    Log.i(TAG, "🚨 [Native Siren Poller] Triggering alert from Supabase Cloud: " + zoneName);
                                     triggerNativeEmergencySiren(zoneName, msg, zoneId, createdAt);
                                 }
                             }
                         }
                     } else if ("HALTED_SIREN".equalsIgnoreCase(status) || "SILENCED".equalsIgnoreCase(status)) {
                         if (isNativeSirenSounding) {
+                            Log.i(TAG, "🚨 [Native Siren Poller] Siren halted via Supabase status=" + status);
                             isNativeSirenSounding = false;
                             stopEmergencyAlarm();
                         }
                     }
                 }
+            } else {
+                Log.w(TAG, "[Native Siren Poller] Supabase REST response code: " + code);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Log.w(TAG, "[Native Siren Poller] Supabase poll error: " + e.getMessage());
         } finally {
             if (supaConn != null) supaConn.disconnect();
+        }
+
+        // 3. If neither local nor Supabase reports an active siren, cease alarm if sounding
+        if (!activeSirenFound && isNativeSirenSounding) {
+            isNativeSirenSounding = false;
+            stopEmergencyAlarm();
         }
     }
 
@@ -1271,37 +1334,33 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     }
 
     private static boolean isTimestampRecent(String isoTimestamp, long maxAgeMs) {
-        if (isoTimestamp == null || isoTimestamp.isEmpty()) return false;
+        if (isoTimestamp == null || isoTimestamp.trim().isEmpty()) return true;
         try {
-            String cleaned = isoTimestamp;
-            if (cleaned.contains("+")) {
-                cleaned = cleaned.substring(0, cleaned.indexOf("+"));
-            }
-            if (cleaned.endsWith("Z")) {
-                cleaned = cleaned.substring(0, cleaned.length() - 1);
-            }
-            int dotIdx = cleaned.indexOf(".");
-            if (dotIdx > 0 && cleaned.length() > dotIdx + 4) {
-                cleaned = cleaned.substring(0, dotIdx + 4);
-            }
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US);
-            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-            java.util.Date parsed = sdf.parse(cleaned);
-            if (parsed != null) {
-                long age = System.currentTimeMillis() - parsed.getTime();
-                return age >= -120000 && age < maxAgeMs;
-            }
-        } catch (Exception e) {
-            try {
-                SimpleDateFormat sdf2 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
-                sdf2.setTimeZone(TimeZone.getTimeZone("UTC"));
-                java.util.Date parsed = sdf2.parse(isoTimestamp.substring(0, 19));
-                if (parsed != null) {
-                    long age = System.currentTimeMillis() - parsed.getTime();
-                    return age >= -120000 && age < maxAgeMs;
+            long parsedEpochMs;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                parsedEpochMs = java.time.OffsetDateTime.parse(isoTimestamp.trim()).toInstant().toEpochMilli();
+            } else {
+                String cleaned = isoTimestamp.trim();
+                if (cleaned.contains("+")) {
+                    cleaned = cleaned.substring(0, cleaned.indexOf("+"));
                 }
-            } catch (Exception ignored) {}
+                if (cleaned.endsWith("Z")) {
+                    cleaned = cleaned.substring(0, cleaned.length() - 1);
+                }
+                int dotIdx = cleaned.indexOf(".");
+                if (dotIdx > 0 && cleaned.length() > dotIdx + 4) {
+                    cleaned = cleaned.substring(0, dotIdx + 4);
+                }
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                java.util.Date parsed = sdf.parse(cleaned);
+                parsedEpochMs = parsed != null ? parsed.getTime() : System.currentTimeMillis();
+            }
+            long age = System.currentTimeMillis() - parsedEpochMs;
+            return age >= -120000 && age < maxAgeMs;
+        } catch (Exception e) {
+            // Never drop life-critical alert on parse quirk
+            return true;
         }
-        return true;
     }
 }

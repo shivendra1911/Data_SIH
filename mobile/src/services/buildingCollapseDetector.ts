@@ -473,6 +473,7 @@ class BuildingCollapseDetector {
         timestamp: now - (i * 300),
         peakG: 4.0 + (Math.random() * 1.5),
       });
+    }
     for (const p of this.recentPeerReports) {
       postCollapseApi('/api/collapse/report', {
         device_uuid: p.deviceId,

@@ -230,7 +230,10 @@ export async function GET(req: NextRequest) {
       !c.device_uuid?.toLowerCase().includes("demo") &&
       !c.device_uuid?.toLowerCase().startsWith("citizen-apk") &&
       !c.device_uuid?.toLowerCase().includes("audit_node") &&
-      !c.device_uuid?.toLowerCase().includes("synthetic")
+      !c.device_uuid?.toLowerCase().includes("synthetic") &&
+      !c.device_uuid?.toLowerCase().startsWith("col_phone") &&
+      !c.device_uuid?.toLowerCase().startsWith("fake") &&
+      !c.device_uuid?.toLowerCase().startsWith("samsung_a15_phone")
   );
 
   // Synchronize unified global store for cross-route radar and connected device counters
