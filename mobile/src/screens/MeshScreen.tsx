@@ -25,6 +25,7 @@ import {
   Send,
   X,
   Mic,
+  Wifi,
 } from 'lucide-react-native';
 import { MeshPeer } from '../types';
 import { meshEngine } from '../services/bluetoothMesh';
@@ -48,25 +49,26 @@ const maskPhone = (phone?: string) => {
 
 const getHopBadge = (peer: MeshPeer) => {
   const hops = peer.hopCount || 1;
-  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 60);
+  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 200);
   const viaNode = peer.nextHop ? ` via ${peer.nextHop}` : '';
+  const distText = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${dist}m`;
   if (hops <= 1) {
     return {
-      label: `🟢 Direct • ~${dist}m`,
+      label: `🟢 Direct (Wi-Fi/BLE) • ~${distText}`,
       bg: '#ecfdf5',
       border: '#10b981',
       text: '#047857',
     };
   } else if (hops === 2) {
     return {
-      label: `🟡 Relayed • 2 hops${viaNode} • ~${dist}m`,
+      label: `🟡 Relayed • 2 hops${viaNode} • ~${distText}`,
       bg: '#fefce8',
       border: '#eab308',
       text: '#a16207',
     };
   } else {
     return {
-      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${dist}m`,
+      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${distText}`,
       bg: '#eff6ff',
       border: '#3b82f6',
       text: '#1d4ed8',
@@ -106,10 +108,10 @@ const BLEMessageModal: React.FC<{
     if (!selectedPeer) {
       // Broadcast to all
       await meshEngine.sendChatMessage('You', message.trim());
-      Alert.alert('Sent!', `Message broadcast to all ${displayPeers.length} nearby citizens via BLE mesh.`);
+      Alert.alert('Sent!', `Message broadcast to all ${displayPeers.length} nearby citizens via Dual-Radio Mesh (BLE + Wi-Fi Direct).`);
     } else {
       await meshEngine.sendChatMessage('You', `[To ${selectedPeer.name}]: ${message.trim()}`);
-      Alert.alert('Sent!', `Message sent to ${selectedPeer.name} via BLE mesh.`);
+      Alert.alert('Sent!', `Message sent to ${selectedPeer.name} via Dual-Radio Mesh.`);
     }
     setMessage('');
     setSelectedPeer(null);
@@ -125,7 +127,7 @@ const BLEMessageModal: React.FC<{
               {/* Header */}
               <View style={modalStyles.header}>
                 <MessageCircle size={18} color="#0ea5e9" />
-                <Text style={modalStyles.title}>BLE Message</Text>
+                <Text style={modalStyles.title}>Dual-Radio Mesh Message</Text>
                 <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn}>
                   <X size={18} color="#64748b" />
                 </TouchableOpacity>
@@ -317,7 +319,7 @@ const BLECallModal: React.FC<{
                   <Text
                     style={[modalStyles.modeBtnText, mode === 'ble' && { color: '#fff' }]}
                   >
-                    BLE Call (Mesh/No Net)
+                    Dual Mesh Call (BLE + Wi-Fi Direct)
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -554,8 +556,8 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
   const handleChainReport = () => {
     const hopCount = Math.max(1, livePeers.length);
     Alert.alert(
-      'Bluetooth Chain Report',
-      `Your signal is hopping through ${hopCount} device(s) to reach the backend.\n\nActive BLE peers: ${livePeers.length}\nStrong signal (> -70 dBm): ${livePeers.filter((p) => p.signalStrength > -70).length}\nWeak signal (<= -70 dBm): ${livePeers.filter((p) => p.signalStrength <= -70).length}`,
+      'Dual-Radio Mesh Chain Report',
+      `Your signal is hopping through ${hopCount} device(s) over BLE & Wi-Fi Direct to reach the backend.\n\nActive mesh peers: ${livePeers.length}\nDual-Radio Range: Up to 250m per direct hop, 2km+ via multi-hop relay.`,
     );
   };
 
@@ -565,6 +567,23 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
+        {/* Dual-Radio Status Banner */}
+        <TouchableOpacity style={styles.radioBanner} onPress={handleChainReport} activeOpacity={0.8}>
+          <View style={styles.radioBannerLeft}>
+            <View style={styles.radioIconsRow}>
+              <Bluetooth size={14} color="#3b82f6" />
+              <Wifi size={14} color="#10b981" />
+            </View>
+            <View>
+              <Text style={styles.radioBannerTitle}>Dual-Radio Long-Range Mesh Active</Text>
+              <Text style={styles.radioBannerSub}>BLE Discovery + Wi-Fi Direct / Aware P2P Socket</Text>
+            </View>
+          </View>
+          <View style={styles.radioBannerBadge}>
+            <Text style={styles.radioBannerBadgeText}>250m / hop</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* Clean Neutral Action Row with Explicit Group Call */}
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -673,11 +692,68 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     backgroundColor: '#F8F9F5',
   },
+  radioBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  radioBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  radioIconsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    padding: 6,
+    borderRadius: 10,
+  },
+  radioBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  radioBannerSub: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#64748B',
+    marginTop: 1,
+  },
+  radioBannerBadge: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  radioBannerBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#047857',
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 8,
     marginBottom: 6,
     gap: 10,
   },

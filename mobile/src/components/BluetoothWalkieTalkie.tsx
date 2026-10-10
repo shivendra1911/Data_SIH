@@ -82,8 +82,8 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       setActivePeerName(peer.name);
       meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
       Alert.alert(
-        '📡 Mesh Intercom Request Sent',
-        `Calling ${peer.name} over Bluetooth P2P Direct Mesh.\n\nWaiting for peer to accept on their device screen.`
+        '📡 Dual-Radio Mesh Call Request Sent',
+        `Calling ${peer.name} over Dual-Radio Mesh (BLE + Wi-Fi Direct).\n\nTransmission covers up to 250m per direct hop (2km+ via multi-hop relays).\nWaiting for peer to accept.`
       );
     }
   };
@@ -94,7 +94,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <Radio size={20} color="#60a5fa" />
-          <Text style={styles.headerTitle}>OFFLINE BLE WALKIE-TALKIE & CHAT</Text>
+          <Text style={styles.headerTitle}>DUAL-RADIO WALKIE-TALKIE (BLE + WI-FI DIRECT)</Text>
         </View>
         <View style={styles.offlineTag}>
           <WifiOff size={12} color="#fbbf24" />

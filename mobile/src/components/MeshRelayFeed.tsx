@@ -21,7 +21,7 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
           <Radio size={18} color="#1C1F24" />
-          <Text style={styles.title}>ACTIVE BLUETOOTH MESH RELAYS</Text>
+          <Text style={styles.title}>ACTIVE DUAL-RADIO MESH RELAYS</Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{list.length} RELAYS CONNECTED</Text>
@@ -29,14 +29,14 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
       </View>
 
       <Text style={styles.desc}>
-        Nearby phones automatically chain distress signals peer-to-peer when cellular infrastructure fails.
+        Nearby phones automatically chain distress signals peer-to-peer over BLE and Wi-Fi Direct when cellular infrastructure fails.
       </Text>
 
       <View style={styles.listContainer}>
         {list.length === 0 ? (
           <View style={{ paddingVertical: 14, alignItems: 'center' }}>
             <Text style={{ color: '#707A84', fontSize: 12, textAlign: 'center' }}>
-              Scanning nearby BLE frequencies... Peer nodes appear here automatically when in proximity.
+              Scanning nearby BLE & Wi-Fi Direct / Aware frequencies... Peer nodes appear here automatically when in proximity.
             </Text>
           </View>
         ) : (
