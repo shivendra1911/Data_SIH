@@ -187,6 +187,10 @@ export async function GET(req: NextRequest) {
           alert.sos_type === "COLLAPSE" ||
           parsedMedical !== "NONE";
 
+        const lastSeenMins = Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000));
+        // In disaster edge mesh mode, preserve active presence for 24 hours (1440 mins)
+        const isLiveInDisasterMode = lastSeenMins < 1440;
+
         const parsedCitizen: CitizenLocation = {
           id: `cit-${devId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: devId,
@@ -194,8 +198,8 @@ export async function GET(req: NextRequest) {
           phone: parsedPhone,
           lat: Number(alert.lat) || 27.6014,
           lng: Number(alert.lng) || 77.5971,
-          is_live: true,
-          last_seen_minutes_ago: Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000)),
+          is_live: isLiveInDisasterMode,
+          last_seen_minutes_ago: lastSeenMins,
           accuracy_radius_m: 10,
           drift_radius_m: 0,
           battery_pct: Number(alert.battery_level) || 84,
@@ -232,8 +236,7 @@ export async function GET(req: NextRequest) {
       !c.device_uuid?.toLowerCase().includes("audit_node") &&
       !c.device_uuid?.toLowerCase().includes("synthetic") &&
       !c.device_uuid?.toLowerCase().startsWith("col_phone") &&
-      !c.device_uuid?.toLowerCase().startsWith("fake") &&
-      !c.device_uuid?.toLowerCase().startsWith("samsung_a15_phone")
+      !c.device_uuid?.toLowerCase().startsWith("fake")
   );
 
   // Synchronize unified global store for cross-route radar and connected device counters

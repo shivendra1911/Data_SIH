@@ -175,7 +175,11 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                   </View>
                   <View style={{ flex: 1, minWidth: 100 }}>
                     <Text style={styles.peerName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.peerDist}>{item.distanceMeters ?? '?'}m away • {item.signalStrength}dBm</Text>
+                    <Text style={styles.peerDist}>
+                      {item.hopCount && item.hopCount > 1
+                        ? `${item.distanceMeters ?? (item.hopCount * 60)}m (${item.hopCount} Hops Relay) • ${item.signalStrength}dBm`
+                        : `${item.distanceMeters ?? '?'}m away • ${item.signalStrength}dBm`}
+                    </Text>
                   </View>
                 </View>
 

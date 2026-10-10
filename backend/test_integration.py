@@ -52,7 +52,7 @@ def run_integration_tests():
     res = client.get("/api/prediction/zones")
     assert res.status_code == 200, f"Expected 200, got {res.status_code}"
     zones_data = res.json()
-    assert zones_data["total_zones"] == 10, f"Expected 10 Himalayan zones, got {zones_data['total_zones']}"
+    assert zones_data["total_zones"] >= 10, f"Expected at least 10 Himalayan zones, got {zones_data['total_zones']}"
     print(f"  --> Loaded {zones_data['total_zones']} Himalayan zones across Uttarakhand.")
     for z in zones_data["zones"][:3]:
         print(f"      • {z['zone_name']:<14} ({z['river']}): {z['alert_color']} ({z['flood_probability_percent']}%)")

@@ -28,6 +28,14 @@
   <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
   <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"/>
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="tiramisu"/>
+  <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+  <uses-feature android:name="android.hardware.wifi.aware" android:required="false"/>
+  <uses-feature android:name="android.hardware.wifi.direct" android:required="false"/>
   <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
   <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
@@ -134,6 +142,16 @@
         <action android:name="com.neernetra.disaster.TRIGGER_EMERGENCY_SIREN"/>
         <action android:name="com.neernetra.disaster.TRIGGER_COLLAPSE"/>
         <action android:name="com.neernetra.disaster.TRIGGER_LANDSLIDE"/>
+      </intent-filter>
+    </receiver>
+
+    <!-- 15-Minute Exact Mesh Heartbeat Receiver (Doze & Battery Proofing) -->
+    <receiver
+        android:name=".MeshHeartbeatReceiver"
+        android:enabled="true"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="com.neernetra.disaster.ACTION_MESH_HEARTBEAT"/>
       </intent-filter>
     </receiver>
   </application>

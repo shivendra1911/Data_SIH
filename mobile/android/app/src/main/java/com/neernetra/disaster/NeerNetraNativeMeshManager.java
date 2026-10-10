@@ -679,19 +679,102 @@ public class NeerNetraNativeMeshManager {
         }
     }
 
+    // Deduplication cache to prevent multi-hop routing loops
+    private final Map<String, Long> seenMessageIds = new ConcurrentHashMap<>();
+
     private void handleIncomingFullPacket(String deviceAddress, byte[] fullBytes) {
+        handleIncomingPacketFromAnyTransport(deviceAddress, fullBytes);
+    }
+
+    public void handleIncomingPacketFromAnyTransport(String fromTransportOrDevice, byte[] fullBytes) {
+        if (fullBytes == null || fullBytes.length == 0) return;
         try {
-            // 1. WhatsApp-Style Background Wakeup Check (even if app is closed!)
-            checkAndTriggerWhatsAppCallOrAlert(deviceAddress, fullBytes);
+            long now = System.currentTimeMillis();
+            if (seenMessageIds.size() > 2048) {
+                for (Map.Entry<String, Long> entry : new ArrayList<>(seenMessageIds.entrySet())) {
+                    if (now - entry.getValue() > 180000) {
+                        seenMessageIds.remove(entry.getKey());
+                    }
+                }
+            }
+
+            // Decode to JSON
+            String decoded = new String(fullBytes, StandardCharsets.UTF_8).trim();
+            if (!decoded.startsWith("{")) {
+                try {
+                    byte[] b64 = android.util.Base64.decode(decoded, android.util.Base64.NO_WRAP);
+                    String tryJson = new String(b64, StandardCharsets.UTF_8).trim();
+                    if (tryJson.startsWith("{")) {
+                        decoded = tryJson;
+                    }
+                } catch (Exception ignored) {}
+            }
+            if (decoded.contains("%7B") || decoded.contains("%22")) {
+                try {
+                    decoded = java.net.URLDecoder.decode(decoded, "UTF-8");
+                } catch (Exception ignored) {}
+            }
+
+            if (!decoded.startsWith("{")) return;
+
+            JSONObject packet = new JSONObject(decoded);
+            int type = packet.optInt("t", -1);
+            String msgId = packet.optString("m", "");
+            String senderId = packet.optString("s", "");
+            String targetId = packet.optString("d", "BROADCAST");
+            int ttl = packet.optInt("ttl", 1);
+
+            if (msgId.isEmpty()) {
+                msgId = "m_" + now + "_" + (senderId.isEmpty() ? "anon" : senderId);
+            }
+
+            // Loop Detection: Suppress duplicate packet
+            if (seenMessageIds.containsKey(msgId)) {
+                return;
+            }
+            seenMessageIds.put(msgId, now);
+
+            // Ignore our own echoes
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            if (!myNodeId.isEmpty() && senderId.equalsIgnoreCase(myNodeId)) {
+                return;
+            }
+
+            Log.i(TAG, "📥 [MeshPacket] Ingested type=" + type + " id=" + msgId + " from=" + senderId + " target=" + targetId + " ttl=" + ttl + " via=" + fromTransportOrDevice);
+
+            // 1. WhatsApp-Style Background Wakeup / Alert Check (even if app is closed!)
+            checkAndTriggerWhatsAppCallOrAlert(fromTransportOrDevice, fullBytes);
 
             // 2. Forward to React Native if active
             String base64 = android.util.Base64.encodeToString(fullBytes, android.util.Base64.NO_WRAP);
             WritableMap params = Arguments.createMap();
-            params.putString("fromDevice", deviceAddress);
+            params.putString("fromDevice", fromTransportOrDevice);
             params.putString("data", base64);
             emitEventMapToReactNative("onPacketReceived", params);
+
+            // 3. Multi-Hop Managed Relay (Linked List Forwarding across BLE & Wi-Fi)
+            // Relay if TTL > 1 and destination is not strictly and only self
+            boolean isStrictlyForMe = (!targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId))
+                    && (!myNodeId.isEmpty() && targetId.equalsIgnoreCase(myNodeId));
+
+            if (ttl > 1 && !isStrictlyForMe) {
+                int newTtl = ttl - 1;
+                packet.put("ttl", newTtl);
+                byte[] relayedBytes = packet.toString().getBytes(StandardCharsets.UTF_8);
+                String relayedBase64 = android.util.Base64.encodeToString(relayedBytes, android.util.Base64.NO_WRAP);
+
+                Log.i(TAG, "🔁 [MultiHopRelay] Forwarding packet " + msgId + " (type=" + type + ", TTL " + ttl + "->" + newTtl + ") across BLE Centrals & Wi-Fi to reach " + targetId);
+
+                // Relay over BLE GATT notify to all Centrals
+                notifyAllClients(relayedBase64);
+
+                // Relay over Wi-Fi (Wi-Fi Aware & UDP Port 8765)
+                NeerNetraWifiMeshManager.getInstance(appContext).broadcastPacketOverWifi(relayedBytes);
+            }
+
         } catch (Exception e) {
-            Log.e(TAG, "handleIncomingFullPacket error: " + e.getMessage());
+            Log.e(TAG, "handleIncomingPacketFromAnyTransport error: " + e.getMessage());
         }
     }
 
@@ -866,5 +949,33 @@ public class NeerNetraNativeMeshManager {
             nativePeerLastSeen.clear();
             Log.i(TAG, "Native BLE Mesh Engine stopped");
         } catch (Exception ignored) {}
+    }
+
+    public synchronized void pokeRadio() {
+        try {
+            if (!isRunning) {
+                android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                String name = sp.getString("local_node_name", "NeerNetra-Node");
+                startMeshEngine(name);
+            } else {
+                if (!isScanningNative) {
+                    startNativeScanning();
+                }
+            }
+            NeerNetraWifiMeshManager.getInstance(appContext).startWifiMesh();
+            Log.i(TAG, "[MeshManager] Radios poked & verified active (BLE + Wi-Fi)");
+        } catch (Exception e) {
+            Log.w(TAG, "pokeRadio error: " + e.getMessage());
+        }
+    }
+
+    public void relayPacketToAllTransports(String msgId, byte[] packetBytes) {
+        if (packetBytes == null || packetBytes.length == 0) return;
+        if (msgId != null && !msgId.isEmpty()) {
+            seenMessageIds.put(msgId, System.currentTimeMillis());
+        }
+        String base64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
+        notifyAllClients(base64);
+        NeerNetraWifiMeshManager.getInstance(appContext).broadcastPacketOverWifi(packetBytes);
     }
 }

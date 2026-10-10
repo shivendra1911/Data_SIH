@@ -1650,7 +1650,9 @@ def get_live_device_locations():
         except Exception:
             elapsed_seconds = 0
 
-        is_unresponsive = elapsed_seconds > 300 and dev.get("status") != "SAFE"
+        # In disaster edge mesh mode, nodes may sync intermittently over multi-hop links or wake intervals.
+        # Ensure registered nodes remain visible and active rather than expiring after short periods.
+        is_unresponsive = elapsed_seconds > 86400 and dev.get("status") != "SAFE"
         dev_copy["isUnresponsiveDanger"] = is_unresponsive
         dev_copy["elapsed_seconds_since_sync"] = int(elapsed_seconds)
         enriched_devices.append(dev_copy)
@@ -2092,7 +2094,7 @@ def get_dashboard_overview(zone_id: str = "chamoli_01"):
             elapsed_seconds = (curr_time - sync_time).total_seconds()
         except Exception:
             elapsed_seconds = 0
-        dev_copy["isUnresponsiveDanger"] = elapsed_seconds > 300 and dev.get("status") != "SAFE"
+        dev_copy["isUnresponsiveDanger"] = elapsed_seconds > 86400 and dev.get("status") != "SAFE"
         dev_copy["elapsed_seconds_since_sync"] = int(elapsed_seconds)
         enriched_devices.append(dev_copy)
 

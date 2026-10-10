@@ -959,10 +959,10 @@ class NeerNetraBLEMesh {
     const isForMe = isBroadcast || packet.targetId === this.myDeviceId ||
                     (this.myName && packet.targetId.includes(this.myName));
 
-    if (isForMe) {
+    if (isForMe || packet.type === BLEMsgType.HELLO) {
       switch (packet.type) {
         case BLEMsgType.HELLO:
-          this.handleHello(fromDeviceId, packet.senderId, packet.payload);
+          this.handleHello(fromDeviceId, packet.senderId, packet.payload, packet.ttl);
           break;
 
         case BLEMsgType.CHAT:
@@ -1004,8 +1004,8 @@ class NeerNetraBLEMesh {
       console.log(`[BLE Mesh] 🔀 Packet ${packet.msgId} (type ${packet.type}) is directed to ${packet.targetId} (not me: ${this.myDeviceId}). Forwarding without ringing.`);
     }
 
-    // Multi-hop managed relay: Relay ALL packet types (including calls, voice, and SOS) when ttl > 1
-    if (packet.ttl > 1 && packet.type !== BLEMsgType.HELLO) {
+    // Multi-hop managed relay: Relay ALL packet types (including HELLO, calls, voice, and SOS) when ttl > 1
+    if (packet.ttl > 1) {
       const peer = this.activePeers.get(fromDeviceId);
       const rssi = peer?.signalStrength || -75;
 
@@ -1014,7 +1014,7 @@ class NeerNetraBLEMesh {
       // Closer nodes (stronger RSSI ~ -50dBm) wait longer (120-180ms) and will likely overhear and suppress!
       const rssiClamped = Math.max(-95, Math.min(-50, rssi));
       const distanceFactor = (-50 - rssiClamped) / 45; // 0 for strong/close, 1 for weak/far
-      const backoffDelay = packet.type === BLEMsgType.SOS ? 15 : Math.round(180 - distanceFactor * 140 + Math.random() * 20);
+      const backoffDelay = packet.type === BLEMsgType.SOS ? 15 : (packet.type === BLEMsgType.VOICE_BURST ? 20 : Math.round(180 - distanceFactor * 140 + Math.random() * 20));
 
       const relayTimer = setTimeout(() => {
         this.pendingRelays.delete(packet.msgId);
@@ -1038,7 +1038,7 @@ class NeerNetraBLEMesh {
   }
 
   // ── Message Handlers ───────────────────────────────────────────────────────
-  private handleHello(deviceId: string, senderId: string, payload: string) {
+  private handleHello(deviceId: string, senderId: string, payload: string, ttl: number = 7) {
     try {
       const info = JSON.parse(payload);
       const actualNodeId = senderId || info.id;
@@ -1048,25 +1048,32 @@ class NeerNetraBLEMesh {
       }
       this.peerNodeIdToMac.set(deviceId, deviceId);
 
-      const existing = this.activePeers.get(deviceId);
-      const peerName = info.name || (existing ? existing.name : `Citizen [${deviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+      const hopCount = Math.max(1, 8 - ttl);
+      const isRelayed = hopCount > 1;
+      const calculatedDistance = isRelayed ? (hopCount * 60) : 5;
+
+      const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
+      const baseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+      const peerName = isRelayed && !baseName.includes('Hops') ? `${baseName} (${hopCount} Hops - ${calculatedDistance}m)` : baseName;
+
       const updatedPeer: MeshPeer = {
-        id: deviceId,
+        id: actualNodeId || deviceId,
         nodeId: actualNodeId || existing?.nodeId,
         name: peerName,
-        signalStrength: existing ? existing.signalStrength : -60,
+        signalStrength: existing ? existing.signalStrength : (isRelayed ? -85 : -60),
         relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
-        role: 'Citizen Node',
-        distanceMeters: existing ? existing.distanceMeters : 5,
+        role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',
+        distanceMeters: existing?.distanceMeters && !isRelayed ? existing.distanceMeters : calculatedDistance,
         status: existing ? existing.status : 'SAFE',
         lastSeen: new Date(),
+        hopCount,
       };
-      this.activePeers.set(deviceId, updatedPeer);
+      this.activePeers.set(actualNodeId || deviceId, updatedPeer);
       this.emitPeersUpdate();
       if (this.onPeerDiscovered) {
         this.onPeerDiscovered(updatedPeer);
       }
-      console.log(`[BLE Mesh] HELLO registered from ${peerName} (${senderId})`);
+      console.log(`[BLE Mesh] HELLO registered from ${peerName} (${senderId}) [Hop: ${hopCount}]`);
 
       // Bidirectional handshake: reply with our own identity so both nodes know each other
       if (!info.isAck) {

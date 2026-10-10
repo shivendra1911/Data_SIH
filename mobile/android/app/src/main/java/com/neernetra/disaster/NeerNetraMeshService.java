@@ -18,6 +18,7 @@ import android.media.MediaPlayer;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -84,6 +85,7 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     public static final String ACTION_TRIGGER_LANDSLIDE = "com.neernetra.disaster.TRIGGER_LANDSLIDE";
 
     private PowerManager.WakeLock partialWakeLock;
+    private WifiManager.WifiLock wifiLock;
     private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
     private static Ringtone emergencyRingtone;
@@ -195,6 +197,16 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
 
         createNotificationChannels();
         acquirePartialWakeLock();
+        acquireWifiLock();
+
+        // Check and log battery optimization exemption status (Doze proofing)
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                boolean isIgnoring = pm.isIgnoringBatteryOptimizations(getPackageName());
+                Log.i(TAG, "[MeshService] Battery optimization exemption status: " + (isIgnoring ? "EXEMPT (Unrestricted 24/7)" : "NOT EXEMPT (Doze restrictions active)"));
+            }
+        } catch (Exception ignored) {}
 
         // Start Foreground Service with safe fallback
         Notification notification = buildForegroundNotification();
@@ -228,6 +240,17 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
         } catch (Exception e) {
             Log.e(TAG, "[MeshService] Failed to start native mesh engine: " + e.getMessage());
         }
+
+        // Boot 24/7 Long-Range Wi-Fi Mesh Subsystem (Wi-Fi Aware NAN & Socket Mesh)
+        try {
+            NeerNetraWifiMeshManager.getInstance(this).startWifiMesh();
+            Log.i(TAG, "[MeshService] Long-Range Wi-Fi Mesh Subsystem initialized in 24/7 background service");
+        } catch (Exception e) {
+            Log.e(TAG, "[MeshService] Failed to start Wi-Fi mesh: " + e.getMessage());
+        }
+
+        // Schedule periodic 15-minute exact heartbeat alarm (Doze & Battery Proofing)
+        schedulePeriodicMeshHeartbeatAlarm(this);
 
         // Register AOSP Self-Managed Telecom PhoneAccount
         NeerNetraConnectionService.registerPhoneAccount(this);
@@ -414,6 +437,10 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             } catch (Exception ignored) {}
         }
         releasePartialWakeLock();
+        releaseWifiLock();
+        try {
+            NeerNetraWifiMeshManager.getInstance(this).stopWifiMesh();
+        } catch (Exception ignored) {}
         stopEmergencyAlarm();
         super.onDestroy();
     }
@@ -892,6 +919,59 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 Log.i(TAG, "[MeshService] Released PARTIAL_WAKE_LOCK");
             }
         } catch (Exception ignored) {}
+    }
+
+    private void acquireWifiLock() {
+        try {
+            if (wifiLock == null) {
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "neernetra:MeshWifiLock");
+                    wifiLock.setReferenceCounted(false);
+                    wifiLock.acquire();
+                    Log.i(TAG, "[MeshService] Acquired WIFI_MODE_FULL_HIGH_PERF WifiLock for 24/7 radio persistence");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[MeshService] Could not acquire WifiLock: " + e.getMessage());
+        }
+    }
+
+    private void releaseWifiLock() {
+        try {
+            if (wifiLock != null && wifiLock.isHeld()) {
+                wifiLock.release();
+                wifiLock = null;
+                Log.i(TAG, "[MeshService] Released WifiLock");
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public static void schedulePeriodicMeshHeartbeatAlarm(Context context) {
+        try {
+            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+
+            Intent heartbeatIntent = new Intent(context, MeshHeartbeatReceiver.class);
+            heartbeatIntent.setAction(MeshHeartbeatReceiver.ACTION_MESH_HEARTBEAT);
+
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+
+            PendingIntent pi = PendingIntent.getBroadcast(context, 7001, heartbeatIntent, flags);
+            long triggerAtMillis = SystemClock.elapsedRealtime() + (15 * 60 * 1000L); // 15 minutes
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+            } else {
+                am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+            }
+            Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute exact heartbeat alarm (Doze-proof)");
+        } catch (Exception e) {
+            Log.w(TAG, "[MeshHeartbeat] Could not schedule heartbeat alarm: " + e.getMessage());
+        }
     }
 
     // ── Native Hardware Sensor Initialization & Listeners ────────────────────
