@@ -265,24 +265,29 @@ class MobileSirenListener {
           if (portalRes.ok) {
             const portalData = await portalRes.json();
             if (portalData.is_siren_active_on_mobile && portalData.active_dispatches && portalData.active_dispatches.length > 0) {
-              const activeDispatch = portalData.latest_dispatch || portalData.active_dispatches[0];
-              const createdAt = activeDispatch.dispatched_at || '';
-              const sirenId = `siren_${activeDispatch.zone_id}_${createdAt}`;
-              if (!this.silencedSirenTimestamps.has(createdAt) && !this.silencedSirenTimestamps.has(sirenId)) {
-                const sirenAge = Date.now() - new Date(createdAt).getTime();
-                if (sirenAge < SIREN_RECENCY_MS) {
-                  if (!this.processedSirenTimestamps.has(createdAt) && !this.processedSirenTimestamps.has(sirenId)) {
-                    this.processedSirenTimestamps.add(createdAt);
-                    this.processedSirenTimestamps.add(sirenId);
-                    this.lastProcessedTimestamp = createdAt;
-                    console.log('[MobileSirenListener] 🚨 Fresh ACTIVE_SIREN broadcast detected from Web Portal Gateway!');
-                    this.triggerAlarm(
-                      activeDispatch.emergency_message || '🚨 EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!',
-                      activeDispatch.zone_name || 'Emergency Zone',
-                      activeDispatch.authorized_by || 'NDRF / SDMA Command',
-                      createdAt
-                    );
-                    return;
+              const candidates = [
+                ...(portalData.latest_dispatch ? [portalData.latest_dispatch] : []),
+                ...portalData.active_dispatches,
+              ];
+              for (const activeDispatch of candidates) {
+                const createdAt = activeDispatch.dispatched_at || '';
+                const sirenId = `siren_${activeDispatch.zone_id}_${createdAt}`;
+                if (!this.silencedSirenTimestamps.has(createdAt) && !this.silencedSirenTimestamps.has(sirenId)) {
+                  const sirenAge = Date.now() - new Date(createdAt).getTime();
+                  if (sirenAge < SIREN_RECENCY_MS) {
+                    if (!this.processedSirenTimestamps.has(createdAt) && !this.processedSirenTimestamps.has(sirenId)) {
+                      this.processedSirenTimestamps.add(createdAt);
+                      this.processedSirenTimestamps.add(sirenId);
+                      this.lastProcessedTimestamp = createdAt;
+                      console.log('[MobileSirenListener] 🚨 Fresh ACTIVE_SIREN broadcast detected from Web Portal Gateway!');
+                      this.triggerAlarm(
+                        activeDispatch.emergency_message || '🚨 EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!',
+                        activeDispatch.zone_name || 'Emergency Zone',
+                        activeDispatch.authorized_by || 'NDRF / SDMA Command',
+                        createdAt
+                      );
+                      return;
+                    }
                   }
                 }
               }

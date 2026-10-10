@@ -105,6 +105,22 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
+        const lowerDevId = (alert.device_id || "").toLowerCase();
+        if (
+          lowerDevId.startsWith("test") ||
+          lowerDevId.includes("dummy") ||
+          lowerDevId.includes("mock") ||
+          lowerDevId.includes("demo") ||
+          lowerDevId.startsWith("citizen-apk") ||
+          lowerDevId.includes("synthetic") ||
+          lowerDevId.startsWith("col_phone") ||
+          lowerDevId.startsWith("fake") ||
+          lowerDevId === "audit_node_99" ||
+          lowerDevId === "cloud_device"
+        ) {
+          continue;
+        }
+
         const devId = alert.device_id || `mobile-${alert.id ? String(alert.id).slice(0, 6) : "node"}`;
         if (processedCloudDevIds.has(devId)) {
           continue;
@@ -202,12 +218,19 @@ export async function GET(req: NextRequest) {
     // Cloud sync fallback gracefully to in-memory
   }
 
-  // Ensure result contains NO Cell Broadcast dummy beacons
+  // Ensure result contains NO Cell Broadcast dummy beacons or synthetic test devices
   result = result.filter(
     (c) =>
       !c.name?.includes("Cell Broadcast") &&
       !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
-      !c.device_uuid?.includes("cell-broadcast")
+      !c.device_uuid?.includes("cell-broadcast") &&
+      !c.device_uuid?.toLowerCase().startsWith("test") &&
+      !c.device_uuid?.toLowerCase().includes("dummy") &&
+      !c.device_uuid?.toLowerCase().includes("mock") &&
+      !c.device_uuid?.toLowerCase().includes("demo") &&
+      !c.device_uuid?.toLowerCase().startsWith("citizen-apk") &&
+      !c.device_uuid?.toLowerCase().includes("audit_node") &&
+      !c.device_uuid?.toLowerCase().includes("synthetic")
   );
 
   // Synchronize unified global store for cross-route radar and connected device counters

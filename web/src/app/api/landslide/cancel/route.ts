@@ -42,6 +42,12 @@ export async function POST(req: NextRequest) {
   if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
     global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
   }
+  global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.forEach((rec, key) => {
+    if (key === sectorId || key.includes(sectorId)) {
+      rec.is_active = false;
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__!.set(key, rec);
+    }
+  });
   const existingRec = global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.get(sectorId);
   if (existingRec) {
     existingRec.is_active = false;

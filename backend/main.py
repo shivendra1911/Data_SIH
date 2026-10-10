@@ -141,6 +141,8 @@ ALL_ZONES_CONFIG = {
     "gopeshwar_01":  {"name": "Gopeshwar",        "lat": 30.4100, "lng": 79.3200, "river": "Balkhila"},
     "nainital_01":   {"name": "Nainital",         "lat": 29.3919, "lng": 79.4542, "river": "Naini Lake Basin"},
     "dehradun_01":   {"name": "Dehradun",         "lat": 30.3165, "lng": 78.0322, "river": "Rispana / Bindal"},
+    "gla_mathura":   {"name": "GLA University (Mathura)", "lat": 27.6048, "lng": 77.5996, "river": "Yamuna River Basin"},
+    "mathura_01":    {"name": "Mathura Flood Plain",       "lat": 27.4924, "lng": 77.6737, "river": "Yamuna River Basin"},
 }
 
 def find_nearest_zone(lat: float, lng: float) -> str:
@@ -245,6 +247,24 @@ CWC_GAUGE_THRESHOLDS: Dict[str, Dict[str, Any]] = {
         "hfl_record_m": 7.20,
         "hfl_date": "2022-08-20",
         "catchment_area_sqkm": 280
+    },
+    "gla_mathura": {
+        "gauge_station": "Mathura / GLA Yamuna Hydrological Station",
+        "river": "Yamuna River Basin",
+        "warning_level_m": 165.20,
+        "danger_level_m": 166.00,
+        "hfl_record_m": 167.80,
+        "hfl_date": "2023-07-15",
+        "catchment_area_sqkm": 14200
+    },
+    "mathura_01": {
+        "gauge_station": "Gokul Barrage Mathura CWC Site",
+        "river": "Yamuna River",
+        "warning_level_m": 165.20,
+        "danger_level_m": 166.00,
+        "hfl_record_m": 167.80,
+        "hfl_date": "2023-07-15",
+        "catchment_area_sqkm": 14200
     }
 }
 

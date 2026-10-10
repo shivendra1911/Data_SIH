@@ -80,12 +80,14 @@ export async function GET(req: NextRequest) {
 
   if (zoneId) {
     const record = dispatches.get(zoneId);
+    const universalRecord = dispatches.get("all_sectors") || dispatches.get("universal");
+    const isActive = Boolean(record?.is_active || (universalRecord?.is_active && !record));
     return NextResponse.json(
       {
         status: "success",
         zone_id: zoneId,
-        is_siren_active_on_mobile: record ? record.is_active : false,
-        details: record || null,
+        is_siren_active_on_mobile: isActive,
+        details: (record && record.is_active) ? record : (universalRecord && universalRecord.is_active ? universalRecord : record || null),
       },
       { headers: corsHeaders }
     );
@@ -96,6 +98,11 @@ export async function GET(req: NextRequest) {
   dispatches.forEach((rec) => {
     if (rec.is_active) allActive.push(rec);
   });
+
+  // Sort descending by dispatched_at so latest dispatch is always index 0
+  allActive.sort(
+    (a, b) => new Date(b.dispatched_at).getTime() - new Date(a.dispatched_at).getTime()
+  );
 
   return NextResponse.json(
     {

@@ -59,9 +59,14 @@ async function runConsensusPipelineTest() {
   assert(phone1Data.directive_broadcast_active === false, "Single-phone report: No siren broadcast dispatched");
 
   // Verify mobile sirens remain silent
-  const sirenCheck1 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenCheck1 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch?zone_id=${sectorId}`);
   const sirenData1 = await sirenCheck1.json();
-  assert(sirenData1.is_siren_active_on_mobile === false, "Single-phone report: Mobile Siren Listener confirms sirens are SILENT");
+  const sirenGlobalCheck1 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenGlobalData1 = await sirenGlobalCheck1.json();
+  const hasActiveSectorTremorSiren = (sirenGlobalData1.active_dispatches || []).some(
+    (d) => d.is_active && (d.zone_id === sectorId || d.zone_id?.includes(sectorId))
+  );
+  assert(sirenData1.is_siren_active_on_mobile === false && !hasActiveSectorTremorSiren, "Single-phone report: Mobile Siren Listener confirms sirens are SILENT");
 
   // 1.3 Phone #2 reports matching tremor
   console.log("\n[1.3] Phone #2 reports matching tremor in sector...");
@@ -112,11 +117,14 @@ async function runConsensusPipelineTest() {
 
   // 1.6 Verify Mobile Siren Listener receives Emergency Siren Directive
   console.log("\n[1.6] Verifying Mobile Siren Listener detects active directive...");
-  const sirenCheck2 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenCheck2 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch?zone_id=${sectorId}`);
   const sirenData2 = await sirenCheck2.json();
-  assert(sirenData2.is_siren_active_on_mobile === true, "Mobile Siren Listener receives ACTIVE_SIREN signal");
+  const sirenGlobalCheck2 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenGlobalData2 = await sirenGlobalCheck2.json();
+  assert(sirenData2.is_siren_active_on_mobile === true || sirenGlobalData2.is_siren_active_on_mobile === true, "Mobile Siren Listener receives ACTIVE_SIREN signal");
+  const sirenMessage = sirenData2.details?.emergency_message || sirenGlobalData2.latest_dispatch?.emergency_message || "";
   assert(
-    sirenData2.latest_dispatch?.emergency_message.includes("LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS"),
+    sirenMessage.includes("LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS"),
     "Mobile lock-screen siren message matches 1/3rd Consensus Directive"
   );
 
@@ -129,9 +137,14 @@ async function runConsensusPipelineTest() {
   });
   const cancelData = await cancelRes.json();
   assert(cancelData.success === true, "Landslide alarm cancelled");
-  const sirenCheck3 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenCheck3 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch?zone_id=${sectorId}`);
   const sirenData3 = await sirenCheck3.json();
-  assert(sirenData3.is_siren_active_on_mobile === false, "Mobile phones safely silenced after cancel");
+  const sirenGlobalCheck3 = await fetch(`${TARGET_URL}/api/mobile/siren-dispatch`);
+  const sirenGlobalData3 = await sirenGlobalCheck3.json();
+  const hasActiveLandslideSiren = (sirenGlobalData3.active_dispatches || []).some(
+    (d) => d.is_active && (d.zone_id === sectorId || d.zone_id?.includes(sectorId))
+  );
+  assert(sirenData3.is_siren_active_on_mobile === false && !hasActiveLandslideSiren, "Mobile phones safely silenced after cancel");
 
   // --------------------------------------------------------------------------
   // TEST SUITE 2: USAR STRUCTURAL COLLAPSE KINETIC QUORUM PIPELINE

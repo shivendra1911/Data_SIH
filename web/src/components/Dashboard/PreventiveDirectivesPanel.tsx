@@ -21,7 +21,7 @@ interface DirectiveItem {
   action: string;
   priority: "IMMEDIATE" | "URGENT" | "ADVISORY" | "STANDBY";
   deadline: string;
-  category: "DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER";
+  category: "DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER" | "CAMPUS" | "BARRAGE";
   executed: boolean;
 }
 
@@ -37,7 +37,7 @@ export default function PreventiveDirectivesPanel({
   const [newTitle, setNewTitle] = useState("");
   const [newAction, setNewAction] = useState("");
   const [newPriority, setNewPriority] = useState<"IMMEDIATE" | "URGENT" | "ADVISORY" | "STANDBY">("IMMEDIATE");
-  const [newCategory, setNewCategory] = useState<"DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER">("HIGHWAY");
+  const [newCategory, setNewCategory] = useState<"DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER" | "CAMPUS" | "BARRAGE">("HIGHWAY");
 
   // Load directives dynamically from activeZone or guidelines API
   useEffect(() => {
@@ -140,6 +140,10 @@ export default function PreventiveDirectivesPanel({
         return <Tent className="w-4 h-4 text-slate-700" aria-hidden />;
       case "POWER":
         return <Zap className="w-4 h-4 text-slate-700" aria-hidden />;
+      case "CAMPUS":
+        return <Building className="w-4 h-4 text-slate-700" aria-hidden />;
+      case "BARRAGE":
+        return <Building className="w-4 h-4 text-slate-700" aria-hidden />;
     }
   };
 
@@ -219,6 +223,8 @@ export default function PreventiveDirectivesPanel({
                 <option value="HIGHWAY">HIGHWAY</option>
                 <option value="PILGRIMAGE">PILGRIMAGE</option>
                 <option value="POWER">POWER</option>
+                <option value="CAMPUS">CAMPUS</option>
+                <option value="BARRAGE">BARRAGE</option>
               </select>
 
               <select

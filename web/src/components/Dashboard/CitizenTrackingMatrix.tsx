@@ -129,7 +129,7 @@ export default function CitizenTrackingMatrix({
       </div>
 
       {/* Scannable Citizen Rows */}
-      <div className={`space-y-2.5 overflow-y-auto pr-1 ${compact ? "max-h-[560px]" : "max-h-[500px]"}`}>
+      <div className={`space-y-2.5 overflow-y-auto custom-scrollbar pr-1 ${compact ? "max-h-[560px]" : "max-h-[500px]"}`}>
         {filteredList.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-500 rounded-2xl bg-[#f1f5f9] border border-slate-200">
             No distress signals currently reported. The rescue queue updates automatically in real-time.

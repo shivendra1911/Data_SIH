@@ -140,7 +140,7 @@ export default function LandslideConsensusPanel({
       </div>
 
       {/* Content List */}
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar flex-1">
         {sectors.length === 0 ? (
           <div className="text-center py-6 text-white/50 text-xs">
             Connecting to Landslide Sector Telemetry Engine...

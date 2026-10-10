@@ -85,13 +85,45 @@ export async function POST(req: NextRequest) {
       console.warn("[Broadcast API] Supabase directive insert fallback:", cloudErr);
     }
 
-    // 2. If acoustic siren was enabled in the broadcast, dispatch to phones via Supabase
+    // 2. If acoustic siren was enabled in the broadcast, dispatch to phones via Supabase & in-memory gateway
     if (newAlert.trigger_acoustic_siren) {
+      const alertLat = body.lat || (newAlert.zone_id.includes("mathura") ? 27.6048 : 30.5573);
+      const alertLng = body.lng || (newAlert.zone_id.includes("mathura") ? 77.5996 : 79.5642);
+
+      // Register in local Next.js in-memory siren gateway for local Wi-Fi mobile listeners
+      try {
+        if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+          global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+        }
+        const sirenRecord = {
+          zone_id: newAlert.zone_id,
+          zone_name: newAlert.title,
+          is_active: true,
+          dispatched_at: newAlert.dispatched_at,
+          authorized_by: "Regional Mobile Alert Command",
+          target_devices_count: newAlert.target_nodes_count,
+          cell_broadcast_channels: [
+            "CB-4370 (Govt Emergency Civic Alarm)",
+            "CB-919 (NDRF National Disaster Audio Alert)",
+          ],
+          mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+          vibration_pattern: [1000, 400, 1000, 400, 1500],
+          emergency_message: newAlert.message,
+        };
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(newAlert.zone_id, sirenRecord);
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set("all_sectors", sirenRecord);
+        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set("universal", sirenRecord);
+        console.log("[Broadcast API] Registered in __NEERNETRA_MOBILE_SIREN_DISPATCHES__ for local APKs");
+      } catch (memErr) {
+        console.warn("[Broadcast API] In-memory siren record warning:", memErr);
+      }
+
+      // Sync to Supabase Cloud for remote / cellular mobile APKs
       try {
         await supabase.from("sos_alerts").insert({
           device_id: "ADMIN_SIREN_DISPATCH",
-          lat: 30.5573,
-          lng: 79.5642,
+          lat: alertLat,
+          lng: alertLng,
           sos_type: "CIVIL_DEFENSE_SIREN",
           status: "ACTIVE_SIREN",
           battery_level: 100,
@@ -109,6 +141,14 @@ export async function POST(req: NextRequest) {
       } catch (sirenErr) {
         console.warn("[Broadcast API] Supabase siren insert fallback:", sirenErr);
       }
+
+      // Forward to FastAPI backend for Firebase FCM Push Notification broadcast
+      try {
+        fetch(`http://127.0.0.1:8000/api/alert/broadcast?zone_id=${encodeURIComponent(newAlert.zone_id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }).catch(() => {});
+      } catch {}
     }
 
     return NextResponse.json(

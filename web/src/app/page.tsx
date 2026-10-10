@@ -12,7 +12,6 @@ import CitizenTrackingMatrix from "@/components/Dashboard/CitizenTrackingMatrix"
 import EmergencyResponderGrid from "@/components/Dashboard/EmergencyResponderGrid";
 import BuildingCollapsePanel from "@/components/Dashboard/BuildingCollapsePanel";
 import LandslideConsensusPanel from "@/components/Dashboard/LandslideConsensusPanel";
-import ScrollVideoHero from "@/components/CinematicHero/ScrollVideoHero";
 import MobilePairingModal from "@/components/Dashboard/MobilePairingModal";
 import RegionalAlertBroadcastModal from "@/components/Dashboard/RegionalAlertBroadcastModal";
 import SafeRouteGuidelineModal from "@/components/Dashboard/SafeRouteGuidelineModal";
@@ -523,22 +522,8 @@ export default function NationalSentinelPage() {
         </div>
       )}
 
-      {/* Cinematic Hero Section with Fixed & Smooth Video Scrubbing */}
-      <div className="relative z-10">
-        <ScrollVideoHero
-          onEnterCommandCenter={() => {
-            const lenis = (window as any).__lenis;
-            if (lenis) {
-              lenis.scrollTo('#sentinel-overview', { duration: 1.2 });
-            } else {
-              document.getElementById("sentinel-overview")?.scrollIntoView({ behavior: "smooth" });
-            }
-          }}
-        />
-      </div>
-
-      {/* Main Page Stage */}
-      <div id="sentinel-overview" className="relative z-10 min-h-screen flex flex-col bg-transparent">
+      {/* Main Page Stage — Instant Direct Access with Standard Responsive Scrollbar */}
+      <div id="sentinel-overview" className="relative z-10 min-h-screen flex flex-col bg-transparent overflow-y-auto">
         <Header
           selectedZone={selectedZone}
           onSelectZone={setSelectedZone}

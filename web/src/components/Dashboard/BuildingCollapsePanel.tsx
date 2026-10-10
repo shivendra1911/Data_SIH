@@ -103,7 +103,7 @@ export default function BuildingCollapsePanel({
       </div>
 
       {/* Clusters List */}
-      <div className="p-4 space-y-3 max-h-[360px] overflow-y-auto flex-1">
+      <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar flex-1">
         {clusters.length === 0 ? (
           <div className="p-8 text-center text-white/40 text-xs">
             No structural collapse incidents detected in monitored sectors. Kinetic sentinels active.

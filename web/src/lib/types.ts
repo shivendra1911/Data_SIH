@@ -37,7 +37,7 @@ export interface HydrographPoint {
 
 export interface PreventiveDirective {
   id: string;
-  category: "DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER";
+  category: "DAM" | "HIGHWAY" | "PILGRIMAGE" | "POWER" | "CAMPUS" | "BARRAGE";
   title: string;
   action: string;
   priority: "IMMEDIATE" | "ADVISORY" | "STANDBY";

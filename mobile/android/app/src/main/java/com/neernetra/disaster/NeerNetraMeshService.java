@@ -34,13 +34,20 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * NeerNetraMeshService
@@ -76,6 +83,16 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     private static PowerManager.WakeLock activeScreenLock;
     private static MediaPlayer emergencyPlayer;
     private long lastSensorTelemetryEmitTime = 0;
+
+    // ── 24/7 Native Background Siren Polling Subsystem ───────────────────────
+    private volatile boolean isSirenPollerRunning = false;
+    private Thread sirenPollerThread = null;
+    private static volatile String lastHandledSirenTimestamp = "";
+    private static volatile String lastSilencedSirenTimestamp = "";
+    private static volatile boolean isNativeSirenSounding = false;
+
+    private static final String SUPABASE_REST_URL = "https://nratutjgjodkbysxyxem.supabase.co/rest/v1";
+    private static final String SUPABASE_ANON_KEY = "sb_publishable_sqCaR-QnTPSE2PVW3FmCtg_AKwBWJpN";
 
     // ── Native Hardware Sensor Sentinel Subsystem ──────────────────────────
     private SensorManager sensorManager;
@@ -225,6 +242,9 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             Log.w(TAG, "Could not start watchdog service: " + e.getMessage());
         }
 
+        // Start 24/7 Native Background Siren Poller loop
+        startNativeSirenPollLoop();
+
         // Start 10-minute periodic watchdog
         watchdogHandler.postDelayed(watchdogRunnable, 10 * 60 * 1000);
     }
@@ -239,6 +259,8 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             } else if (ACTION_DECLINE_CALL.equals(action)) {
                 Log.i(TAG, "[MeshService] ACTION_DECLINE_CALL received, stopping alarm and cancelling notification");
                 stopEmergencyAlarm();
+                lastSilencedSirenTimestamp = lastHandledSirenTimestamp;
+                isNativeSirenSounding = false;
                 NeerNetraConnectionService.rejectCall();
                 NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm != null) {
@@ -370,6 +392,11 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     @Override
     public void onDestroy() {
         Log.i(TAG, "[MeshService] Service destroying, releasing wake locks");
+        isSirenPollerRunning = false;
+        if (sirenPollerThread != null) {
+            try { sirenPollerThread.interrupt(); } catch (Exception ignored) {}
+            sirenPollerThread = null;
+        }
         watchdogHandler.removeCallbacks(watchdogRunnable);
         try {
             unregisterReceiver(bluetoothStateReceiver);
@@ -452,7 +479,7 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                     PowerManager.ON_AFTER_RELEASE,
                     "NeerNetra:ScreenWakeUpLock"
                 );
-                screenLock.acquire(8000); // 8 seconds screen wake (prevents 20s hang)
+                screenLock.acquire(15000); // 15 seconds screen wake for emergency siren
                 activeScreenLock = screenLock;
             }
 
@@ -1049,5 +1076,232 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
         Log.i(TAG, "⚠️ [Native Barometer Sentinel] Rapid 3-hour pressure drop detected: " + dropHpa + " hPa (Current: " + currentHpa + " hPa). Dispatching telemetry to React Native bridge (no siren).");
         // Notify React Native bridge (no local siren or call notification)
         NeerNetraGattModule.notifyNativeStormEvent(dropHpa, currentHpa);
+    }
+
+    // ── Native 24/7 Background Siren Poller Subsystem ─────────────────────────
+    private void startNativeSirenPollLoop() {
+        if (isSirenPollerRunning) return;
+        isSirenPollerRunning = true;
+
+        sirenPollerThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Log.i(TAG, "🚨 [MeshService Native Siren Poller] Started 24/7 background siren listener loop");
+                while (isSirenPollerRunning) {
+                    try {
+                        pollSirenEndpoints();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "[Native Siren Poller] Tick error: " + t.getMessage());
+                    }
+
+                    try {
+                        Thread.sleep(3000); // Poll every 3.0 seconds
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
+                }
+                Log.i(TAG, "🚨 [MeshService Native Siren Poller] Loop stopped");
+            }
+        }, "NeerNetra-NativeSirenPoller");
+        sirenPollerThread.setDaemon(true);
+        sirenPollerThread.start();
+    }
+
+    private void pollSirenEndpoints() {
+        boolean handled = false;
+
+        // 1. Try local Wi-Fi Next.js Web Portal: http://192.168.0.185:3000/api/mobile/siren-dispatch
+        String[] localUrls = new String[]{
+            "http://192.168.0.185:3000/api/mobile/siren-dispatch",
+            "http://10.0.2.2:3000/api/mobile/siren-dispatch",
+            "http://127.0.0.1:3000/api/mobile/siren-dispatch",
+            "https://data-sih.vercel.app/api/mobile/siren-dispatch"
+        };
+
+        for (String localUrl : localUrls) {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(localUrl);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                conn.setRequestProperty("Accept", "application/json");
+
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    br.close();
+
+                    JSONObject root = new JSONObject(sb.toString());
+                    boolean isActive = root.optBoolean("is_siren_active_on_mobile", false);
+                    if (isActive) {
+                        JSONObject latest = root.optJSONObject("latest_dispatch");
+                        if (latest == null) {
+                            JSONArray arr = root.optJSONArray("active_dispatches");
+                            if (arr != null && arr.length() > 0) {
+                                latest = arr.optJSONObject(0);
+                            }
+                        }
+
+                        if (latest != null) {
+                            String dispatchedAt = latest.optString("dispatched_at", "");
+                            String zoneName = latest.optString("zone_name", "Emergency Zone");
+                            String zoneId = latest.optString("zone_id", "all_sectors");
+                            String msg = latest.optString("emergency_message", "EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!");
+
+                            if (!dispatchedAt.isEmpty() && isTimestampRecent(dispatchedAt, 10 * 60 * 1000L)) {
+                                if (!dispatchedAt.equals(lastSilencedSirenTimestamp)) {
+                                    if (!dispatchedAt.equals(lastHandledSirenTimestamp) || !isNativeSirenSounding) {
+                                        lastHandledSirenTimestamp = dispatchedAt;
+                                        isNativeSirenSounding = true;
+                                        triggerNativeEmergencySiren(zoneName, msg, zoneId, dispatchedAt);
+                                    }
+                                    handled = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        // Web portal reports no active siren
+                        if (isNativeSirenSounding && !lastHandledSirenTimestamp.isEmpty()) {
+                            isNativeSirenSounding = false;
+                            stopEmergencyAlarm();
+                        }
+                        handled = true;
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }
+
+        if (handled) return;
+
+        // 2. Fallback: Query Supabase Cloud REST directly
+        HttpURLConnection supaConn = null;
+        try {
+            URL url = new URL(SUPABASE_REST_URL + "/sos_alerts?device_id=eq.ADMIN_SIREN_DISPATCH&order=created_at.desc&limit=1");
+            supaConn = (HttpURLConnection) url.openConnection();
+            supaConn.setRequestMethod("GET");
+            supaConn.setConnectTimeout(2500);
+            supaConn.setReadTimeout(2500);
+            supaConn.setRequestProperty("apikey", SUPABASE_ANON_KEY);
+            supaConn.setRequestProperty("Authorization", "Bearer " + SUPABASE_ANON_KEY);
+            supaConn.setRequestProperty("Accept", "application/json");
+
+            int code = supaConn.getResponseCode();
+            if (code == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(supaConn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) {
+                    sb.append(line);
+                }
+                br.close();
+
+                JSONArray arr = new JSONArray(sb.toString());
+                if (arr.length() > 0) {
+                    JSONObject latest = arr.getJSONObject(0);
+                    String status = latest.optString("status", "");
+                    String createdAt = latest.optString("created_at", "");
+
+                    if ("ACTIVE_SIREN".equalsIgnoreCase(status)) {
+                        if (!createdAt.isEmpty() && isTimestampRecent(createdAt, 10 * 60 * 1000L)) {
+                            if (!createdAt.equals(lastSilencedSirenTimestamp)) {
+                                if (!createdAt.equals(lastHandledSirenTimestamp) || !isNativeSirenSounding) {
+                                    String zoneName = "Emergency Zone";
+                                    String zoneId = "universal";
+                                    String msg = "EMERGENCY CIVIL DEFENSE ALARM ACTIVATED! Evacuate immediately uphill!";
+
+                                    String notesStr = latest.optString("notes", "");
+                                    if (!notesStr.isEmpty()) {
+                                        try {
+                                            JSONObject nObj = new JSONObject(notesStr);
+                                            zoneName = nObj.optString("zone_name", zoneName);
+                                            zoneId = nObj.optString("zone_id", zoneId);
+                                            msg = nObj.optString("message", msg);
+                                        } catch (Exception ignored) {}
+                                    }
+
+                                    lastHandledSirenTimestamp = createdAt;
+                                    isNativeSirenSounding = true;
+                                    triggerNativeEmergencySiren(zoneName, msg, zoneId, createdAt);
+                                }
+                            }
+                        }
+                    } else if ("HALTED_SIREN".equalsIgnoreCase(status) || "SILENCED".equalsIgnoreCase(status)) {
+                        if (isNativeSirenSounding) {
+                            isNativeSirenSounding = false;
+                            stopEmergencyAlarm();
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (supaConn != null) supaConn.disconnect();
+        }
+    }
+
+    private void triggerNativeEmergencySiren(String zoneName, String message, String zoneId, String timestamp) {
+        Log.w(TAG, "🚨🚨🚨 [MeshService Native Siren] ACTIVATED! Zone=" + zoneName + " | Msg=" + message);
+        Bundle extras = new Bundle();
+        extras.putString("title", "🚨 CIVIL DEFENSE EMERGENCY SIREN");
+        extras.putString("message", zoneName + ": " + message);
+        extras.putString("emergency_type", "SIREN");
+        extras.putString("zone_id", zoneId);
+        extras.putString("dispatched_at", timestamp);
+
+        wakeScreenAndShowNotification(
+            this,
+            "🚨 CIVIL DEFENSE EMERGENCY SIREN",
+            zoneName + ": " + message,
+            "SIREN",
+            extras
+        );
+        playEmergencyAlarm(this);
+    }
+
+    private static boolean isTimestampRecent(String isoTimestamp, long maxAgeMs) {
+        if (isoTimestamp == null || isoTimestamp.isEmpty()) return false;
+        try {
+            String cleaned = isoTimestamp;
+            if (cleaned.contains("+")) {
+                cleaned = cleaned.substring(0, cleaned.indexOf("+"));
+            }
+            if (cleaned.endsWith("Z")) {
+                cleaned = cleaned.substring(0, cleaned.length() - 1);
+            }
+            int dotIdx = cleaned.indexOf(".");
+            if (dotIdx > 0 && cleaned.length() > dotIdx + 4) {
+                cleaned = cleaned.substring(0, dotIdx + 4);
+            }
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US);
+            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+            java.util.Date parsed = sdf.parse(cleaned);
+            if (parsed != null) {
+                long age = System.currentTimeMillis() - parsed.getTime();
+                return age >= -120000 && age < maxAgeMs;
+            }
+        } catch (Exception e) {
+            try {
+                SimpleDateFormat sdf2 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
+                sdf2.setTimeZone(TimeZone.getTimeZone("UTC"));
+                java.util.Date parsed = sdf2.parse(isoTimestamp.substring(0, 19));
+                if (parsed != null) {
+                    long age = System.currentTimeMillis() - parsed.getTime();
+                    return age >= -120000 && age < maxAgeMs;
+                }
+            } catch (Exception ignored) {}
+        }
+        return true;
     }
 }
