@@ -520,6 +520,7 @@ class LocationSyncPayload(BaseModel):
     battery_level: Optional[float] = None
     last_synced_at: str
     zone_id: Optional[str] = "chamoli_01"
+    mesh_hops: Optional[int] = 0
 
 class RescueDispatchPayload(BaseModel):
     cluster_id: int
@@ -1617,6 +1618,7 @@ def sync_device_location(payload: LocationSyncPayload, background_tasks: Backgro
             "last_synced_at": payload.last_synced_at,
             "zone_id": resolved_zone,
             "status": curr_status,
+            "mesh_hops": payload.mesh_hops if payload.mesh_hops is not None else 0,
             "server_received_at": datetime.now(timezone.utc).isoformat()
         }
         location_history_db[payload.device_uuid] = location_entry

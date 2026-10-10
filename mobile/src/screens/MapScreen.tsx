@@ -100,6 +100,43 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     }
   }, [isRedZone, targetHavenCoords]);
 
+  // Synchronize mesh peers (including multi-hop relays) onto the offline Leaflet radar
+  useEffect(() => {
+    if (!peers || peers.length === 0) return;
+    const meshCitizens: NearbyCitizen[] = peers.map((p, idx) => {
+      const hops = p.hopCount || 1;
+      const dist = p.distanceMeters || (hops === 1 ? 45 : hops * 60);
+      const angle = (idx * (2 * Math.PI / Math.max(1, peers.length)));
+      const latOffset = (dist * Math.cos(angle)) / 111000;
+      const lngOffset = (dist * Math.sin(angle)) / (111000 * Math.cos((currentLat * Math.PI) / 180));
+      return {
+        id: p.id,
+        name: p.name,
+        phone: hops > 1 ? `Relayed Mesh (${hops} Hops via ${p.nextHop || 'Mesh'})` : 'Direct BLE Mesh',
+        lat: p.lat || (currentLat + latOffset),
+        lng: p.lng || (currentLng + lngOffset),
+        distance_meters: dist,
+        battery_level: p.batteryLevel ?? 85,
+        safety_status: p.status === 'SOS' ? 'DANGER' : (p.status === 'HELPING' ? 'HELPING' : 'SAFE'),
+        status: p.status || 'SAFE',
+        location_name: p.location || (hops > 1 ? `Multi-Hop Relay (${hops} hops)` : 'Direct Mesh Range'),
+        hop_count: hops,
+        next_hop: p.nextHop,
+      };
+    });
+
+    setNearbyCitizens((prev) => {
+      const merged = [...meshCitizens];
+      for (const c of prev) {
+        if (!merged.some((m) => m.id === c.id || m.name === c.name)) {
+          merged.push(c);
+        }
+      }
+      sendCitizensToMap(merged);
+      return merged;
+    });
+  }, [peers, currentLat, currentLng]);
+
   // Live GPS tracking state
   const [liveCoords, setLiveCoords] = useState<{
     latitude: number;
@@ -777,6 +814,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           '<div style="font-size:10px; color:#94a3b8;">' + c.location_name + '</div>' +
           '<div style="font-size:10px; color:' + color + '; font-weight:700; margin-top:2px;">Status: ' + c.safety_status + '</div>' +
           '<div style="font-size:10px; color:#e2e8f0;">Distance: ' + c.distance_meters + 'm | Battery: ' + c.battery_level + '%</div>' +
+          (c.hop_count && c.hop_count > 1 ? '<div style="font-size:10px; color:#fde047; font-weight:700;">📡 ' + c.hop_count + ' Hops Relay' + (c.next_hop ? ' via ' + c.next_hop : '') + '</div>' : '<div style="font-size:10px; color:#86efac; font-weight:700;">🟢 Direct 1 Hop</div>') +
           '<div style="font-size:10px; color:#38bdf8; font-weight:700;">Phone: ' + c.phone + '</div>' +
         '</div>';
         cm.bindPopup(pop);

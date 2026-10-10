@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
           battery_pct: Number(dev.battery_level) || 85,
           status: dev.status === "SOS" ? "SOS" : "SAFE",
           sos_type: dev.status === "SOS" ? "MOBILE DISTRESS" : "LOCATION_TRACKING",
-          mesh_hops: 0,
+          mesh_hops: Number(dev.mesh_hops) || 0,
           zone_id: dev.zone_id || "chamoli_01",
           medical_distress: "NONE",
         };
@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
           battery_pct: Number(alert.battery_level) || 84,
           status: isExplicitSos ? "SOS" : "SAFE",
           sos_type: parsedSosType,
-          mesh_hops: 0,
+          mesh_hops: Number(alert.mesh_hops || alert.hops) || 0,
           zone_id: "chamoli_01",
           medical_distress: parsedMedical as any,
         };

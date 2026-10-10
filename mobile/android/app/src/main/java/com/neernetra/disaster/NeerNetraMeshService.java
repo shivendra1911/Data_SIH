@@ -205,6 +205,14 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 boolean isIgnoring = pm.isIgnoringBatteryOptimizations(getPackageName());
                 Log.i(TAG, "[MeshService] Battery optimization exemption status: " + (isIgnoring ? "EXEMPT (Unrestricted 24/7)" : "NOT EXEMPT (Doze restrictions active)"));
+                if (!isIgnoring) {
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        intent.setData(android.net.Uri.parse("package:" + getPackageName()));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
+                }
             }
         } catch (Exception ignored) {}
 

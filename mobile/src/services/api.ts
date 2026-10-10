@@ -377,6 +377,8 @@ export interface NearbyCitizen {
   status: string;
   location_name: string;
   last_synced_at?: string;
+  hop_count?: number;
+  next_hop?: string;
 }
 
 export const fetchNearbyCitizens = async (lat?: number, lng?: number): Promise<NearbyCitizen[]> => {

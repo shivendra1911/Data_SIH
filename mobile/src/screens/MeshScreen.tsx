@@ -46,6 +46,34 @@ const maskPhone = (phone?: string) => {
   return clean.substring(0, 3) + ' ••••• ••' + clean.substring(clean.length - 2);
 };
 
+const getHopBadge = (peer: MeshPeer) => {
+  const hops = peer.hopCount || 1;
+  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 60);
+  const viaNode = peer.nextHop ? ` via ${peer.nextHop}` : '';
+  if (hops <= 1) {
+    return {
+      label: `🟢 Direct • ~${dist}m`,
+      bg: '#ecfdf5',
+      border: '#10b981',
+      text: '#047857',
+    };
+  } else if (hops === 2) {
+    return {
+      label: `🟡 Relayed • 2 hops${viaNode} • ~${dist}m`,
+      bg: '#fefce8',
+      border: '#eab308',
+      text: '#a16207',
+    };
+  } else {
+    return {
+      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${dist}m`,
+      bg: '#eff6ff',
+      border: '#3b82f6',
+      text: '#1d4ed8',
+    };
+  }
+};
+
 // ─────────────────────────────────────────────
 // Modal: BLE Message — show peer list
 // ─────────────────────────────────────────────
@@ -121,35 +149,41 @@ const BLEMessageModal: React.FC<{
                   data={displayPeers}
                   keyExtractor={(p) => p.id}
                   style={modalStyles.peerList}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        modalStyles.peerRow,
-                        selectedPeer?.id === item.id && modalStyles.peerRowSelected,
-                      ]}
-                      onPress={() =>
-                        setSelectedPeer(selectedPeer?.id === item.id ? null : item)
-                      }
-                      activeOpacity={0.8}
-                    >
-                      <View style={modalStyles.peerAvatar}>
-                        <Text style={modalStyles.peerInitial}>
-                          {item.name.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={modalStyles.peerName}>{item.name}</Text>
-                        <Text style={modalStyles.peerMeta}>
-                          {item.distanceMeters ?? '?'}m away • {item.signalStrength} dBm • {item.status}
-                        </Text>
-                      </View>
-                      {selectedPeer?.id === item.id && (
-                        <View style={modalStyles.selectedBadge}>
-                          <Text style={modalStyles.selectedBadgeText}>Selected</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                      renderItem={({ item }) => {
+                        const hop = getHopBadge(item);
+                        return (
+                          <TouchableOpacity
+                            style={[
+                              modalStyles.peerRow,
+                              selectedPeer?.id === item.id && modalStyles.peerRowSelected,
+                            ]}
+                            onPress={() =>
+                              setSelectedPeer(selectedPeer?.id === item.id ? null : item)
+                            }
+                            activeOpacity={0.8}
+                          >
+                            <View style={modalStyles.peerAvatar}>
+                              <Text style={modalStyles.peerInitial}>
+                                {item.name.charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={modalStyles.peerName}>{item.name}</Text>
+                              <View style={[modalStyles.peerHopBadge, { backgroundColor: hop.bg, borderColor: hop.border }]}>
+                                <Text style={[modalStyles.peerHopBadgeText, { color: hop.text }]}>{hop.label}</Text>
+                              </View>
+                              <Text style={modalStyles.peerMeta}>
+                                {item.signalStrength} dBm • {item.status || 'SAFE'}
+                              </Text>
+                            </View>
+                            {selectedPeer?.id === item.id && (
+                              <View style={modalStyles.selectedBadge}>
+                                <Text style={modalStyles.selectedBadgeText}>Selected</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
                 />
               )}
 
@@ -353,27 +387,33 @@ const BLECallModal: React.FC<{
                       data={displayPeers}
                       keyExtractor={(p) => p.id}
                       style={modalStyles.peerList}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={modalStyles.peerRow}
-                          onPress={() => handleBLECall(item)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={[modalStyles.peerAvatar, { backgroundColor: '#064e3b' }]}>
-                            <Mic size={14} color="#34d399" />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={modalStyles.peerName}>{item.name}</Text>
-                            <Text style={modalStyles.peerMeta}>
-                              {item.distanceMeters ?? '?'}m away • {item.signalStrength} dBm • {item.status}
-                            </Text>
-                          </View>
-                          <View style={modalStyles.callBadge}>
-                            <PhoneCall size={14} color="#34d399" />
-                            <Text style={modalStyles.callBadgeText}>Walkie</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
+                      renderItem={({ item }) => {
+                        const hop = getHopBadge(item);
+                        return (
+                          <TouchableOpacity
+                            style={modalStyles.peerRow}
+                            onPress={() => handleBLECall(item)}
+                            activeOpacity={0.8}
+                          >
+                            <View style={[modalStyles.peerAvatar, { backgroundColor: '#064e3b' }]}>
+                              <Mic size={14} color="#34d399" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={modalStyles.peerName}>{item.name}</Text>
+                              <View style={[modalStyles.peerHopBadge, { backgroundColor: hop.bg, borderColor: hop.border }]}>
+                                <Text style={[modalStyles.peerHopBadgeText, { color: hop.text }]}>{hop.label}</Text>
+                              </View>
+                              <Text style={modalStyles.peerMeta}>
+                                {item.signalStrength} dBm • {item.status || 'SAFE'}
+                              </Text>
+                            </View>
+                            <View style={modalStyles.callBadge}>
+                              <PhoneCall size={14} color="#34d399" />
+                              <Text style={modalStyles.callBadgeText}>Call</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
                     />
                   )}
                 </>
@@ -763,6 +803,18 @@ const modalStyles = StyleSheet.create({
     color: '#707A84',
     fontSize: 11,
     marginTop: 2,
+  },
+  peerHopBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginVertical: 2,
+  },
+  peerHopBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
   },
   selectedBadge: {
     backgroundColor: '#1E2124',

@@ -28,6 +28,34 @@ const statusLabel = (peer: MeshPeer) => {
   return 'HELPING';
 };
 
+const getHopBadgeInfo = (peer: MeshPeer) => {
+  const hops = peer.hopCount || 1;
+  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 60);
+  const viaNode = peer.nextHop ? ` via ${peer.nextHop}` : '';
+  if (hops <= 1) {
+    return {
+      label: `🟢 Direct • ~${dist}m`,
+      bg: '#ecfdf5',
+      border: '#10b981',
+      text: '#047857',
+    };
+  } else if (hops === 2) {
+    return {
+      label: `🟡 Relayed • 2 hops${viaNode} • ~${dist}m`,
+      bg: '#fefce8',
+      border: '#eab308',
+      text: '#a16207',
+    };
+  } else {
+    return {
+      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${dist}m`,
+      bg: '#eff6ff',
+      border: '#3b82f6',
+      text: '#1d4ed8',
+    };
+  }
+};
+
 export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
   onCallVictim,
   onMessageVictim,
@@ -142,6 +170,16 @@ export const NearbyVictimsHelpCard: React.FC<NearbyVictimsHelpCardProps> = ({
                     <Text style={[styles.statusText, { color }]}>{statusLabel(peer)}</Text>
                   </View>
                 </View>
+
+                {/* Hop Relay Badge */}
+                {(() => {
+                  const hopInfo = getHopBadgeInfo(peer);
+                  return (
+                    <View style={[styles.hopBadge, { backgroundColor: hopInfo.bg, borderColor: hopInfo.border }]}>
+                      <Text style={[styles.hopBadgeText, { color: hopInfo.text }]}>{hopInfo.label}</Text>
+                    </View>
+                  );
+                })()}
 
                 {/* Role */}
                 {peer.role && (
@@ -378,5 +416,18 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 11,
     fontWeight: '800',
+  },
+  hopBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginVertical: 4,
+  },
+  hopBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
 });

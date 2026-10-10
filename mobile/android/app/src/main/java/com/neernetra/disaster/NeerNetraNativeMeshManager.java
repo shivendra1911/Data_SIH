@@ -20,6 +20,7 @@ import com.facebook.react.common.LifecycleState;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -83,6 +84,91 @@ public class NeerNetraNativeMeshManager {
             scanRecycleHandler.postDelayed(this, 10 * 60 * 1000);
         }
     };
+
+    // ── Native Distance-Vector Routing Table & Gossip Engine ──────────────
+    public static class MeshRoute {
+        public String peerId;
+        public String name;
+        public int hopCount;
+        public String nextHop;
+        public long lastSeen;
+        public double lat;
+        public double lng;
+        public int battery;
+        public String status;
+    }
+
+    private final Map<String, MeshRoute> routingTable = new ConcurrentHashMap<>();
+
+    public Map<String, MeshRoute> getRoutingTable() {
+        return routingTable;
+    }
+
+    private final android.os.Handler gossipHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable gossipRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isRunning) {
+                broadcastGossipBeacon();
+            }
+            gossipHandler.postDelayed(this, 7000); // 7-second distance-vector gossip
+        }
+    };
+
+    public void broadcastGossipBeacon() {
+        try {
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "dev_node_" + Build.MODEL.replaceAll("[^a-zA-Z0-9]", ""));
+            String myNodeName = sp.getString("local_node_name", "Citizen [" + Build.MODEL + "]");
+
+            JSONObject payload = new JSONObject();
+            payload.put("id", myNodeId);
+            payload.put("name", myNodeName);
+            payload.put("battery", 85);
+            payload.put("lat", 27.6015);
+            payload.put("lng", 77.5975);
+            payload.put("isGossip", true);
+
+            long now = System.currentTimeMillis();
+            JSONArray neighborArray = new JSONArray();
+            for (MeshRoute route : routingTable.values()) {
+                if (now - route.lastSeen < 120000 && !route.peerId.equalsIgnoreCase(myNodeId)) {
+                    JSONObject n = new JSONObject();
+                    n.put("peer_id", route.peerId);
+                    n.put("name", route.name);
+                    n.put("hop_count", route.hopCount);
+                    n.put("next_hop_mac", route.nextHop);
+                    n.put("last_seen", route.lastSeen);
+                    n.put("lat", route.lat);
+                    n.put("lng", route.lng);
+                    n.put("battery", route.battery);
+                    n.put("status", route.status != null ? route.status : "SAFE");
+                    neighborArray.put(n);
+                }
+            }
+            payload.put("neighbors", neighborArray);
+
+            JSONObject envelope = new JSONObject();
+            String msgId = "gossip_" + now + "_" + myNodeId.substring(0, Math.min(6, myNodeId.length()));
+            envelope.put("t", 1); // BLEMsgType.HELLO
+            envelope.put("type", "GOSSIP");
+            envelope.put("m", msgId);
+            envelope.put("msg_id", msgId);
+            envelope.put("s", myNodeId);
+            envelope.put("origin_id", myNodeId);
+            envelope.put("d", "BROADCAST");
+            envelope.put("dest_id", "BROADCAST");
+            envelope.put("ttl", 5);
+            envelope.put("p", payload.toString());
+            envelope.put("neighbors", neighborArray);
+
+            byte[] bytes = envelope.toString().getBytes(StandardCharsets.UTF_8);
+            String b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+            notifyAllClients(b64);
+        } catch (Exception e) {
+            Log.w(TAG, "broadcastGossipBeacon error: " + e.getMessage());
+        }
+    }
 
     private NeerNetraNativeMeshManager(Context context) {
         this.appContext = context.getApplicationContext();
@@ -173,6 +259,9 @@ public class NeerNetraNativeMeshManager {
 
             scanRecycleHandler.removeCallbacks(scanRecycleRunnable);
             scanRecycleHandler.postDelayed(scanRecycleRunnable, 10 * 60 * 1000);
+
+            gossipHandler.removeCallbacks(gossipRunnable);
+            gossipHandler.postDelayed(gossipRunnable, 3000);
 
             isRunning = true;
             Log.i(TAG, "24/7 Native BLE Mesh Engine successfully started!");
@@ -745,9 +834,41 @@ public class NeerNetraNativeMeshManager {
 
             JSONObject packet = new JSONObject(decoded);
             int type = packet.optInt("t", -1);
+            if (type == -1 && packet.has("type")) {
+                String typeStr = packet.optString("type", "");
+                if ("MESH_CALL_REQ".equalsIgnoreCase(typeStr) || "CALL_REQUEST".equalsIgnoreCase(typeStr) || "CALL_REQ".equalsIgnoreCase(typeStr)) {
+                    type = 7;
+                } else if ("CALL_ACCEPT".equalsIgnoreCase(typeStr)) {
+                    type = 8;
+                } else if ("CALL_DECLINE".equalsIgnoreCase(typeStr)) {
+                    type = 9;
+                } else if ("CALL_END".equalsIgnoreCase(typeStr)) {
+                    type = 10;
+                } else if ("VOICE_BURST".equalsIgnoreCase(typeStr) || "VOICE".equalsIgnoreCase(typeStr)) {
+                    type = 11;
+                } else if ("HELLO".equalsIgnoreCase(typeStr) || "GOSSIP".equalsIgnoreCase(typeStr) || "BEACON".equalsIgnoreCase(typeStr)) {
+                    type = 1;
+                } else if ("CHAT".equalsIgnoreCase(typeStr)) {
+                    type = 2;
+                } else if ("SOS".equalsIgnoreCase(typeStr)) {
+                    type = 3;
+                } else if ("SAFE".equalsIgnoreCase(typeStr)) {
+                    type = 4;
+                }
+            }
+
             String msgId = packet.optString("m", "");
+            if (msgId.isEmpty()) msgId = packet.optString("msg_id", "");
+            if (msgId.isEmpty()) msgId = packet.optString("call_id", "");
+
             String senderId = packet.optString("s", "");
-            String targetId = packet.optString("d", "BROADCAST");
+            if (senderId.isEmpty()) senderId = packet.optString("origin_id", "");
+            if (senderId.isEmpty()) senderId = packet.optString("from", "");
+
+            String targetId = packet.optString("d", "");
+            if (targetId.isEmpty()) targetId = packet.optString("dest_id", "");
+            if (targetId.isEmpty()) targetId = packet.optString("to", "BROADCAST");
+
             int ttl = packet.optInt("ttl", 1);
 
             if (msgId.isEmpty()) {
@@ -756,6 +877,7 @@ public class NeerNetraNativeMeshManager {
 
             // Loop Detection: Suppress duplicate packet
             if (seenMessageIds.containsKey(msgId)) {
+                Log.i(TAG, "🔁 [MeshDeduplication] Dropping duplicate packet msg_id=" + msgId);
                 return;
             }
             seenMessageIds.put(msgId, now);
@@ -763,11 +885,61 @@ public class NeerNetraNativeMeshManager {
             // Ignore our own echoes
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
             String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
             if (!myNodeId.isEmpty() && senderId.equalsIgnoreCase(myNodeId)) {
                 return;
             }
 
             Log.i(TAG, "📥 [MeshPacket] Ingested type=" + type + " id=" + msgId + " from=" + senderId + " target=" + targetId + " ttl=" + ttl + " via=" + fromTransportOrDevice);
+
+            // 0. Update native distance-vector routing table
+            if (!senderId.isEmpty()) {
+                MeshRoute directRoute = routingTable.get(senderId);
+                if (directRoute == null) directRoute = new MeshRoute();
+                directRoute.peerId = senderId;
+                directRoute.name = packet.optString("name", directRoute.name != null ? directRoute.name : "Citizen [" + senderId.substring(Math.max(0, senderId.length() - 4)) + "]");
+                directRoute.hopCount = 1;
+                directRoute.nextHop = senderId;
+                directRoute.lastSeen = now;
+                directRoute.status = "SAFE";
+                routingTable.put(senderId, directRoute);
+            }
+
+            // Parse gossip neighbors table if present
+            JSONArray neighbors = null;
+            if (packet.has("neighbors")) {
+                neighbors = packet.optJSONArray("neighbors");
+            } else if (packet.has("p")) {
+                try {
+                    String pRaw = packet.getString("p");
+                    if (pRaw.startsWith("{")) {
+                        JSONObject pObj = new JSONObject(pRaw);
+                        if (pObj.has("neighbors")) neighbors = pObj.optJSONArray("neighbors");
+                    }
+                } catch (Exception ignored) {}
+            }
+            if (neighbors != null) {
+                for (int i = 0; i < neighbors.length(); i++) {
+                    JSONObject n = neighbors.optJSONObject(i);
+                    if (n == null) continue;
+                    String nId = n.optString("peer_id", n.optString("id", ""));
+                    if (nId.isEmpty() || nId.equalsIgnoreCase(myNodeId)) continue;
+                    int nHop = n.optInt("hop_count", n.optInt("hops", 1)) + 1;
+                    MeshRoute relayedRoute = routingTable.get(nId);
+                    if (relayedRoute == null) relayedRoute = new MeshRoute();
+                    relayedRoute.peerId = nId;
+                    relayedRoute.name = n.optString("name", relayedRoute.name != null ? relayedRoute.name : "Citizen [" + nId.substring(Math.max(0, nId.length() - 4)) + "]");
+                    relayedRoute.hopCount = nHop;
+                    relayedRoute.nextHop = senderId;
+                    relayedRoute.lastSeen = now;
+                    relayedRoute.lat = n.optDouble("lat", 0.0);
+                    relayedRoute.lng = n.optDouble("lng", 0.0);
+                    relayedRoute.battery = n.optInt("battery", 80);
+                    relayedRoute.status = n.optString("status", "SAFE");
+                    routingTable.put(nId, relayedRoute);
+                    Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + (nHop * 60) + "m)");
+                }
+            }
 
             // 1. WhatsApp-Style Background Wakeup / Alert Check (even if app is closed!)
             checkAndTriggerWhatsAppCallOrAlert(fromTransportOrDevice, fullBytes);
@@ -782,7 +954,7 @@ public class NeerNetraNativeMeshManager {
             // 3. Multi-Hop Managed Relay (Linked List Forwarding across BLE & Wi-Fi)
             // Relay if TTL > 1 and destination is not strictly and only self
             boolean isStrictlyForMe = (!targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId))
-                    && (!myNodeId.isEmpty() && targetId.equalsIgnoreCase(myNodeId));
+                    && (!myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId) || targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me")));
 
             if (ttl > 1 && !isStrictlyForMe) {
                 int newTtl = ttl - 1;
@@ -790,7 +962,9 @@ public class NeerNetraNativeMeshManager {
                 byte[] relayedBytes = packet.toString().getBytes(StandardCharsets.UTF_8);
                 String relayedBase64 = android.util.Base64.encodeToString(relayedBytes, android.util.Base64.NO_WRAP);
 
-                Log.i(TAG, "🔁 [MultiHopRelay] Forwarding packet " + msgId + " (type=" + type + ", TTL " + ttl + "->" + newTtl + ") across BLE Centrals & Wi-Fi to reach " + targetId);
+                MeshRoute route = routingTable.get(targetId);
+                String nextHop = route != null ? route.nextHop : targetId;
+                Log.i(TAG, "🔁 [MultiHopRelay] Forwarding packet " + msgId + " (type=" + type + ", TTL " + ttl + "->" + newTtl + ") via next_hop=" + nextHop + " across BLE Centrals & Wi-Fi UDP 8765 to reach " + targetId);
 
                 // Relay over BLE GATT notify to all Centrals
                 notifyAllClients(relayedBase64);
@@ -829,7 +1003,8 @@ public class NeerNetraNativeMeshManager {
             // ── Call End / Decline → dismiss IncomingCallActivity immediately ──
             boolean isCallEnd = decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
                                 decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9") ||
-                                decodedJson.contains("\"t\":\"10\"") || decodedJson.contains("\"t\":\"9\"");
+                                decodedJson.contains("\"t\":\"10\"") || decodedJson.contains("\"t\":\"9\"") ||
+                                decodedJson.contains("CALL_END") || decodedJson.contains("CALL_DECLINE");
             if (isCallEnd) {
                 Log.i(TAG, "📴 Remote CALL_END/DECLINE received — dismissing IncomingCallActivity immediately");
                 Intent dismissIntent = new Intent(IncomingCallActivity.ACTION_DISMISS_INCOMING_CALL);
@@ -844,9 +1019,11 @@ public class NeerNetraNativeMeshManager {
                 return;
             }
 
-            // ── Incoming Call Packet (t: 7) ──
+            // ── Incoming Call Packet (t: 7 or MESH_CALL_REQ) ──
             boolean isCall = decodedJson.contains("\"t\":7") || decodedJson.contains("\"t\": 7") ||
-                             decodedJson.contains("\"t\":\"7\"") || decodedJson.contains("\"t\": \"7\"");
+                             decodedJson.contains("\"t\":\"7\"") || decodedJson.contains("\"t\": \"7\"") ||
+                             decodedJson.contains("MESH_CALL_REQ") || decodedJson.contains("CALL_REQUEST") ||
+                             decodedJson.contains("CALL_REQ");
             if (isCall) {
                 String callerName = "Nearby Citizen";
                 String targetId = null;
@@ -855,15 +1032,21 @@ public class NeerNetraNativeMeshManager {
                                   decodedJson.contains("\"isGroupCall\": true");
                 try {
                     JSONObject jo = new JSONObject(decodedJson);
-                    if (jo.has("d")) {
-                        targetId = jo.optString("d");
-                    }
+                    if (jo.has("d")) targetId = jo.optString("d");
+                    if (targetId == null && jo.has("dest_id")) targetId = jo.optString("dest_id");
+                    if (targetId == null && jo.has("to")) targetId = jo.optString("to");
+
+                    if (jo.has("caller_name")) callerName = jo.getString("caller_name");
+                    else if (jo.has("name")) callerName = jo.getString("name");
+
                     if (jo.has("p")) {
                         String pStr = jo.getString("p");
-                        JSONObject p = new JSONObject(pStr);
-                        if (p.has("callerName")) callerName = p.getString("callerName");
-                        if (targetId == null && p.has("targetId")) targetId = p.getString("targetId");
-                        if (targetId == null && p.has("targetNodeId")) targetId = p.getString("targetNodeId");
+                        if (pStr.startsWith("{")) {
+                            JSONObject p = new JSONObject(pStr);
+                            if (p.has("callerName")) callerName = p.getString("callerName");
+                            if (targetId == null && p.has("targetId")) targetId = p.getString("targetId");
+                            if (targetId == null && p.has("targetNodeId")) targetId = p.getString("targetNodeId");
+                        }
                     }
                 } catch (Exception ignored) {}
 
@@ -874,7 +1057,8 @@ public class NeerNetraNativeMeshManager {
                     String myNodeName = sp.getString("local_node_name", "");
                     boolean matchesId = !myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId));
                     boolean matchesName = !myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName) || myNodeName.contains(targetId));
-                    if (!myNodeId.isEmpty() && !matchesId && !matchesName) {
+                    boolean matchesSelf = targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me");
+                    if (!myNodeId.isEmpty() && !matchesId && !matchesName && !matchesSelf) {
                         Log.i(TAG, "Private intercom call addressed to " + targetId + " (not us: id=" + myNodeId + ", name=" + myNodeName + "). Suppressing lock-screen wake.");
                         return;
                     }
@@ -963,6 +1147,7 @@ public class NeerNetraNativeMeshManager {
     public synchronized void stopMeshEngine() {
         try {
             scanRecycleHandler.removeCallbacks(scanRecycleRunnable);
+            gossipHandler.removeCallbacks(gossipRunnable);
             if (advertiser != null) advertiser.stopAdvertising(advertiseCallback);
             if (nativeScanner != null && nativeScanCallback != null && isScanningNative) {
                 try { nativeScanner.stopScan(nativeScanCallback); } catch (Exception ignored) {}

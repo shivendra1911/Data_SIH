@@ -114,9 +114,15 @@ function encodePacket(
   const m = msgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4));
   const envelope = {
     t: type,
+    type: type === BLEMsgType.CALL_REQUEST ? 'MESH_CALL_REQ' : (type === BLEMsgType.HELLO ? 'GOSSIP' : 'BLE_PACKET'),
     m,
+    msg_id: m,
+    call_id: type === BLEMsgType.CALL_REQUEST ? `call_${m}` : undefined,
     s: senderId.substring(0, 16),
+    origin_id: senderId,
     d: targetId || 'BROADCAST',
+    dest_id: targetId || 'BROADCAST',
+    path: [senderId, targetId || 'BROADCAST'],
     ttl,
     p: payload,
   };
@@ -149,14 +155,53 @@ function decodePacket(base64: string): {
     // 1. JSON envelope format (Modern robust)
     if (raw.startsWith('{') && raw.endsWith('}')) {
       const obj = JSON.parse(raw);
-      if (obj.t !== undefined && obj.m && obj.s) {
+      let type: BLEMsgType = BLEMsgType.HELLO;
+      if (obj.t !== undefined) {
+        type = obj.t as BLEMsgType;
+      } else if (obj.type) {
+        const typeStr = String(obj.type).toUpperCase();
+        if (typeStr === 'MESH_CALL_REQ' || typeStr === 'CALL_REQUEST' || typeStr === 'CALL_REQ') {
+          type = BLEMsgType.CALL_REQUEST;
+        } else if (typeStr === 'CALL_ACCEPT') {
+          type = BLEMsgType.CALL_ACCEPT;
+        } else if (typeStr === 'CALL_DECLINE') {
+          type = BLEMsgType.CALL_DECLINE;
+        } else if (typeStr === 'CALL_END') {
+          type = BLEMsgType.CALL_END;
+        } else if (typeStr === 'VOICE_BURST' || typeStr === 'VOICE') {
+          type = BLEMsgType.VOICE_BURST;
+        } else if (typeStr === 'GOSSIP' || typeStr === 'HELLO' || typeStr === 'BEACON') {
+          type = BLEMsgType.HELLO;
+        } else if (typeStr === 'CHAT') {
+          type = BLEMsgType.CHAT;
+        } else if (typeStr === 'SOS') {
+          type = BLEMsgType.SOS;
+        } else if (typeStr === 'SAFE') {
+          type = BLEMsgType.SAFE;
+        }
+      }
+
+      const msgId = obj.m || obj.msg_id || obj.call_id || `m_${Date.now()}`;
+      const senderId = obj.s || obj.origin_id || obj.from || '';
+      const targetId = obj.d || obj.dest_id || obj.to || 'BROADCAST';
+      const ttl = obj.ttl || 1;
+      let payload = '';
+      if (typeof obj.p === 'string') {
+        payload = obj.p;
+      } else if (obj.p !== undefined) {
+        payload = JSON.stringify(obj.p);
+      } else {
+        payload = raw;
+      }
+
+      if (senderId || obj.id || obj.neighbors) {
         return {
-          type: obj.t as BLEMsgType,
-          msgId: obj.m,
-          senderId: obj.s,
-          targetId: obj.d || 'BROADCAST',
-          ttl: obj.ttl || 1,
-          payload: typeof obj.p === 'string' ? obj.p : JSON.stringify(obj.p),
+          type,
+          msgId: String(msgId),
+          senderId: senderId || obj.id || 'unknown',
+          targetId: String(targetId),
+          ttl: Number(ttl),
+          payload,
         };
       }
     }
@@ -208,6 +253,7 @@ class NeerNetraBLEMesh {
   private isScanning: boolean = false;
   private isMeshStarted: boolean = false;
   private scanTimer: any = null;
+  private gossipTimer: any = null;
   private voiceBuffers: Map<string, { total: number; chunks: Map<number, string>; timer: any }> = new Map();
   private notifySlices: Map<string, { total: number; chunks: Map<number, string>; timer: any }> = new Map();
   private peripheralClients: Set<string> = new Set();
@@ -465,6 +511,54 @@ class NeerNetraBLEMesh {
 
     // 2. Start GATT Client scanning (Central mode)
     await this.startScanning();
+
+    // 3. Start 7-second periodic distance-vector gossip
+    if (this.gossipTimer) clearInterval(this.gossipTimer);
+    this.gossipTimer = setInterval(() => {
+      this.broadcastDistanceVectorGossip().catch(() => {});
+    }, 7000);
+  }
+
+  public async broadcastDistanceVectorGossip() {
+    try {
+      const neighborList: Array<{
+        peer_id: string;
+        name: string;
+        hop_count: number;
+        next_hop_mac: string;
+        last_seen: number;
+        status?: string;
+        lat?: number;
+        lng?: number;
+      }> = [];
+
+      this.activePeers.forEach((p) => {
+        if (p.id !== this.myDeviceId) {
+          neighborList.push({
+            peer_id: p.id,
+            name: p.name,
+            hop_count: p.hopCount || 1,
+            next_hop_mac: p.nextHop || p.id,
+            last_seen: Date.now(),
+            status: p.status || 'SAFE',
+            lat: p.lat,
+            lng: p.lng,
+          });
+        }
+      });
+
+      const payload = JSON.stringify({
+        id: this.myDeviceId,
+        name: this.myName || 'Citizen Node',
+        battery: 88,
+        lat: 27.6015,
+        lng: 77.5975,
+        neighbors: neighborList,
+        isGossip: true,
+      });
+
+      await this.broadcastToAll(BLEMsgType.HELLO, payload, 5, undefined, this.myDeviceId, 'BROADCAST');
+    } catch {}
   }
 
 
@@ -1048,9 +1142,46 @@ class NeerNetraBLEMesh {
       }
       this.peerNodeIdToMac.set(deviceId, deviceId);
 
-      const hopCount = Math.max(1, 8 - ttl);
+      // 1. Ingest Distance-Vector Gossip Neighbor Table if present
+      const neighbors = info.neighbors || info.known_peers || info.peers;
+      if (Array.isArray(neighbors) && neighbors.length > 0) {
+        for (const n of neighbors) {
+          const nId = n.peer_id || n.id || n.device_id || n.nodeId;
+          if (!nId || nId === this.myDeviceId) continue;
+          const nHop = (n.hop_count || n.hops || 1) + 1;
+          const nDist = nHop * 60;
+          const nBaseName = n.name || `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`;
+          const nName = nHop > 1 && !nBaseName.includes('Hops')
+            ? `${nBaseName} (${nHop} Hops - ${nDist}m)`
+            : nBaseName;
+          const relayedPeer: MeshPeer = {
+            id: nId,
+            nodeId: nId,
+            name: nName,
+            signalStrength: -75 - (nHop * 5),
+            relayedPacketsCount: (n.relayedPacketsCount || 0) + 1,
+            role: 'Mesh Relay Node',
+            distanceMeters: nDist,
+            status: n.status || 'SAFE',
+            lastSeen: new Date(),
+            hopCount: nHop,
+            nextHop: actualNodeId || senderId,
+            batteryLevel: n.battery || n.battery_level || 82,
+            lat: n.lat,
+            lng: n.lng,
+          };
+          this.activePeers.set(nId, relayedPeer);
+          this.peerNodeIdToMac.set(nId, deviceId);
+          this.macToNodeId.set(deviceId, nId);
+          console.log(`[BLE Mesh] 🗺️ [GossipRouting] Registered remote neighbor ${nName} via ${actualNodeId} (${nHop} hops, ${nDist}m)`);
+        }
+      }
+
+      // 2. Process the sender node itself
+      const explicitHop = info.hop_count !== undefined ? info.hop_count : (info.hops !== undefined ? info.hops : undefined);
+      const hopCount = explicitHop !== undefined ? explicitHop : Math.max(1, 8 - ttl);
       const isRelayed = hopCount > 1;
-      const calculatedDistance = isRelayed ? (hopCount * 60) : 5;
+      const calculatedDistance = isRelayed ? (hopCount * 60) : (info.distance || 45);
 
       const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
       const baseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
@@ -1067,6 +1198,10 @@ class NeerNetraBLEMesh {
         status: existing ? existing.status : 'SAFE',
         lastSeen: new Date(),
         hopCount,
+        nextHop: info.next_hop || info.next_hop_mac || (isRelayed ? senderId : undefined),
+        lat: info.lat || existing?.lat,
+        lng: info.lng || existing?.lng,
+        batteryLevel: info.battery || info.battery_level || existing?.batteryLevel || 85,
       };
       this.activePeers.set(actualNodeId || deviceId, updatedPeer);
       this.emitPeersUpdate();

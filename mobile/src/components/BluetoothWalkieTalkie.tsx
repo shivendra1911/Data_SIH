@@ -173,12 +173,30 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                   <View style={styles.peerIconCircle}>
                     <Mic size={14} color="#60a5fa" />
                   </View>
-                  <View style={{ flex: 1, minWidth: 100 }}>
+                  <View style={{ flex: 1, minWidth: 120 }}>
                     <Text style={styles.peerName} numberOfLines={1}>{item.name}</Text>
+                    <View style={[
+                      styles.peerHopBadge,
+                      {
+                        backgroundColor: (!item.hopCount || item.hopCount <= 1) ? '#ecfdf5' : item.hopCount === 2 ? '#fefce8' : '#eff6ff',
+                        borderColor: (!item.hopCount || item.hopCount <= 1) ? '#10b981' : item.hopCount === 2 ? '#eab308' : '#3b82f6',
+                      }
+                    ]}>
+                      <Text style={[
+                        styles.peerHopBadgeText,
+                        {
+                          color: (!item.hopCount || item.hopCount <= 1) ? '#047857' : item.hopCount === 2 ? '#a16207' : '#1d4ed8',
+                        }
+                      ]}>
+                        {(!item.hopCount || item.hopCount <= 1)
+                          ? `🟢 Direct • ~${item.distanceMeters ?? 45}m`
+                          : item.hopCount === 2
+                          ? `🟡 Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ~${item.distanceMeters ?? 120}m`
+                          : `🔵 Relayed • ${item.hopCount} hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ~${item.distanceMeters ?? 180}m`}
+                      </Text>
+                    </View>
                     <Text style={styles.peerDist}>
-                      {item.hopCount && item.hopCount > 1
-                        ? `${item.distanceMeters ?? (item.hopCount * 60)}m (${item.hopCount} Hops Relay) • ${item.signalStrength}dBm`
-                        : `${item.distanceMeters ?? '?'}m away • ${item.signalStrength}dBm`}
+                      {item.signalStrength} dBm
                     </Text>
                   </View>
                 </View>
@@ -419,6 +437,19 @@ const styles = StyleSheet.create({
   peerDist: {
     color: '#707A84',
     fontSize: 10,
+    marginTop: 2,
+  },
+  peerHopBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginVertical: 2,
+  },
+  peerHopBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
   },
   peerActionRow: {
     flexDirection: 'row',

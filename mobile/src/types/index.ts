@@ -41,6 +41,7 @@ export interface LocationSyncPayload {
   battery_level?: number | null;
   last_synced_at: string;
   zone_id?: string;
+  mesh_hops?: number;
 }
 
 export type NetworkMode = 'ONLINE' | 'BLE_MESH' | 'OFFLINE_QUEUED';
@@ -63,6 +64,8 @@ export interface MeshPeer {
   batteryLevel?: number;
   nodeId?: string;
   isGroupCall?: boolean;
+  hopCount?: number;
+  nextHop?: string;
 }
 
 export interface MeshChatMessage {
