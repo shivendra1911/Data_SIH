@@ -25,6 +25,8 @@ import {
   dismissIncomingCall,
   showNativeChatNotification,
   setLocalNodeId,
+  triggerWifiDirectCall,
+  broadcastWifiBeacon,
 } from './gattServerBridge';
 import { startBLEAdvertising } from './bleAdvertiser';
 
@@ -1636,6 +1638,19 @@ class NeerNetraBLEMesh {
   async initiateGroupCall(callerName?: string): Promise<boolean> {
     console.log('[BLE Mesh] 🚨 INITIATING GROUP EMERGENCY CALL TO ALL NEARBY CITIZENS!');
     return this.initiateCall('GROUP_CALL', callerName || 'ALL NEARBY CITIZENS', true);
+  }
+
+  /** Initiate an explicit long-range Wi-Fi Direct / Local Hotspot call (up to 250m) */
+  async initiateWifiDirectCall(targetPeerId: string, targetName?: string): Promise<boolean> {
+    console.log(`[Mesh Engine] 📶 INITIATING LONG-RANGE WI-FI DIRECT CALL to ${targetPeerId} (${targetName || 'Citizen'})`);
+    const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
+    const targetNodeId = peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId;
+    
+    // 1. Dispatch explicit native Wi-Fi Direct socket packet
+    await triggerWifiDirectCall(targetNodeId, targetName || this.myName);
+    // 2. Also mirror via standard mesh broadcast for multi-hop resilience
+    await this.initiateCall(targetPeerId, targetName, false);
+    return true;
   }
 
   /** Accept an incoming call (TTL=16) */

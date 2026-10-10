@@ -93,6 +93,17 @@ public class NeerNetraWifiMeshManager {
         return instance;
     }
 
+    private final Handler beaconHandler = new Handler(Looper.getMainLooper());
+    private final Runnable beaconRunnable = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                broadcastWifiHelloBeacon();
+            } catch (Exception ignored) {}
+            beaconHandler.postDelayed(this, 5000); // 5-second periodic long-range Wi-Fi discovery beacon
+        }
+    };
+
     /**
      * Bootstraps Wi-Fi Aware NAN, Wi-Fi Direct P2P, and Local UDP Socket Mesh engine.
      */
@@ -102,6 +113,40 @@ public class NeerNetraWifiMeshManager {
         startUdpSocketListener();
         initWifiAware();
         initWifiP2p();
+        beaconHandler.postDelayed(beaconRunnable, 2000);
+    }
+
+    /**
+     * Actively broadcasts a Wi-Fi HELLO beacon over UDP 8765 and Wi-Fi Aware to discover peers up to 250m away.
+     */
+    public void broadcastWifiHelloBeacon() {
+        executor.execute(() -> {
+            try {
+                android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                String myNodeId = sp.getString("local_node_id", "dev_node_" + Build.MODEL.replaceAll("[^a-zA-Z0-9]", ""));
+                String myNodeName = sp.getString("local_node_name", Build.MODEL);
+
+                org.json.JSONObject payload = new org.json.JSONObject();
+                payload.put("id", myNodeId);
+                payload.put("name", myNodeName);
+                payload.put("transport", "wifi_direct");
+                payload.put("range", 250);
+                payload.put("isBeacon", true);
+                payload.put("battery", 85);
+
+                org.json.JSONObject envelope = new org.json.JSONObject();
+                envelope.put("t", 1); // BLEMsgType.HELLO
+                envelope.put("m", "wb_" + System.currentTimeMillis() + "_" + (myNodeId.length() > 6 ? myNodeId.substring(0, 6) : myNodeId));
+                envelope.put("s", myNodeId);
+                envelope.put("name", myNodeName);
+                envelope.put("d", "BROADCAST");
+                envelope.put("ttl", 5);
+                envelope.put("p", payload.toString());
+
+                byte[] packetBytes = envelope.toString().getBytes(StandardCharsets.UTF_8);
+                broadcastPacketOverWifi(packetBytes);
+            } catch (Exception ignored) {}
+        });
     }
 
     private void acquireMulticastLock() {

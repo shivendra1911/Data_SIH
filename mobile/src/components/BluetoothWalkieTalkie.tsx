@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { MeshChatMessage, MeshPeer } from '../types';
 import { meshEngine } from '../services/bluetoothMesh';
-import { Radio, Mic, MicOff, Send, WifiOff, Volume2, Shield, Phone, MessageSquare } from 'lucide-react-native';
+import { Radio, Mic, MicOff, Send, WifiOff, Volume2, Shield, Phone, MessageSquare, Wifi, Bluetooth } from 'lucide-react-native';
 
 interface BluetoothWalkieTalkieProps {
   peers?: MeshPeer[];
@@ -30,6 +30,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   const [inputMsg, setInputMsg] = useState<string>('');
   const [isCalling, setIsCalling] = useState<boolean>(false);
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
+  const [selectedRadio, setSelectedRadio] = useState<'wifi' | 'ble'>('wifi');
   const [peers, setPeers] = useState<MeshPeer[]>(propPeers || meshEngine.getConnectedPeers());
 
   const displayPeers = peers;
@@ -80,11 +81,19 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
-      meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
-      Alert.alert(
-        '📡 Dual-Radio Mesh Call Request Sent',
-        `Calling ${peer.name} over Dual-Radio Mesh (BLE + Wi-Fi Direct).\n\nTransmission covers up to 250m per direct hop (2km+ via multi-hop relays).\nWaiting for peer to accept.`
-      );
+      if (selectedRadio === 'wifi') {
+        meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
+        Alert.alert(
+          '📶 Wi-Fi Direct Call Sent',
+          `Calling ${peer.name} over Wi-Fi Direct (250m direct range, 2km+ via multi-hop mesh).\n\nZero cellular network required.\nWaiting for peer to accept.`
+        );
+      } else {
+        meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
+        Alert.alert(
+          '🔵 Bluetooth Mesh Call Sent',
+          `Calling ${peer.name} over Bluetooth Low Energy (50m range).\n\nBattery-saving mesh intercom.\nWaiting for peer to accept.`
+        );
+      }
     }
   };
 
@@ -102,13 +111,38 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
         </View>
       </View>
 
+      {/* Active Radio Selector: Wi-Fi Direct 250m vs Bluetooth BLE 50m */}
+      <View style={styles.radioSelectorContainer}>
+        <TouchableOpacity
+          style={[styles.radioTab, selectedRadio === 'wifi' && styles.radioTabActiveWifi]}
+          onPress={() => setSelectedRadio('wifi')}
+          activeOpacity={0.8}
+        >
+          <Wifi size={13} color={selectedRadio === 'wifi' ? '#ffffff' : '#059669'} />
+          <Text style={[styles.radioTabText, selectedRadio === 'wifi' && styles.radioTabTextActive]}>
+            📶 Wi-Fi Direct (250m)
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.radioTab, selectedRadio === 'ble' && styles.radioTabActiveBle]}
+          onPress={() => setSelectedRadio('ble')}
+          activeOpacity={0.8}
+        >
+          <Bluetooth size={13} color={selectedRadio === 'ble' ? '#ffffff' : '#2563eb'} />
+          <Text style={[styles.radioTabText, selectedRadio === 'ble' && styles.radioTabTextActive]}>
+            🔵 Bluetooth BLE (50m)
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Active Walkie Talkie Voice Channel Bar */}
       {isCalling && (
         <View style={styles.voiceCallBar}>
           <View style={styles.pulseDot} />
           <Volume2 size={20} color="#34d399" />
           <Text style={styles.callText}>
-            WALKIE-TALKIE LIVE: <Text style={styles.peerNameText}>{activePeerName}</Text>
+            WALKIE-TALKIE LIVE [{selectedRadio === 'wifi' ? '📶 WI-FI 250m' : '🔵 BLE 50m'}]: <Text style={styles.peerNameText}>{activePeerName}</Text>
           </Text>
           <TouchableOpacity
             style={styles.endCallBtn}
@@ -126,28 +160,55 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
 
       {/* Group Emergency Broadcast Call Button */}
       <TouchableOpacity
-        style={styles.groupCallBanner}
+        style={[
+          styles.groupCallBanner,
+          selectedRadio === 'wifi' && {
+            backgroundColor: '#064e3b',
+            borderColor: '#10b981',
+            shadowColor: '#10b981',
+          }
+        ]}
         onPress={() => {
-          if (onGroupEmergencyCall) {
-            onGroupEmergencyCall();
+          if (selectedRadio === 'wifi') {
+            meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
+            Alert.alert(
+              '📶 Wi-Fi Direct Group Call Sent',
+              `Emergency broadcast ring sent over Wi-Fi Direct (250m range) to all ${displayPeers.length} nearby devices.`
+            );
           } else {
-            meshEngine.initiateGroupCall();
+            if (onGroupEmergencyCall) {
+              onGroupEmergencyCall();
+            } else {
+              meshEngine.initiateGroupCall();
+            }
           }
         }}
         activeOpacity={0.85}
       >
-        <View style={styles.groupCallIconCircle}>
-          <Phone size={16} color="#ffffff" />
+        <View style={[styles.groupCallIconCircle, selectedRadio === 'wifi' && { backgroundColor: '#059669' }]}>
+          {selectedRadio === 'wifi' ? (
+            <Wifi size={16} color="#ffffff" />
+          ) : (
+            <Phone size={16} color="#ffffff" />
+          )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.groupCallTitle}>🚨 GROUP EMERGENCY CALL (ALL NODES)</Text>
-          <Text style={styles.groupCallSub}>Rings all nearby phones simultaneously for urgent disaster coordination</Text>
+          <Text style={[styles.groupCallTitle, selectedRadio === 'wifi' && { color: '#6ee7b7' }]}>
+            {selectedRadio === 'wifi' ? '📶 WI-FI CALL ALL NODES (250m RANGE)' : '🚨 GROUP EMERGENCY CALL (ALL NODES)'}
+          </Text>
+          <Text style={[styles.groupCallSub, selectedRadio === 'wifi' && { color: '#a7f3d0' }]}>
+            {selectedRadio === 'wifi'
+              ? 'Broadcasts emergency voice ring to all phones over Wi-Fi Direct with zero cellular network'
+              : 'Rings all nearby phones simultaneously for urgent disaster coordination'}
+          </Text>
         </View>
       </TouchableOpacity>
 
-      {/* Connected Bluetooth Peers List */}
+      {/* Connected Bluetooth & Wi-Fi Peers List */}
       <View style={styles.peersSection}>
-        <Text style={styles.subTitle}>Nearby Mesh Nodes ({displayPeers.length} Active):</Text>
+        <Text style={styles.subTitle}>
+          Nearby Mesh Nodes ({displayPeers.length} Active • {selectedRadio === 'wifi' ? 'Wi-Fi 250m' : 'BLE 50m'}):
+        </Text>
         <FlatList
           data={displayPeers}
           horizontal
@@ -157,8 +218,14 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
             <View style={styles.emptyPeersBox}>
               <Radio size={16} color="#60a5fa" />
               <View>
-                <Text style={styles.emptyPeersText}>Scanning for nearby BLE peers...</Text>
-                <Text style={styles.emptyPeersSub}>Keep Bluetooth ON on both devices</Text>
+                <Text style={styles.emptyPeersText}>
+                  {selectedRadio === 'wifi'
+                    ? 'Scanning for Wi-Fi Direct & Mesh peers (250m)...'
+                    : 'Scanning for nearby BLE peers (50m)...'}
+                </Text>
+                <Text style={styles.emptyPeersSub}>
+                  Keep Wi-Fi & Bluetooth ON for maximum 250m range
+                </Text>
               </View>
             </View>
           }
@@ -170,8 +237,12 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                 ]}
               >
                 <View style={styles.peerCardTop}>
-                  <View style={styles.peerIconCircle}>
-                    <Mic size={14} color="#60a5fa" />
+                  <View style={[styles.peerIconCircle, selectedRadio === 'wifi' && { borderColor: '#10b981' }]}>
+                    {selectedRadio === 'wifi' ? (
+                      <Wifi size={13} color="#059669" />
+                    ) : (
+                      <Mic size={14} color="#60a5fa" />
+                    )}
                   </View>
                   <View style={{ flex: 1, minWidth: 120 }}>
                     <Text style={styles.peerName} numberOfLines={1}>{item.name}</Text>
@@ -192,12 +263,12 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                           const hops = item.hopCount || 1;
                           const rawDist = item.distanceMeters && item.distanceMeters > 0
                             ? item.distanceMeters
-                            : (hops <= 1 ? 45 : hops * 200);
+                            : (hops <= 1 ? (selectedRadio === 'wifi' ? 150 : 45) : hops * 200);
                           const distLabel = rawDist >= 1000
                             ? `~${(rawDist / 1000).toFixed(1)} km`
                             : `~${Math.round(rawDist)}m`;
                           if (hops <= 1) {
-                            return `🟢 Direct • ${distLabel}`;
+                            return selectedRadio === 'wifi' ? `📶 Direct Wi-Fi • ${distLabel}` : `🟢 Direct BLE • ${distLabel}`;
                           } else if (hops === 2) {
                             return `🟡 Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}`;
                           } else {
@@ -230,18 +301,42 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.peerCallBtn}
+                    style={[
+                      styles.peerCallBtn,
+                      selectedRadio === 'wifi' ? { backgroundColor: '#059669' } : { backgroundColor: '#2563eb' }
+                    ]}
                     onPress={() => {
-                      if (onCallPeer) {
-                        onCallPeer(item);
+                      if (selectedRadio === 'wifi') {
+                        if (meshEngine.initiateWifiDirectCall) {
+                          meshEngine.initiateWifiDirectCall(item.id, item.name).catch(() => {});
+                        } else {
+                          meshEngine.initiateCall(item.id, item.name).catch(() => {});
+                        }
+                        Alert.alert(
+                          '📶 Wi-Fi Direct Call Sent',
+                          `Calling ${item.name} over Wi-Fi Direct (250m range).\n\nZero cellular network required.\nWaiting for peer to accept.`
+                        );
                       } else {
-                        handleStartWalkieTalkie(item);
+                        if (onCallPeer) {
+                          onCallPeer(item);
+                        } else {
+                          handleStartWalkieTalkie(item);
+                        }
                       }
                     }}
                     activeOpacity={0.8}
                   >
-                    <Phone size={11} color="#ffffff" />
-                    <Text style={styles.peerCallBtnText}>Call</Text>
+                    {selectedRadio === 'wifi' ? (
+                      <>
+                        <Wifi size={11} color="#ffffff" />
+                        <Text style={styles.peerCallBtnText}>Wi-Fi Call</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Bluetooth size={11} color="#ffffff" />
+                        <Text style={styles.peerCallBtnText}>BLE Call</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -610,5 +705,39 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
     lineHeight: 14,
+  },
+  radioSelectorContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  radioTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EBE2',
+  },
+  radioTabActiveWifi: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  radioTabActiveBle: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  radioTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5A6570',
+  },
+  radioTabTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
 });

@@ -257,6 +257,48 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         }
     }
 
+    @ReactMethod
+    public void triggerWifiDirectCall(String targetNodeId, String callerName, Promise promise) {
+        try {
+            android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "dev_node_" + Build.MODEL.replaceAll("[^a-zA-Z0-9]", ""));
+            String myNodeName = sp.getString("local_node_name", Build.MODEL);
+
+            org.json.JSONObject payload = new org.json.JSONObject();
+            payload.put("callerId", myNodeId);
+            payload.put("callerName", (callerName != null && !callerName.isEmpty()) ? callerName : myNodeName);
+            payload.put("targetId", targetNodeId);
+            payload.put("transport", "wifi_direct");
+            payload.put("isWifiDirectCall", true);
+            payload.put("timestamp", System.currentTimeMillis());
+
+            org.json.JSONObject envelope = new org.json.JSONObject();
+            envelope.put("t", 7); // CALL_REQUEST
+            envelope.put("m", "wcall_" + System.currentTimeMillis() + "_" + (myNodeId.length() > 6 ? myNodeId.substring(0, 6) : myNodeId));
+            envelope.put("s", myNodeId);
+            envelope.put("name", myNodeName);
+            envelope.put("d", targetNodeId != null ? targetNodeId : "BROADCAST");
+            envelope.put("ttl", 10);
+            envelope.put("p", payload.toString());
+
+            byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("WIFI_CALL_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void broadcastWifiBeacon(Promise promise) {
+        try {
+            NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastWifiHelloBeacon();
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
     // ── Voice Recording & Playback ───────────────────────────────────────────
     @ReactMethod
     public void playPttTone(String type, Promise promise) {

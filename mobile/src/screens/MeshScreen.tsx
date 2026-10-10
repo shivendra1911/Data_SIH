@@ -252,7 +252,7 @@ const BLECallModal: React.FC<{
   onClose: () => void;
 }> = ({ visible, peers, isDisasterConfirmed = false, onInitiateCall, onInitiateGroupCall, onClose }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [mode, setMode] = useState<'ble' | 'phone'>('ble');
+  const [mode, setMode] = useState<'wifi' | 'ble' | 'phone'>('wifi');
   const [callingPeer, setCallingPeer] = useState<MeshPeer | null>(null);
   const [sectorCitizens, setSectorCitizens] = useState<NearbyCitizen[]>([]);
 
@@ -264,6 +264,15 @@ const BLECallModal: React.FC<{
 
   const displayPeers: (MeshPeer & { phone?: string })[] = peers;
 
+  const handleWifiCall = (peer: MeshPeer) => {
+    onClose();
+    meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
+    Alert.alert(
+      '📶 Wi-Fi Direct Call Sent',
+      `Calling ${peer.name} over Wi-Fi Direct (250m direct range, 2km+ via relays).\n\nZero cellular network or internet required.\nWaiting for peer to accept.`
+    );
+  };
+
   const handleBLECall = (peer: MeshPeer) => {
     onClose();
     if (onInitiateCall) {
@@ -271,13 +280,17 @@ const BLECallModal: React.FC<{
     } else {
       meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
     }
+    Alert.alert(
+      '🔵 BLE Call Sent',
+      `Calling ${peer.name} over Bluetooth Low Energy (50m range).\n\nBattery-saving mesh intercom.\nWaiting for peer to accept.`
+    );
   };
 
   const handlePhoneCall = (targetNum?: string, isCitizen: boolean = false) => {
     if (isCitizen && !isDisasterConfirmed) {
       Alert.alert(
         '🔒 Privacy Protected',
-        'Citizen direct phone numbers are only unlocked during a confirmed disaster or verified emergency. Use the offline BLE Walkie-Talkie to contact this citizen.'
+        'Citizen direct phone numbers are only unlocked during a confirmed disaster or verified emergency. Use the offline BLE or Wi-Fi Walkie-Talkie to contact this citizen.'
       );
       return;
     }
@@ -308,45 +321,183 @@ const BLECallModal: React.FC<{
                 </TouchableOpacity>
               </View>
 
-              {/* Mode Toggle */}
+              {/* 3-Mode Radio Selector Toggle */}
               <View style={modalStyles.modeToggle}>
                 <TouchableOpacity
-                  style={[modalStyles.modeBtn, mode === 'ble' && modalStyles.modeBtnActive]}
+                  style={[modalStyles.modeBtn, mode === 'wifi' && modalStyles.modeBtnActiveWifi]}
+                  onPress={() => setMode('wifi')}
+                  activeOpacity={0.8}
+                >
+                  <Wifi size={13} color={mode === 'wifi' ? '#fff' : '#059669'} />
+                  <Text
+                    style={[modalStyles.modeBtnText, mode === 'wifi' && { color: '#fff', fontWeight: '800' }]}
+                  >
+                    Wi-Fi Call (250m)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[modalStyles.modeBtn, mode === 'ble' && modalStyles.modeBtnActiveBle]}
                   onPress={() => setMode('ble')}
                   activeOpacity={0.8}
                 >
-                  <Bluetooth size={14} color={mode === 'ble' ? '#fff' : '#64748b'} />
+                  <Bluetooth size={13} color={mode === 'ble' ? '#fff' : '#2563eb'} />
                   <Text
-                    style={[modalStyles.modeBtnText, mode === 'ble' && { color: '#fff' }]}
+                    style={[modalStyles.modeBtnText, mode === 'ble' && { color: '#fff', fontWeight: '800' }]}
                   >
-                    Dual Mesh Call (BLE + Wi-Fi Direct)
+                    BLE Call (50m)
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[modalStyles.modeBtn, mode === 'phone' && modalStyles.modeBtnActivePhone]}
                   onPress={() => setMode('phone')}
                   activeOpacity={0.8}
                 >
-                  <Phone size={14} color={mode === 'phone' ? '#fff' : '#64748b'} />
+                  <Phone size={13} color={mode === 'phone' ? '#fff' : '#64748b'} />
                   <Text
-                    style={[modalStyles.modeBtnText, mode === 'phone' && { color: '#fff' }]}
+                    style={[modalStyles.modeBtnText, mode === 'phone' && { color: '#fff', fontWeight: '800' }]}
                   >
-                    Phone / Cellular Call
+                    Cellular
                   </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* BLE Peer List */}
-              {mode === 'ble' && (
+              {/* MODE 1: Wi-Fi Calling (250m+) */}
+              {mode === 'wifi' && (
                 <>
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#ecfdf5',
+                    borderWidth: 1,
+                    borderColor: '#a7f3d0',
+                    borderRadius: 12,
+                    padding: 9,
+                    marginBottom: 10,
+                    gap: 8,
+                  }}>
+                    <Wifi size={15} color="#059669" />
+                    <Text style={{ flex: 1, color: '#065f46', fontSize: 11, fontWeight: '600', lineHeight: 15 }}>
+                      <Text style={{ fontWeight: '800' }}>Offline Wi-Fi Calling Active:</Text> High-speed voice via Wi-Fi Aware NAN & P2P hotspot. 250m per direct hop (2km+ via mesh relays) with zero cell network!
+                    </Text>
+                  </View>
+
                   {/* Group Emergency Call Action */}
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      backgroundColor: '#450a0a',
+                      backgroundColor: '#064e3b',
                       borderWidth: 1.5,
-                      borderColor: '#ef4444',
+                      borderColor: '#10b981',
+                      borderRadius: 14,
+                      padding: 12,
+                      marginBottom: 12,
+                      gap: 12,
+                    }}
+                    onPress={() => {
+                      onClose();
+                      meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
+                      Alert.alert(
+                        '📶 Wi-Fi Direct Group Call Sent',
+                        `Emergency broadcast ring sent over Wi-Fi Direct (250m range) to all ${displayPeers.length} nearby devices.`
+                      );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center' }}>
+                      <Wifi size={16} color="#ffffff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '800' }}>
+                        📶 WI-FI CALL ALL NEARBY CITIZENS
+                      </Text>
+                      <Text style={{ color: '#a7f3d0', fontSize: 11 }}>
+                        Emergency broadcast ring to all {displayPeers.length} connected devices
+                      </Text>
+                    </View>
+                    <PhoneCall size={16} color="#34d399" />
+                  </TouchableOpacity>
+
+                  <Text style={modalStyles.sectionLabel}>
+                    Call Single Peer Over Wi-Fi (250m):
+                  </Text>
+                  {displayPeers.length === 0 ? (
+                    <View style={modalStyles.emptyBox}>
+                      <Wifi size={24} color="#059669" />
+                      <Text style={modalStyles.emptyText}>No Wi-Fi mesh peers in range.</Text>
+                      <Text style={modalStyles.emptySubText}>
+                        Keep Wi-Fi ON. Nodes within 250m will appear automatically.
+                      </Text>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={displayPeers}
+                      keyExtractor={(p) => p.id}
+                      style={modalStyles.peerList}
+                      renderItem={({ item }) => {
+                        const hop = getHopBadge(item);
+                        return (
+                          <TouchableOpacity
+                            style={modalStyles.peerRow}
+                            onPress={() => handleWifiCall(item)}
+                            activeOpacity={0.8}
+                          >
+                            <View style={[modalStyles.peerAvatar, { backgroundColor: '#059669' }]}>
+                              <Wifi size={15} color="#ffffff" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={modalStyles.peerName}>{item.name}</Text>
+                              <View style={[modalStyles.peerHopBadge, { backgroundColor: '#ecfdf5', borderColor: '#10b981' }]}>
+                                <Text style={[modalStyles.peerHopBadgeText, { color: '#047857' }]}>
+                                  📶 Wi-Fi Direct • {hop.label}
+                                </Text>
+                              </View>
+                              <Text style={modalStyles.peerMeta}>
+                                {item.signalStrength} dBm • {item.status || 'SAFE'}
+                              </Text>
+                            </View>
+                            <View style={[modalStyles.callBadge, { backgroundColor: '#059669' }]}>
+                              <PhoneCall size={13} color="#ffffff" />
+                              <Text style={[modalStyles.callBadgeText, { color: '#ffffff' }]}>Wi-Fi Call</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* MODE 2: BLE Low Energy Call (50m) */}
+              {mode === 'ble' && (
+                <>
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#eff6ff',
+                    borderWidth: 1,
+                    borderColor: '#bfdbfe',
+                    borderRadius: 12,
+                    padding: 9,
+                    marginBottom: 10,
+                    gap: 8,
+                  }}>
+                    <Bluetooth size={15} color="#2563eb" />
+                    <Text style={{ flex: 1, color: '#1e40af', fontSize: 11, fontWeight: '600', lineHeight: 15 }}>
+                      <Text style={{ fontWeight: '800' }}>BLE Low Energy Mode:</Text> Conserves battery for close-range (under 50m) communication.
+                    </Text>
+                  </View>
+
+                  {/* Group Emergency Call Action */}
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#1e3a8a',
+                      borderWidth: 1.5,
+                      borderColor: '#3b82f6',
                       borderRadius: 14,
                       padding: 12,
                       marginBottom: 12,
@@ -359,29 +510,29 @@ const BLECallModal: React.FC<{
                     }}
                     activeOpacity={0.8}
                   >
-                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' }}>
                       <Radio size={16} color="#ffffff" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '800' }}>
-                        🚨 CALL ALL NEARBY NODES (GROUP)
+                      <Text style={{ color: '#93c5fd', fontSize: 13, fontWeight: '800' }}>
+                        🔵 BLE CALL ALL NEARBY NODES (GROUP)
                       </Text>
-                      <Text style={{ color: '#fecaca', fontSize: 11 }}>
+                      <Text style={{ color: '#bfdbfe', fontSize: 11 }}>
                         Emergency broadcast ring to all {displayPeers.length} connected devices
                       </Text>
                     </View>
-                    <PhoneCall size={16} color="#ef4444" />
+                    <PhoneCall size={16} color="#60a5fa" />
                   </TouchableOpacity>
 
                   <Text style={modalStyles.sectionLabel}>
-                    Or Call Single Peer (1-to-1 Intercom):
+                    Call Single Peer Over BLE (50m):
                   </Text>
                   {displayPeers.length === 0 ? (
                     <View style={modalStyles.emptyBox}>
                       <Bluetooth size={24} color="#475569" />
-                      <Text style={modalStyles.emptyText}>No peers in range.</Text>
+                      <Text style={modalStyles.emptyText}>No BLE peers in range.</Text>
                       <Text style={modalStyles.emptySubText}>
-                        Switch to "Phone / Cellular Call" mode.
+                        Keep Bluetooth ON on both devices.
                       </Text>
                     </View>
                   ) : (
@@ -397,8 +548,8 @@ const BLECallModal: React.FC<{
                             onPress={() => handleBLECall(item)}
                             activeOpacity={0.8}
                           >
-                            <View style={[modalStyles.peerAvatar, { backgroundColor: '#064e3b' }]}>
-                              <Mic size={14} color="#34d399" />
+                            <View style={[modalStyles.peerAvatar, { backgroundColor: '#1d4ed8' }]}>
+                              <Bluetooth size={15} color="#ffffff" />
                             </View>
                             <View style={{ flex: 1 }}>
                               <Text style={modalStyles.peerName}>{item.name}</Text>
@@ -409,9 +560,9 @@ const BLECallModal: React.FC<{
                                 {item.signalStrength} dBm • {item.status || 'SAFE'}
                               </Text>
                             </View>
-                            <View style={modalStyles.callBadge}>
-                              <PhoneCall size={14} color="#34d399" />
-                              <Text style={modalStyles.callBadgeText}>Call</Text>
+                            <View style={[modalStyles.callBadge, { backgroundColor: '#2563eb' }]}>
+                              <PhoneCall size={13} color="#ffffff" />
+                              <Text style={[modalStyles.callBadgeText, { color: '#ffffff' }]}>BLE Call</Text>
                             </View>
                           </TouchableOpacity>
                         );
@@ -972,7 +1123,7 @@ const modalStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
@@ -980,12 +1131,20 @@ const modalStyles = StyleSheet.create({
     borderColor: '#E8EBE2',
   },
   modeBtnActive: {
-    backgroundColor: '#1E2124',
-    borderColor: '#1E2124',
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  modeBtnActiveWifi: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  modeBtnActiveBle: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
   },
   modeBtnActivePhone: {
-    backgroundColor: '#1E2124',
-    borderColor: '#1E2124',
+    backgroundColor: '#475569',
+    borderColor: '#475569',
   },
   modeBtnText: {
     color: '#5A6570',
