@@ -83,7 +83,7 @@ def run_all_tests():
     time.sleep(1.0)
     
     passed_count = 0
-    total_count = 6
+    total_count = 7
 
     # -------------------------------------------------------------------------
     # TEST 1: Distance-Vector Gossip Beacon Routing Table Ingestion
@@ -281,6 +281,60 @@ def run_all_tests():
     log("Sent CALL_END packet to dismiss incoming call activity")
     time.sleep(1.0)
     
+    # -------------------------------------------------------------------------
+    # TEST 7: Long-Range 2+ km Multi-Hop Chain Relay (12 Hops / 2.4 km)
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 7: Long-Range Multi-Hop Chain Verification (12 Hops / 2.4 km) ---")
+    long_range_gossip = {
+        "t": 1,
+        "m": f"gossip_2km_{int(time.time()*1000)}",
+        "s": "dev_node_b_relay",
+        "name": "Node B [Relay Gateway]",
+        "d": "BROADCAST",
+        "ttl": 15,
+        "neighbors": [
+            {
+                "peer_id": "dev_node_l_2400m",
+                "name": "Node L (Sector 12 Evacuation Center - 2.4km)",
+                "hop_count": 11, # 11 hops from Node B -> 12 hops from phone!
+                "status": "HELPING",
+                "battery": 95
+            }
+        ]
+    }
+    send_udp(long_range_gossip)
+    log("Sent 12-hop / 2.4 km multi-hop route advertisement for dev_node_l_2400m")
+    
+    match_2km = monitor.search_for("[GossipRouting] Node dev_node_l_2400m reachable via dev_node_b_relay (12 hops", timeout=6.0)
+    
+    # Send long-range call packet destined across 2.4km chain with TTL=15
+    long_call_id = f"mhop_2km_call_{int(time.time()*1000)}"
+    long_range_call_packet = {
+        "t": 7, # MESH_CALL_REQ
+        "m": long_call_id,
+        "s": "dev_initiator_node",
+        "d": "dev_node_l_2400m", # Addressed across 2.4km
+        "caller_name": "Camp Alpha Rescue",
+        "ttl": 15,
+        "p": json.dumps({
+            "callerName": "Camp Alpha Rescue",
+            "targetId": "dev_node_l_2400m",
+            "isVoice": True
+        })
+    }
+    send_udp(long_range_call_packet)
+    log(f"Sent 2.4 km call packet {long_call_id} addressed to dev_node_l_2400m (TTL=15)")
+    
+    forward_2km_match = monitor.search_for(f"🔁 [MultiHopRelay] Forwarding packet {long_call_id}", timeout=6.0)
+    ttl_2km_match = monitor.search_for("TTL 15->14", timeout=6.0)
+    
+    if match_2km and forward_2km_match and ttl_2km_match:
+        log(f"PASS: 12-Hop (2.4 km) route ingested: {match_2km}")
+        log(f"PASS: 2.4 km call relayed across chain: {forward_2km_match} ({ttl_2km_match})")
+        passed_count += 1
+    else:
+        log(f"FAIL: 2.4 km test failed. Route: {match_2km}, Forward: {forward_2km_match}, TTL: {ttl_2km_match}")
+
     monitor.stop()
 
     log("\n==================================================================")
