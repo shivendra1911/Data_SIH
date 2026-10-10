@@ -245,15 +245,19 @@ export default function CitizenTrackingMatrix({
                   </span>
                 </div>
 
-                {/* Mesh Chain */}
-                {!citizen.is_live && citizen.mesh_relay_chain && (
+                {/* Mesh Chain & Multi-Hop Relay Badge */}
+                {(citizen.mesh_hops > 0 || Boolean(citizen.mesh_relay_chain)) && (
                   <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                     <span className="flex items-center gap-1.5 truncate">
                       <Share2 className="w-3 h-3 text-slate-400 shrink-0" />
-                      <span className="truncate">{citizen.mesh_relay_chain.join(" ➔ ")}</span>
+                      <span className="truncate">
+                        {citizen.mesh_relay_chain && citizen.mesh_relay_chain.length > 0
+                          ? citizen.mesh_relay_chain.join(" ➔ ")
+                          : "Offline Mesh Network"}
+                      </span>
                     </span>
-                    <span className="text-[9px] text-slate-500 shrink-0 font-bold">
-                      {citizen.mesh_hops || 2} Hops
+                    <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0 font-bold">
+                      {citizen.mesh_hops <= 1 ? "🟢 Direct 1 Hop" : `📡 ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 60}m)`}
                     </span>
                   </div>
                 )}

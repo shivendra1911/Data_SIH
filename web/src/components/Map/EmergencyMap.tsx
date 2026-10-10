@@ -76,12 +76,17 @@ function MapViewController({ center, zoom }: { center: [number, number]; zoom: n
 }
 
 // Custom DivIcons — Corwdy Pure Neutral Palette
-const createRadarIcon = (status: "SOS" | "SAFE" | "HELPING", isMesh: boolean) => {
+const createRadarIcon = (status: "SOS" | "SAFE" | "HELPING", isMesh: boolean, hops: number = 0) => {
   const colorClass =
     status === "SAFE" ? "safe" : status === "HELPING" ? "helping" : "";
-  const meshBadge = isMesh
-    ? `<span style="position: absolute; top: -6px; right: -6px; background: #ffffff; color: #161a20; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #161a20;">BLE</span>`
-    : "";
+  let meshBadge = "";
+  if (isMesh || hops > 0) {
+    if (hops > 1) {
+      meshBadge = `<span style="position: absolute; top: -7px; right: -7px; background: #fef08a; color: #854d0e; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #ca8a04;">${hops}H</span>`;
+    } else {
+      meshBadge = `<span style="position: absolute; top: -6px; right: -6px; background: #bbf7d0; color: #166534; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #16a34a;">1H</span>`;
+    }
+  }
 
   return L.divIcon({
     className: "custom-div-icon",
@@ -601,7 +606,7 @@ export default function EmergencyMap({
               <Marker
                 key={citizen.id}
                 position={[citizen.lat, citizen.lng]}
-                icon={createRadarIcon(citizen.status, citizen.mesh_hops > 0)}
+                icon={createRadarIcon(citizen.status, citizen.mesh_hops > 0, citizen.mesh_hops)}
               >
                 <Popup>
                   <div className="p-2 space-y-1.5 text-white min-w-[210px] bg-[#1b2027]">
@@ -619,6 +624,11 @@ export default function EmergencyMap({
                     <div className="text-[11px] text-white/50 font-mono">
                       UUID: {citizen.device_uuid.slice(0, 14)}...
                     </div>
+                    {citizen.mesh_hops > 0 && (
+                      <div className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded flex items-center gap-1 mt-1">
+                        📡 {citizen.mesh_hops === 1 ? "Direct • 1 Hop (~45m)" : `Relayed Mesh • ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 60}m)`}
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>

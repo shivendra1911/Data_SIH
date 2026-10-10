@@ -155,6 +155,7 @@ public class NeerNetraNativeMeshManager {
             envelope.put("m", msgId);
             envelope.put("msg_id", msgId);
             envelope.put("s", myNodeId);
+            envelope.put("name", myNodeName);
             envelope.put("origin_id", myNodeId);
             envelope.put("d", "BROADCAST");
             envelope.put("dest_id", "BROADCAST");
@@ -925,19 +926,30 @@ public class NeerNetraNativeMeshManager {
                     String nId = n.optString("peer_id", n.optString("id", ""));
                     if (nId.isEmpty() || nId.equalsIgnoreCase(myNodeId)) continue;
                     int nHop = n.optInt("hop_count", n.optInt("hops", 1)) + 1;
-                    MeshRoute relayedRoute = routingTable.get(nId);
-                    if (relayedRoute == null) relayedRoute = new MeshRoute();
-                    relayedRoute.peerId = nId;
-                    relayedRoute.name = n.optString("name", relayedRoute.name != null ? relayedRoute.name : "Citizen [" + nId.substring(Math.max(0, nId.length() - 4)) + "]");
-                    relayedRoute.hopCount = nHop;
-                    relayedRoute.nextHop = senderId;
-                    relayedRoute.lastSeen = now;
-                    relayedRoute.lat = n.optDouble("lat", 0.0);
-                    relayedRoute.lng = n.optDouble("lng", 0.0);
-                    relayedRoute.battery = n.optInt("battery", 80);
-                    relayedRoute.status = n.optString("status", "SAFE");
-                    routingTable.put(nId, relayedRoute);
-                    Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + (nHop * 60) + "m)");
+                    MeshRoute existingRoute = routingTable.get(nId);
+
+                    // Bellman-Ford Distance-Vector rule:
+                    // 1. Never overwrite a fresh direct 1-hop route with a multi-hop relayed route.
+                    // 2. Only update if route is new, OR new hop count is shorter, OR update comes from same nextHop, OR existing route has timed out (> 45s).
+                    boolean isFreshDirect = (existingRoute != null && existingRoute.hopCount == 1 && (now - existingRoute.lastSeen < 45000));
+                    boolean shouldUpdate = (existingRoute == null)
+                            || (!isFreshDirect && (nHop < existingRoute.hopCount || (existingRoute.nextHop != null && existingRoute.nextHop.equals(senderId)) || (now - existingRoute.lastSeen > 45000)));
+
+                    if (shouldUpdate) {
+                        MeshRoute relayedRoute = (existingRoute != null) ? existingRoute : new MeshRoute();
+                        relayedRoute.peerId = nId;
+                        String cleanName = n.optString("name", relayedRoute.name != null ? relayedRoute.name : "Citizen [" + nId.substring(Math.max(0, nId.length() - 4)) + "]");
+                        relayedRoute.name = cleanName;
+                        relayedRoute.hopCount = nHop;
+                        relayedRoute.nextHop = senderId;
+                        relayedRoute.lastSeen = now;
+                        relayedRoute.lat = n.optDouble("lat", relayedRoute.lat);
+                        relayedRoute.lng = n.optDouble("lng", relayedRoute.lng);
+                        relayedRoute.battery = n.optInt("battery", 80);
+                        relayedRoute.status = n.optString("status", "SAFE");
+                        routingTable.put(nId, relayedRoute);
+                        Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + (nHop * 60) + "m)");
+                    }
                 }
             }
 
@@ -954,11 +966,25 @@ public class NeerNetraNativeMeshManager {
             // 3. Multi-Hop Managed Relay (Linked List Forwarding across BLE & Wi-Fi)
             // Relay if TTL > 1 and destination is not strictly and only self
             boolean isStrictlyForMe = (!targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId))
-                    && (!myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId) || targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me")));
+                    && ((!myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId)))
+                        || (!myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName)))
+                        || targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me"));
 
             if (ttl > 1 && !isStrictlyForMe) {
                 int newTtl = ttl - 1;
                 packet.put("ttl", newTtl);
+
+                // Append own node ID to path array for multi-hop tracing
+                JSONArray pathArr = packet.optJSONArray("path");
+                if (pathArr == null) {
+                    pathArr = new JSONArray();
+                    if (!senderId.isEmpty()) pathArr.put(senderId);
+                }
+                if (!myNodeId.isEmpty()) {
+                    pathArr.put(myNodeId);
+                }
+                packet.put("path", pathArr);
+
                 byte[] relayedBytes = packet.toString().getBytes(StandardCharsets.UTF_8);
                 String relayedBase64 = android.util.Base64.encodeToString(relayedBytes, android.util.Base64.NO_WRAP);
 
@@ -966,11 +992,8 @@ public class NeerNetraNativeMeshManager {
                 String nextHop = route != null ? route.nextHop : targetId;
                 Log.i(TAG, "🔁 [MultiHopRelay] Forwarding packet " + msgId + " (type=" + type + ", TTL " + ttl + "->" + newTtl + ") via next_hop=" + nextHop + " across BLE Centrals & Wi-Fi UDP 8765 to reach " + targetId);
 
-                // Relay over BLE GATT notify to all Centrals
+                // Unified relay: notifyAllClients relays across BLE GATT notify to Centrals AND broadcasts over Wi-Fi UDP 8765
                 notifyAllClients(relayedBase64);
-
-                // Relay over Wi-Fi (Wi-Fi Aware & UDP Port 8765)
-                NeerNetraWifiMeshManager.getInstance(appContext).broadcastPacketOverWifi(relayedBytes);
             }
 
         } catch (Exception e) {

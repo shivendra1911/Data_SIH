@@ -112,17 +112,25 @@ function encodePacket(
   targetId?: string
 ): string {
   const m = msgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4));
+  let callerName: string | undefined;
+  if (type === BLEMsgType.CALL_REQUEST && payload) {
+    try {
+      const pObj = JSON.parse(payload);
+      callerName = pObj.callerName || pObj.name;
+    } catch {}
+  }
   const envelope = {
     t: type,
     type: type === BLEMsgType.CALL_REQUEST ? 'MESH_CALL_REQ' : (type === BLEMsgType.HELLO ? 'GOSSIP' : 'BLE_PACKET'),
     m,
     msg_id: m,
     call_id: type === BLEMsgType.CALL_REQUEST ? `call_${m}` : undefined,
+    caller_name: callerName,
     s: senderId.substring(0, 16),
     origin_id: senderId,
     d: targetId || 'BROADCAST',
     dest_id: targetId || 'BROADCAST',
-    path: [senderId, targetId || 'BROADCAST'],
+    path: [senderId],
     ttl,
     p: payload,
   };
@@ -146,10 +154,18 @@ function decodePacket(base64: string): {
     const cleaned = cleanBase64(base64);
     if (!cleaned) return null;
     let raw = '';
-    try {
-      raw = decodeURIComponent(escape(atob(cleaned)));
-    } catch {
-      raw = atob(cleaned);
+    if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+      raw = cleaned;
+    } else {
+      try {
+        raw = decodeURIComponent(escape(atob(cleaned)));
+      } catch {
+        try {
+          raw = atob(cleaned);
+        } catch {
+          raw = cleaned;
+        }
+      }
     }
 
     // 1. JSON envelope format (Modern robust)
@@ -1112,19 +1128,16 @@ class NeerNetraBLEMesh {
 
       const relayTimer = setTimeout(() => {
         this.pendingRelays.delete(packet.msgId);
-        this.broadcastToAll(
-          packet.type,
-          packet.payload,
-          packet.ttl - 1,
-          packet.msgId,
-          packet.senderId,
-          packet.targetId
-        ).then(() => {
-          if (peer) {
-            peer.relayedPacketsCount = (peer.relayedPacketsCount || 0) + 1;
-            this.activePeers.set(fromDeviceId, peer);
-          }
-        }).catch(() => {});
+        // Only forward to Peripherals connected in Central mode (Java already broadcast to Centrals and Wi-Fi)
+        const sender = packet.senderId || this.myDeviceId;
+        const newTtl = packet.ttl - 1;
+        Array.from(this.connectedDevices.values()).forEach((d) => {
+          this.sendToPeer(d, packet.type, packet.payload, newTtl, packet.msgId, sender, packet.targetId).catch(() => false);
+        });
+        if (peer) {
+          peer.relayedPacketsCount = (peer.relayedPacketsCount || 0) + 1;
+          this.activePeers.set(fromDeviceId, peer);
+        }
       }, backoffDelay);
 
       this.pendingRelays.set(packet.msgId, { timer: relayTimer, packet });
@@ -1150,14 +1163,19 @@ class NeerNetraBLEMesh {
           if (!nId || nId === this.myDeviceId) continue;
           const nHop = (n.hop_count || n.hops || 1) + 1;
           const nDist = nHop * 60;
-          const nBaseName = n.name || `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`;
-          const nName = nHop > 1 && !nBaseName.includes('Hops')
-            ? `${nBaseName} (${nHop} Hops - ${nDist}m)`
-            : nBaseName;
+          const existing = this.activePeers.get(nId);
+          const nowMs = Date.now();
+          const isFreshDirect = existing && (existing.hopCount || 1) === 1 && (nowMs - new Date(existing.lastSeen).getTime() < 45000);
+          const shouldUpdate = !existing || (!isFreshDirect && (nHop <= (existing.hopCount || 99) || (existing.nextHop && existing.nextHop === actualNodeId) || (nowMs - new Date(existing.lastSeen).getTime() > 45000)));
+          if (!shouldUpdate) continue;
+
+          const rawBaseName = n.name || (existing ? existing.name : `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+          const cleanName = rawBaseName.replace(/\s*\(\d+\s*Hops[^\)]*\)/gi, '').trim();
+
           const relayedPeer: MeshPeer = {
             id: nId,
             nodeId: nId,
-            name: nName,
+            name: cleanName,
             signalStrength: -75 - (nHop * 5),
             relayedPacketsCount: (n.relayedPacketsCount || 0) + 1,
             role: 'Mesh Relay Node',
@@ -1167,13 +1185,13 @@ class NeerNetraBLEMesh {
             hopCount: nHop,
             nextHop: actualNodeId || senderId,
             batteryLevel: n.battery || n.battery_level || 82,
-            lat: n.lat,
-            lng: n.lng,
+            lat: n.lat || existing?.lat,
+            lng: n.lng || existing?.lng,
           };
           this.activePeers.set(nId, relayedPeer);
           this.peerNodeIdToMac.set(nId, deviceId);
           this.macToNodeId.set(deviceId, nId);
-          console.log(`[BLE Mesh] 🗺️ [GossipRouting] Registered remote neighbor ${nName} via ${actualNodeId} (${nHop} hops, ${nDist}m)`);
+          console.log(`[BLE Mesh] 🗺️ [GossipRouting] Registered remote neighbor ${cleanName} via ${actualNodeId} (${nHop} hops, ${nDist}m)`);
         }
       }
 
@@ -1184,13 +1202,13 @@ class NeerNetraBLEMesh {
       const calculatedDistance = isRelayed ? (hopCount * 60) : (info.distance || 45);
 
       const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
-      const baseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
-      const peerName = isRelayed && !baseName.includes('Hops') ? `${baseName} (${hopCount} Hops - ${calculatedDistance}m)` : baseName;
+      const rawBaseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+      const cleanPeerName = rawBaseName.replace(/\s*\(\d+\s*Hops[^\)]*\)/gi, '').trim();
 
       const updatedPeer: MeshPeer = {
         id: actualNodeId || deviceId,
         nodeId: actualNodeId || existing?.nodeId,
-        name: peerName,
+        name: cleanPeerName,
         signalStrength: existing ? existing.signalStrength : (isRelayed ? -85 : -60),
         relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
         role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',

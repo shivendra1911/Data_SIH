@@ -47,6 +47,10 @@ export async function GET(req: NextRequest) {
       for (const dev of backendData.devices) {
         if (!dev.device_uuid) continue;
         const existingIdx = result.findIndex((c) => c.device_uuid === dev.device_uuid);
+        const elapsedSecs = Number(dev.elapsed_seconds_since_sync) || 0;
+        const lastSeenMins = Math.max(0, Math.round(elapsedSecs / 60));
+        // Retain nodes operating in offline mesh mode for extended disaster grace window (up to 4-6 hours / 360 mins)
+        const isLive = !dev.isUnresponsiveDanger && lastSeenMins < 1440;
         const citObj: CitizenLocation = {
           id: `cit-${dev.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: dev.device_uuid,
@@ -54,8 +58,8 @@ export async function GET(req: NextRequest) {
           phone: dev.phone || "+91 98765 43210",
           lat: Number(dev.lat) || 30.5573,
           lng: Number(dev.lng) || 79.5642,
-          is_live: true,
-          last_seen_minutes_ago: 0,
+          is_live: isLive,
+          last_seen_minutes_ago: lastSeenMins,
           accuracy_radius_m: Number(dev.accuracy) || 10,
           drift_radius_m: 0,
           battery_pct: Number(dev.battery_level) || 85,

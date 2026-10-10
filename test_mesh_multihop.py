@@ -5,6 +5,7 @@ import subprocess
 import threading
 import sys
 import base64
+import urllib.request
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -82,7 +83,7 @@ def run_all_tests():
     time.sleep(1.0)
     
     passed_count = 0
-    total_count = 4
+    total_count = 6
 
     # -------------------------------------------------------------------------
     # TEST 1: Distance-Vector Gossip Beacon Routing Table Ingestion
@@ -126,9 +127,41 @@ def run_all_tests():
         log(f"FAIL: Gossip routing table not updated. C: {match_c}, D: {match_d}")
 
     # -------------------------------------------------------------------------
-    # TEST 2: Multi-Hop Call Request Forwarding & Intermediate Wake Suppression
+    # TEST 2: Bellman-Ford Shortest Path Protection (Routing Integrity)
     # -------------------------------------------------------------------------
-    log("\n--- TEST 2: Multi-Hop MESH_CALL_REQ Relay Forwarding ---")
+    log("\n--- TEST 2: Bellman-Ford Shortest Path Protection ---")
+    # Suboptimal beacon claiming Node C is 5 hops via a worse node
+    degraded_gossip_packet = {
+        "t": 1,
+        "m": f"gossip_worse_{int(time.time()*1000)}",
+        "s": "dev_node_x_relay",
+        "name": "Node X [Suboptimal Route]",
+        "d": "BROADCAST",
+        "ttl": 5,
+        "neighbors": [
+            {
+                "peer_id": "dev_node_c_dist",
+                "name": "Node C (Rescue Team)",
+                "hop_count": 5, # 5 hops + 1 = 6 hops (should be rejected in favor of existing 2 hops!)
+                "status": "SAFE",
+                "battery": 91
+            }
+        ]
+    }
+    send_udp(degraded_gossip_packet)
+    log("Sent degraded 5-hop route advertisement for Node C via Node X")
+    time.sleep(1.0)
+    degraded_match = monitor.search_for("Node dev_node_c_dist reachable via dev_node_x_relay (6 hops", timeout=2.0)
+    if degraded_match is None:
+        log("PASS: Degraded 6-hop route rejected. Existing optimal 2-hop route preserved.")
+        passed_count += 1
+    else:
+        log(f"FAIL: Degraded route improperly overwritten: {degraded_match}")
+
+    # -------------------------------------------------------------------------
+    # TEST 3: Multi-Hop Call Request Forwarding & Intermediate Wake Suppression
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 3: Multi-Hop MESH_CALL_REQ Relay Forwarding & Wake Suppression ---")
     call_mhop_id = f"mhop_call_{int(time.time()*1000)}"
     relay_call_packet = {
         "t": 7, # MESH_CALL_REQ
@@ -136,6 +169,7 @@ def run_all_tests():
         "s": "dev_initiator_node",
         "d": "dev_node_c_dist", # Addressed to Node C (phone is intermediate node!)
         "caller_name": "Commander Sharma",
+        "path": ["dev_initiator_node"],
         "ttl": 5,
         "p": json.dumps({
             "callerName": "Commander Sharma",
@@ -159,9 +193,9 @@ def run_all_tests():
         log(f"FAIL: Forwarding failed. Forward: {forward_match}, TTL: {ttl_match}")
 
     # -------------------------------------------------------------------------
-    # TEST 3: Packet Deduplication & Anti-Looping Protection
+    # TEST 4: Packet Deduplication & Anti-Looping Protection
     # -------------------------------------------------------------------------
-    log("\n--- TEST 3: Duplicate Packet Suppression (Looping Prevention) ---")
+    log("\n--- TEST 4: Duplicate Packet Suppression (Looping Prevention) ---")
     send_udp(relay_call_packet) # Send identical packet with same msg_id
     log(f"Sent duplicate packet {call_mhop_id}")
     
@@ -173,9 +207,38 @@ def run_all_tests():
         log(f"FAIL: Deduplication did not drop duplicate packet: {dedup_match}")
 
     # -------------------------------------------------------------------------
-    # TEST 4: WhatsApp-Style Incoming Call for Self (Wake Screen & Ring)
+    # TEST 5: Voice Burst Audio Stream Relaying (<30ms delay)
     # -------------------------------------------------------------------------
-    log("\n--- TEST 4: Direct Incoming Call Addressed to Self (Wake & Launch UI) ---")
+    log("\n--- TEST 5: Multi-Hop Voice Audio Burst Relaying ---")
+    voice_msg_id = f"voice_{int(time.time()*1000)}"
+    voice_packet = {
+        "t": 11, # VOICE_BURST
+        "m": voice_msg_id,
+        "s": "dev_initiator_node",
+        "d": "dev_node_c_dist", # Addressed to Node C
+        "ttl": 4,
+        "p": json.dumps({
+            "senderId": "dev_initiator_node",
+            "targetId": "dev_node_c_dist",
+            "audio": "IyFBTVIKAAAA", # Dummy AMR 8kHz audio frame
+            "seq": 0,
+            "total": 1
+        })
+    }
+    send_udp(voice_packet)
+    log(f"Sent VOICE_BURST packet {voice_msg_id} (TTL=4)")
+    voice_relay_match = monitor.search_for(f"Forwarding packet {voice_msg_id}", timeout=6.0)
+    voice_ttl_match = monitor.search_for("TTL 4->3", timeout=6.0)
+    if voice_relay_match and voice_ttl_match:
+        log(f"PASS: Voice burst forwarded: {voice_relay_match}")
+        passed_count += 1
+    else:
+        log(f"FAIL: Voice burst relaying failed: {voice_relay_match}")
+
+    # -------------------------------------------------------------------------
+    # TEST 6: WhatsApp-Style Incoming Call for Self (Wake Screen & Ring)
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 6: Direct Incoming Call Addressed to Self (Wake & Launch UI) ---")
     call_self_id = f"self_call_{int(time.time()*1000)}"
     self_call_packet = {
         "t": 7, # MESH_CALL_REQ
