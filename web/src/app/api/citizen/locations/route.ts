@@ -22,19 +22,67 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
+export function isGenuineDevice(device_uuid?: string, name?: string): boolean {
+  if (!device_uuid && !name) return false;
+  const d = (device_uuid || "").toLowerCase();
+  const n = (name || "").toLowerCase();
+
+  const mockKeywords = [
+    "mock",
+    "demo",
+    "dummy",
+    "test",
+    "synthetic",
+    "audit",
+    "fake",
+    "col_phone",
+    "citizen-apk",
+    "cloud_device",
+    "ramesh",
+    "anita",
+    "katy",
+    "seed",
+    "sample",
+    "priyanshu (citizen node 01)",
+    "dev_priyanshu_phone",
+    "dev_ramesh_kumar",
+    "dev_katy_fuller",
+    "dev_anita_sharma",
+    "vivo-v2437-node-01",
+    "dev_node_b_relay",
+    "dev_node_c_dist",
+    "dev_node_d_shelter",
+    "dev_node_x_relay",
+    "dev_node_l_2400m",
+    "dev_initiator_node",
+    "ndrf rescue ops",
+    "cell broadcast",
+    "emergency cell siren",
+    "cell-broadcast",
+    "admin_siren_dispatch",
+    "govt_directive",
+    "command_directive",
+    "broadcast_all",
+  ];
+
+  for (const kw of mockKeywords) {
+    if (d.includes(kw) || n.includes(kw)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const zoneIdFilter = searchParams.get("zone_id");
   const statusFilter = searchParams.get("status");
   const isLiveFilter = searchParams.get("is_live");
 
-  // Prune legacy simulated siren beacons from in-memory cache
+  // Prune legacy simulated siren beacons and mock devices from in-memory cache
   if (global.__NEERNETRA_CITIZENS__) {
     global.__NEERNETRA_CITIZENS__ = global.__NEERNETRA_CITIZENS__.filter(
-      (c) =>
-        !c.name?.includes("Cell Broadcast") &&
-        !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
-        !c.device_uuid?.includes("cell-broadcast")
+      (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 720
     );
   }
 
@@ -45,19 +93,19 @@ export async function GET(req: NextRequest) {
     const backendData = await proxyToBackend<any>("/api/location/live");
     if (backendData && Array.isArray(backendData.devices)) {
       for (const dev of backendData.devices) {
-        if (!dev.device_uuid) continue;
-        const existingIdx = result.findIndex((c) => c.device_uuid === dev.device_uuid);
+        if (!dev.device_uuid || !isGenuineDevice(dev.device_uuid, dev.name)) continue;
         const elapsedSecs = Number(dev.elapsed_seconds_since_sync) || 0;
         const lastSeenMins = Math.max(0, Math.round(elapsedSecs / 60));
-        // Retain nodes operating in offline mesh mode for extended disaster grace window (up to 4-6 hours / 360 mins)
-        const isLive = !dev.isUnresponsiveDanger && lastSeenMins < 1440;
+        if (lastSeenMins > 720) continue;
+        const existingIdx = result.findIndex((c) => c.device_uuid === dev.device_uuid);
+        const isLive = !dev.isUnresponsiveDanger && lastSeenMins < 720;
         const citObj: CitizenLocation = {
           id: `cit-${dev.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: dev.device_uuid,
           name: dev.name || `Citizen [${dev.device_uuid.slice(0, 8)}]`,
           phone: dev.phone || "+91 98765 43210",
-          lat: Number(dev.lat) || 30.5573,
-          lng: Number(dev.lng) || 79.5642,
+          lat: Number(dev.lat) || 27.6050,
+          lng: Number(dev.lng) || 77.5930,
           is_live: isLive,
           last_seen_minutes_ago: lastSeenMins,
           accuracy_radius_m: Number(dev.accuracy) || 10,
@@ -96,41 +144,29 @@ export async function GET(req: NextRequest) {
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       const processedCloudDevIds = new Set<string>();
       for (const alert of cloudAlerts) {
-        // Skip broadcast control commands and sirens from showing as citizens
-        if (
-          alert.device_id === "ADMIN_SIREN_DISPATCH" ||
-          alert.device_id === "GOVT_DIRECTIVE" ||
-          alert.device_id === "COMMAND_DIRECTIVE" ||
-          alert.device_id === "BROADCAST_ALL" ||
-          alert.sos_type === "CIVIL_DEFENSE_SIREN" ||
-          alert.sos_type === "GOVT_DIRECTIVE" ||
-          alert.notes?.includes("EMERGENCY CELL SIREN")
-        ) {
+        if (!isGenuineDevice(alert.device_id, alert.notes)) {
           continue;
         }
 
-        const lowerDevId = (alert.device_id || "").toLowerCase();
-        if (
-          lowerDevId.startsWith("test") ||
-          lowerDevId.includes("dummy") ||
-          lowerDevId.includes("mock") ||
-          lowerDevId.includes("demo") ||
-          lowerDevId.startsWith("citizen-apk") ||
-          lowerDevId.includes("synthetic") ||
-          lowerDevId.startsWith("col_phone") ||
-          lowerDevId.startsWith("fake") ||
-          lowerDevId === "audit_node_99" ||
-          lowerDevId === "cloud_device"
-        ) {
+        const lastSeenMins = Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000));
+        // Reject stale history older than 12 hours (720 mins) so old test records do not appear as live
+        if (lastSeenMins > 720) {
           continue;
         }
 
         const devId = alert.device_id || `mobile-${alert.id ? String(alert.id).slice(0, 6) : "node"}`;
-        if (processedCloudDevIds.has(devId)) {
+        // Normalize core hardware token (e.g. dev_g9ubwd6o_ or vivo_v2437) to prevent duplicate stream markers
+        const coreDeviceKey = devId.toLowerCase().includes("v2437")
+          ? "vivo_v2437"
+          : (devId.startsWith("dev_") ? devId.slice(0, 14) : devId);
+        if (processedCloudDevIds.has(coreDeviceKey)) {
           continue;
         }
-        processedCloudDevIds.add(devId);
-        const existingIdx = result.findIndex((c) => c.device_uuid === devId);
+        processedCloudDevIds.add(coreDeviceKey);
+
+        const existingIdx = result.findIndex(
+          (c) => c.device_uuid === devId || c.device_uuid.toLowerCase().includes(coreDeviceKey)
+        );
 
         let parsedMedical = "NONE";
         if (alert.sos_type === "HIGH_WATER_EVACUATION" || alert.notes?.includes("WATER_RISING")) {
@@ -191,17 +227,21 @@ export async function GET(req: NextRequest) {
           alert.sos_type === "COLLAPSE" ||
           parsedMedical !== "NONE";
 
-        const lastSeenMins = Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000));
-        // In disaster edge mesh mode, preserve active presence for 24 hours (1440 mins)
-        const isLiveInDisasterMode = lastSeenMins < 1440;
+        // In disaster edge mesh mode, preserve active presence for 12 hours (720 mins)
+        const isLiveInDisasterMode = lastSeenMins < 720;
+
+        let cleanDisplayName = parsedName;
+        if (cleanDisplayName.toLowerCase().includes("v2437")) {
+          cleanDisplayName = "Vivo V2437";
+        }
 
         const parsedCitizen: CitizenLocation = {
           id: `cit-${devId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: devId,
-          name: parsedName,
+          name: cleanDisplayName,
           phone: parsedPhone,
-          lat: Number(alert.lat) || 27.6014,
-          lng: Number(alert.lng) || 77.5971,
+          lat: Number(alert.lat) || 27.6050,
+          lng: Number(alert.lng) || 77.5930,
           is_live: isLiveInDisasterMode,
           last_seen_minutes_ago: lastSeenMins,
           accuracy_radius_m: 10,
@@ -226,22 +266,25 @@ export async function GET(req: NextRequest) {
     // Cloud sync fallback gracefully to in-memory
   }
 
-  // Ensure result contains NO Cell Broadcast dummy beacons or synthetic test devices
+  // Strictly enforce only genuine devices that were active within the current window (< 12 hours)
   result = result.filter(
-    (c) =>
-      !c.name?.includes("Cell Broadcast") &&
-      !c.sos_type?.includes("EMERGENCY CELL SIREN") &&
-      !c.device_uuid?.includes("cell-broadcast") &&
-      !c.device_uuid?.toLowerCase().startsWith("test") &&
-      !c.device_uuid?.toLowerCase().includes("dummy") &&
-      !c.device_uuid?.toLowerCase().includes("mock") &&
-      !c.device_uuid?.toLowerCase().includes("demo") &&
-      !c.device_uuid?.toLowerCase().startsWith("citizen-apk") &&
-      !c.device_uuid?.toLowerCase().includes("audit_node") &&
-      !c.device_uuid?.toLowerCase().includes("synthetic") &&
-      !c.device_uuid?.toLowerCase().startsWith("col_phone") &&
-      !c.device_uuid?.toLowerCase().startsWith("fake")
+    (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 720
   );
+
+  // Deduplicate multiple telemetry streams from the same physical smartphone
+  const uniqueCitizens: CitizenLocation[] = [];
+  const seenIdentities = new Set<string>();
+  for (const c of result) {
+    const isVivo = (c.name?.toLowerCase().includes("v2437") || c.device_uuid.toLowerCase().includes("v2437"));
+    const identityKey = isVivo
+      ? "vivo_v2437_physical_device"
+      : (c.device_uuid.startsWith("dev_") ? c.device_uuid.slice(0, 14) : c.device_uuid);
+    if (!seenIdentities.has(identityKey)) {
+      seenIdentities.add(identityKey);
+      uniqueCitizens.push(c);
+    }
+  }
+  result = uniqueCitizens;
 
   // Synchronize unified global store for cross-route radar and connected device counters
   global.__NEERNETRA_CITIZENS__ = result;
@@ -277,13 +320,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const device_uuid = body.device_uuid || `node-${Math.random().toString(36).substring(2, 7)}`;
+    if (!isGenuineDevice(device_uuid, body.name)) {
+      return NextResponse.json({ status: "ignored_mock_device" }, { headers: corsHeaders });
+    }
     const newCitizen: CitizenLocation = {
       id: body.id || `cit-${device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
       device_uuid,
       name: body.name || `Citizen [${device_uuid.slice(0, 8)}]`,
       phone: body.phone || "+91 98765 43210",
-      lat: Number(body.lat) || 30.5573,
-      lng: Number(body.lng) || 79.5642,
+      lat: Number(body.lat) || 27.6050,
+      lng: Number(body.lng) || 77.5930,
       is_live: body.is_live !== undefined ? Boolean(body.is_live) : true,
       last_seen_minutes_ago: Number(body.last_seen_minutes_ago) || 0,
       accuracy_radius_m: Number(body.accuracy_radius_m) || 15,

@@ -355,15 +355,36 @@ export default function EmergencyMap({
   const [basemap, setBasemap] = useState<"hybrid" | "satellite" | "terrain" | "street">("hybrid");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
+  const mockNamesOrIds = [
+    "test",
+    "dummy",
+    "mock",
+    "demo",
+    "synthetic",
+    "cloud_device",
+    "ramesh",
+    "anita",
+    "katy",
+    "seed",
+    "dev_priyanshu_phone",
+    "dev_ramesh_kumar",
+    "dev_katy_fuller",
+    "dev_anita_sharma",
+    "vivo-v2437-node-01",
+    "node_b_relay",
+    "node_c_dist",
+    "node_d_shelter",
+    "node_x_relay",
+    "node_l_2400m",
+  ];
+
   // Filter out any mock/dummy telemetry devices
-  const realCitizens = citizens.filter(
-    (c) =>
-      c.device_uuid &&
-      !c.device_uuid.toLowerCase().includes("test") &&
-      !c.device_uuid.toLowerCase().includes("dummy") &&
-      !c.device_uuid.toLowerCase().includes("mock") &&
-      !c.device_uuid.toLowerCase().includes("cloud_device")
-  );
+  const realCitizens = citizens.filter((c) => {
+    if (!c.device_uuid && !c.name) return false;
+    const d = (c.device_uuid || "").toLowerCase();
+    const n = (c.name || "").toLowerCase();
+    return !mockNamesOrIds.some((kw) => d.includes(kw) || n.includes(kw));
+  });
 
   const activeSafeRoutes =
     safeRoutes && safeRoutes.length > 0
@@ -692,7 +713,13 @@ export default function EmergencyMap({
 
         {/* Fallback Legacy SOS Events */}
         {showLiveCitizens &&
-          sosEvents.map((event) => (
+          sosEvents
+            .filter((event) => {
+              const d = (event.device_uuid || event.id || "").toLowerCase();
+              const n = (event.notes || "").toLowerCase();
+              return !mockNamesOrIds.some((kw) => d.includes(kw) || n.includes(kw));
+            })
+            .map((event) => (
             <Marker
               key={event.id}
               position={[event.lat, event.lng]}

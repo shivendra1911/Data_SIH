@@ -8,58 +8,9 @@ interface DarkSessionDrawerProps {
 }
 
 export const DarkSessionDrawer: React.FC<DarkSessionDrawerProps> = ({ peers }) => {
-  const defaultItems = [
-    {
-      id: '1',
-      name: 'Harry Bender',
-      time: 'Sep 20, 17:30',
-      location: 'Paris',
-      flag: '🇫🇷',
-      deviceType: 'phone',
-    },
-    {
-      id: '2',
-      name: 'Katy Fuller',
-      time: 'Sep 20, 15:00',
-      location: 'New York',
-      flag: '🇺🇸',
-      deviceType: 'phone',
-    },
-    {
-      id: '3',
-      name: 'Jonathan Kelly',
-      time: 'Sep 20, 12:30',
-      location: 'Victoria',
-      flag: '🇨🇦',
-      deviceType: 'laptop',
-    },
-    {
-      id: '4',
-      name: 'Billie Wright',
-      time: 'Sep 20, 11:00',
-      location: 'Paris',
-      flag: '🇫🇷',
-      deviceType: 'phone',
-    },
-    {
-      id: '5',
-      name: 'Sarah Page',
-      time: 'Sep 19, 16:45',
-      location: 'Perth',
-      flag: '🇦🇺',
-      deviceType: 'phone',
-    },
-    {
-      id: '6',
-      name: 'Erica Wyatt',
-      time: 'Sep 19, 14:30',
-      location: 'Paris',
-      flag: '🇫🇷',
-      deviceType: 'phone',
-    },
-  ];
+  const defaultItems: any[] = [];
 
-  const list = peers && peers.length > 0 ? peers : defaultItems;
+  const list = peers || defaultItems;
 
   return (
     <View style={styles.card}>

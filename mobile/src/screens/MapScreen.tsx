@@ -100,13 +100,37 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     }
   }, [isRedZone, targetHavenCoords]);
 
+  const isMockOrFalsePeer = (id?: string, name?: string) => {
+    if (!id && !name) return true;
+    const s = `${id || ''} ${name || ''}`.toLowerCase();
+    return (
+      s.includes('test') ||
+      s.includes('dummy') ||
+      s.includes('mock') ||
+      s.includes('demo') ||
+      s.includes('synthetic') ||
+      s.includes('ramesh') ||
+      s.includes('anita') ||
+      s.includes('katy') ||
+      s.includes('seed') ||
+      s.includes('priyanshu (citizen node 01)') ||
+      s.includes('node_b_relay') ||
+      s.includes('node_c_dist') ||
+      s.includes('node_d_shelter') ||
+      s.includes('node_x_relay') ||
+      s.includes('node_l_2400m')
+    );
+  };
+
   // Synchronize mesh peers (including multi-hop relays) onto the offline Leaflet radar
   useEffect(() => {
     if (!peers || peers.length === 0) return;
-    const meshCitizens: NearbyCitizen[] = peers.map((p, idx) => {
+    const realPeers = peers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
+    if (realPeers.length === 0) return;
+    const meshCitizens: NearbyCitizen[] = realPeers.map((p, idx) => {
       const hops = p.hopCount || 1;
       const dist = p.distanceMeters || (hops === 1 ? 45 : hops * 200);
-      const angle = (idx * (2 * Math.PI / Math.max(1, peers.length)));
+      const angle = (idx * (2 * Math.PI / Math.max(1, realPeers.length)));
       const latOffset = (dist * Math.cos(angle)) / 111000;
       const lngOffset = (dist * Math.sin(angle)) / (111000 * Math.cos((currentLat * Math.PI) / 180));
       return {
@@ -128,7 +152,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     setNearbyCitizens((prev) => {
       const merged = [...meshCitizens];
       for (const c of prev) {
-        if (!merged.some((m) => m.id === c.id || m.name === c.name)) {
+        if (!isMockOrFalsePeer(c.id, c.name) && !merged.some((m) => m.id === c.id || m.name === c.name)) {
           merged.push(c);
         }
       }
@@ -294,11 +318,10 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
   const loadNearbyCitizens = async (lat: number, lng: number) => {
     try {
-      const citizens = await fetchNearbyCitizens(lat, lng);
-      if (citizens && citizens.length > 0) {
-        setNearbyCitizens(citizens);
-        sendCitizensToMap(citizens);
-      }
+      const rawCitizens = await fetchNearbyCitizens(lat, lng);
+      const citizens = (rawCitizens || []).filter((c) => !isMockOrFalsePeer(c.id, c.name));
+      setNearbyCitizens(citizens);
+      sendCitizensToMap(citizens);
     } catch (err) {
       console.warn('[MapScreen] Failed to load nearby citizens:', err);
     }

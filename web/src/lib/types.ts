@@ -106,6 +106,7 @@ export interface SOSEvent {
   is_mesh_relayed: boolean;
   created_at: string;
   rescued?: boolean;
+  notes?: string;
 }
 
 export interface SOSCluster {

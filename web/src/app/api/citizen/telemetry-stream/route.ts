@@ -65,18 +65,12 @@ export async function GET(req: NextRequest) {
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       for (const alert of cloudAlerts) {
-        // Exclude dummy test devices and synthetic pings
         const devId = (alert.device_id || "").toLowerCase();
         const noteStr = (alert.notes || "").toLowerCase();
+        const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
         if (
           !alert.device_id ||
-          devId === "test" ||
-          devId === "test2" ||
-          devId.startsWith("test") ||
-          devId.includes("dummy") ||
-          devId.includes("mock") ||
-          devId === "cloud_device" ||
-          noteStr.startsWith("test")
+          mockKeywords.some((kw) => devId.includes(kw) || noteStr.includes(kw))
         ) {
           continue;
         }
@@ -122,13 +116,13 @@ export async function GET(req: NextRequest) {
   }
 
   // Filter out any lingering dummy entries from memory stream as well
-  stream = stream.filter(
-    (b) =>
-      b.device_uuid &&
-      !b.device_uuid.toLowerCase().startsWith("test") &&
-      !b.device_uuid.toLowerCase().includes("dummy") &&
-      !b.phone_model.toLowerCase().startsWith("test")
-  );
+  const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
+  stream = stream.filter((b) => {
+    if (!b.device_uuid) return false;
+    const dev = b.device_uuid.toLowerCase();
+    const model = (b.phone_model || "").toLowerCase();
+    return !mockKeywords.some((kw) => dev.includes(kw) || model.includes(kw));
+  });
 
   // Sort descending by timestamp
   stream.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -174,6 +168,13 @@ export async function POST(req: NextRequest) {
 
     if (!device_uuid || lat === undefined || lng === undefined) {
       return NextResponse.json({ error: "Missing device_uuid or coordinates" }, { status: 400, headers: corsHeaders });
+    }
+
+    const lowerDev = device_uuid.toLowerCase();
+    const lowerModel = (phone_model || "").toLowerCase();
+    const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
+    if (mockKeywords.some((kw) => lowerDev.includes(kw) || lowerModel.includes(kw))) {
+      return NextResponse.json({ status: "ignored_mock_device" }, { headers: corsHeaders });
     }
 
     const breadcrumb: TelemetryBreadcrumb = {

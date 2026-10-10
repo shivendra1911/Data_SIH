@@ -50,31 +50,8 @@ db_lock = threading.RLock()
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "neernetra_model.pkl")
 model_clf = None
 
-# Store registered SOS events in memory
-sos_events_db: List[Dict[str, Any]] = [
-    {
-        "id": "req_seed_001",
-        "device_uuid": "dev_priyanshu_phone",
-        "lat": 30.5573,
-        "lng": 79.5642,
-        "status": "SOS",
-        "sos_type": "TRAPPED",
-        "is_mesh_relayed": False,
-        "received_at": datetime.now(timezone.utc).isoformat(),
-        "notes": "Trapped near Riverbank sector 1"
-    },
-    {
-        "id": "req_seed_002",
-        "device_uuid": "dev_katy_fuller",
-        "lat": 30.5560,
-        "lng": 79.5630,
-        "status": "HELPING",
-        "sos_type": "EVACUATION",
-        "is_mesh_relayed": True,
-        "received_at": datetime.now(timezone.utc).isoformat(),
-        "notes": "Assisting elderly citizens towards higher ridge"
-    }
-]
+# Store registered SOS events in memory (only genuine live events from active nodes)
+sos_events_db: List[Dict[str, Any]] = []
 
 # Dispatched rescue missions
 dispatched_rescues_db: List[Dict[str, Any]] = []
@@ -447,57 +424,8 @@ zone_sensor_state: Dict[str, Dict[str, Any]] = {
 zone_sensor_state["joshimath_02"] = zone_sensor_state["joshimath_01"]
 zone_sensor_state["badrinath_03"] = zone_sensor_state["badrinath_01"]
 
-now_ts = time.time()
-location_history_db: Dict[str, Dict[str, Any]] = {
-    "dev_priyanshu_phone": {
-        "device_uuid": "dev_priyanshu_phone",
-        "name": "Priyanshu (Citizen Node 01)",
-        "lat": 30.5573,
-        "lng": 79.5642,
-        "altitude": 1450,
-        "accuracy": 4.2,
-        "battery_level": 88,
-        "last_synced_at": datetime.fromtimestamp(now_ts - 360, timezone.utc).isoformat(),
-        "zone_id": "chamoli_01",
-        "status": "SOS"
-    },
-    "dev_ramesh_kumar": {
-        "device_uuid": "dev_ramesh_kumar",
-        "name": "Ramesh Kumar",
-        "lat": 30.5585,
-        "lng": 79.5652,
-        "altitude": 1480,
-        "accuracy": 5.0,
-        "battery_level": 64,
-        "last_synced_at": datetime.fromtimestamp(now_ts - 120, timezone.utc).isoformat(),
-        "zone_id": "chamoli_01",
-        "status": "SAFE"
-    },
-    "dev_katy_fuller": {
-        "device_uuid": "dev_katy_fuller",
-        "name": "Katy Fuller (Vol. Rescue)",
-        "lat": 30.5560,
-        "lng": 79.5630,
-        "altitude": 1410,
-        "accuracy": 6.1,
-        "battery_level": 42,
-        "last_synced_at": datetime.fromtimestamp(now_ts - 180, timezone.utc).isoformat(),
-        "zone_id": "chamoli_01",
-        "status": "HELPING"
-    },
-    "dev_anita_sharma": {
-        "device_uuid": "dev_anita_sharma",
-        "name": "Anita Sharma",
-        "lat": 30.5810,
-        "lng": 79.5230,
-        "altitude": 1620,
-        "accuracy": 3.8,
-        "battery_level": 75,
-        "last_synced_at": datetime.fromtimestamp(now_ts - 90, timezone.utc).isoformat(),
-        "zone_id": "joshimath_01",
-        "status": "SOS"
-    }
-}
+# Genuine physical devices populated exclusively via live telemetry updates
+location_history_db: Dict[str, Dict[str, Any]] = {}
 
 # --- Pydantic Schemas ---
 class SOSPayload(BaseModel):

@@ -20,7 +20,12 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const citizens = global.__NEERNETRA_CITIZENS__ || [];
+  const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
+  const citizens = (global.__NEERNETRA_CITIZENS__ || []).filter((c) => {
+    const d = (c.device_uuid || "").toLowerCase();
+    const n = (c.name || "").toLowerCase();
+    return !mockKeywords.some((kw) => d.includes(kw) || n.includes(kw));
+  });
   return NextResponse.json(
     {
       status: "success",
@@ -47,6 +52,13 @@ export async function POST(req: NextRequest) {
     }
     if (!parsedName) {
       parsedName = `Citizen [${device_uuid.slice(0, 8)}]`;
+    }
+
+    const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
+    const lowerDev = device_uuid.toLowerCase();
+    const lowerName = parsedName.toLowerCase();
+    if (mockKeywords.some((kw) => lowerDev.includes(kw) || lowerName.includes(kw))) {
+      return NextResponse.json({ status: "ignored_mock_device" }, { headers: corsHeaders });
     }
 
     const citizen: CitizenLocation = {

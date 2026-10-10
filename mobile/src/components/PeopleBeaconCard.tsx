@@ -12,43 +12,9 @@ export const PeopleBeaconCard: React.FC<PeopleBeaconCardProps> = ({
   beacons,
   onSelectBeacon,
 }) => {
-  const defaultBeacons: CitizenBeaconItem[] = [
-    {
-      id: '1',
-      name: 'Harry Bender',
-      role: 'Civil Defense Lead',
-      status: 'HELPING',
-      location: 'Sector Alpha',
-      countryFlag: '🇮🇳 India',
-      distance: '0.4 km',
-      timestamp: 'Mar 13, 2026',
-      selected: false,
-    },
-    {
-      id: '2',
-      name: 'Katy Fuller',
-      role: 'Citizen Responder',
-      status: 'SAFE',
-      location: 'Sector Bravo',
-      countryFlag: '🇮🇳 India',
-      distance: '1.2 km',
-      timestamp: 'Oct 13, 2026',
-      selected: true,
-    },
-    {
-      id: '3',
-      name: 'Jonathan Kelly',
-      role: 'Mobile Edge Node',
-      status: 'SAFE',
-      location: 'Sector Charlie',
-      countryFlag: '🇮🇳 India',
-      distance: '2.8 km',
-      timestamp: 'Mar 13, 2026',
-      selected: false,
-    },
-  ];
+  const defaultBeacons: CitizenBeaconItem[] = [];
 
-  const list = beacons && beacons.length > 0 ? beacons : defaultBeacons;
+  const list = beacons || defaultBeacons;
 
   return (
     <View style={styles.container}>
