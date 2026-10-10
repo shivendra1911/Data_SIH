@@ -417,15 +417,41 @@ public class NeerNetraNativeMeshManager {
 
 
     // ── Notify All Connected Centrals ─────────────────────────────────────────
+    // ── Unified Broadcast: BLE Centrals + Wi-Fi Mesh (NAN/P2P/UDP) ────────────
     public int notifyAllClients(String base64Data) {
-        if (!isRunning || notifyCharacteristic == null || gattServer == null) {
+        if (base64Data == null || base64Data.trim().isEmpty()) {
             return 0;
         }
 
         try {
             byte[] data = android.util.Base64.decode(base64Data.trim(), android.util.Base64.NO_WRAP);
-            int notified = 0;
+            if (data == null || data.length == 0) return 0;
 
+            // 1. Dedup cache registration: mark msgId as seen so our own transmission is never looped back
+            try {
+                String str = new String(data, StandardCharsets.UTF_8).trim();
+                if (str.startsWith("{")) {
+                    JSONObject jo = new JSONObject(str);
+                    String m = jo.optString("m", "");
+                    if (!m.isEmpty()) {
+                        seenMessageIds.put(m, System.currentTimeMillis());
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 2. High-speed, long-range Wi-Fi Broadcast (Wi-Fi Aware NAN + Wi-Fi Direct P2P + UDP 8765)
+            try {
+                NeerNetraWifiMeshManager.getInstance(appContext).broadcastPacketOverWifi(data);
+            } catch (Exception we) {
+                Log.w(TAG, "Wi-Fi broadcast error in notifyAllClients: " + we.getMessage());
+            }
+
+            // 3. BLE GATT Notify to all connected Centrals
+            if (!isRunning || notifyCharacteristic == null || gattServer == null) {
+                return 1; // Wi-Fi successfully broadcast even if BLE centrals are 0
+            }
+
+            int notified = 0;
             synchronized (connectedCentrals) {
                 for (BluetoothDevice device : connectedCentrals) {
                     try {
@@ -448,7 +474,7 @@ public class NeerNetraNativeMeshManager {
                 }
             }
 
-            return notified;
+            return Math.max(1, notified);
         } catch (Throwable e) {
             Log.e(TAG, "notifyAllClients error: " + e.getMessage());
             return 0;

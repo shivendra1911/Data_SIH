@@ -921,19 +921,27 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
         } catch (Exception ignored) {}
     }
 
+    private WifiManager.MulticastLock serviceMulticastLock;
+
     private void acquireWifiLock() {
         try {
-            if (wifiLock == null) {
-                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-                if (wm != null) {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                if (wifiLock == null) {
                     wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "neernetra:MeshWifiLock");
                     wifiLock.setReferenceCounted(false);
                     wifiLock.acquire();
                     Log.i(TAG, "[MeshService] Acquired WIFI_MODE_FULL_HIGH_PERF WifiLock for 24/7 radio persistence");
                 }
+                if (serviceMulticastLock == null) {
+                    serviceMulticastLock = wm.createMulticastLock("neernetra:ServiceMulticastLock");
+                    serviceMulticastLock.setReferenceCounted(false);
+                    serviceMulticastLock.acquire();
+                    Log.i(TAG, "[MeshService] Acquired MulticastLock for 24/7 background UDP broadcast reception");
+                }
             }
         } catch (Exception e) {
-            Log.w(TAG, "[MeshService] Could not acquire WifiLock: " + e.getMessage());
+            Log.w(TAG, "[MeshService] Could not acquire WifiLock/MulticastLock: " + e.getMessage());
         }
     }
 
@@ -943,6 +951,11 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 wifiLock.release();
                 wifiLock = null;
                 Log.i(TAG, "[MeshService] Released WifiLock");
+            }
+            if (serviceMulticastLock != null && serviceMulticastLock.isHeld()) {
+                serviceMulticastLock.release();
+                serviceMulticastLock = null;
+                Log.i(TAG, "[MeshService] Released MulticastLock");
             }
         } catch (Exception ignored) {}
     }
@@ -963,12 +976,34 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
             PendingIntent pi = PendingIntent.getBroadcast(context, 7001, heartbeatIntent, flags);
             long triggerAtMillis = SystemClock.elapsedRealtime() + (15 * 60 * 1000L); // 15 minutes
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (am.canScheduleExactAlarms()) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+                    Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute exact heartbeat alarm (Doze-proof)");
+                } else {
+                    am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+                    Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute allow-while-idle heartbeat alarm (exact alarm fallback)");
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+                Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute exact heartbeat alarm (Doze-proof)");
             } else {
                 am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+                Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute exact heartbeat alarm (legacy)");
             }
-            Log.i(TAG, "⏰ [MeshHeartbeat] Scheduled 15-minute exact heartbeat alarm (Doze-proof)");
+        } catch (SecurityException se) {
+            try {
+                AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                if (am != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Intent heartbeatIntent = new Intent(context, MeshHeartbeatReceiver.class);
+                    heartbeatIntent.setAction(MeshHeartbeatReceiver.ACTION_MESH_HEARTBEAT);
+                    int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+                    PendingIntent pi = PendingIntent.getBroadcast(context, 7001, heartbeatIntent, flags);
+                    long triggerAtMillis = SystemClock.elapsedRealtime() + (15 * 60 * 1000L);
+                    am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pi);
+                    Log.i(TAG, "⏰ [MeshHeartbeat] Fallback to setAndAllowWhileIdle after SecurityException");
+                }
+            } catch (Exception ignored) {}
         } catch (Exception e) {
             Log.w(TAG, "[MeshHeartbeat] Could not schedule heartbeat alarm: " + e.getMessage());
         }

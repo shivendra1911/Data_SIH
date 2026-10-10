@@ -1075,19 +1075,22 @@ class NeerNetraBLEMesh {
       }
       console.log(`[BLE Mesh] HELLO registered from ${peerName} (${senderId}) [Hop: ${hopCount}]`);
 
-      // Bidirectional handshake: reply with our own identity so both nodes know each other
+      // Bidirectional handshake: reply with our own identity so both nodes know each other across multi-hop links
       if (!info.isAck) {
         const replyPayload = JSON.stringify({
           name: this.myName,
           id: this.myDeviceId,
           isAck: true,
         });
-        const replyPkt = encodePacket(BLEMsgType.HELLO, this.myDeviceId, replyPayload, 1);
-        notifyAllCentrals(replyPkt).catch(() => {});
-        const targetDev = this.connectedDevices.get(deviceId);
-        if (targetDev) {
-          this.sendToPeer(targetDev, BLEMsgType.HELLO, replyPayload, 1).catch(() => {});
-        }
+        const replyTtl = isRelayed ? Math.max(5, hopCount + 2) : 2;
+        this.broadcastToAll(
+          BLEMsgType.HELLO,
+          replyPayload,
+          replyTtl,
+          undefined,
+          this.myDeviceId,
+          actualNodeId || deviceId
+        ).catch(() => {});
       }
     } catch {}
   }

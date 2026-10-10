@@ -2,6 +2,7 @@ package com.neernetra.disaster;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.net.wifi.WifiManager;
 import android.net.wifi.aware.AttachCallback;
 import android.net.wifi.aware.DiscoverySessionCallback;
 import android.net.wifi.aware.PeerHandle;
@@ -11,6 +12,7 @@ import android.net.wifi.aware.SubscribeConfig;
 import android.net.wifi.aware.SubscribeDiscoverySession;
 import android.net.wifi.aware.WifiAwareManager;
 import android.net.wifi.aware.WifiAwareSession;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,8 +27,10 @@ import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,9 +39,10 @@ import java.util.concurrent.Executors;
  * NeerNetraWifiMeshManager
  * ========================
  * High-speed, zero-infrastructure long-range mesh extension utilizing:
- *  1. Wi-Fi Aware (NAN - Neighbor Awareness Networking) for direct 150m-300m discovery.
- *  2. High-throughput zero-latency UDP/TCP socket mesh (Port 8765) allowing uncompressed/compressed
- *     voice packet streaming and multi-hop linked list forwarding without cellular/routers.
+ *  1. Wi-Fi Aware (NAN - Neighbor Awareness Networking) for direct 150m-300m discovery on supported hardware.
+ *  2. Wi-Fi Direct (P2P - WifiP2pManager) for zero-infrastructure autonomous discovery on all Android chipsets.
+ *  3. High-throughput zero-latency UDP broadcast socket mesh (Port 8765) with WifiManager.MulticastLock
+ *     allowing uncompressed/compressed voice packet streaming and multi-hop linked list forwarding with NO NETWORK.
  */
 public class NeerNetraWifiMeshManager {
 
@@ -50,13 +55,21 @@ public class NeerNetraWifiMeshManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    // Multicast lock to prevent Android Wi-Fi power-saving from dropping UDP broadcast packets
+    private WifiManager.MulticastLock multicastLock;
+
     // Wi-Fi Aware state
     private WifiAwareManager wifiAwareManager;
     private WifiAwareSession awareSession;
     private PublishDiscoverySession publishSession;
     private SubscribeDiscoverySession subscribeSession;
     private volatile boolean isAwareAttached = false;
-    private final Map<Integer, PeerHandle> discoveredAwarePeers = new ConcurrentHashMap<>();
+    private final Map<Integer, PeerHandle> discoveredSubscribePeers = new ConcurrentHashMap<>();
+    private final Map<Integer, PeerHandle> discoveredPublishPeers = new ConcurrentHashMap<>();
+
+    // Wi-Fi Direct (P2P) state
+    private WifiP2pManager wifiP2pManager;
+    private WifiP2pManager.Channel wifiP2pChannel;
 
     // UDP Broadcast Socket state
     private DatagramSocket udpSocket;
@@ -81,12 +94,80 @@ public class NeerNetraWifiMeshManager {
     }
 
     /**
-     * Bootstraps Wi-Fi Aware NAN and Local Socket Mesh engine.
+     * Bootstraps Wi-Fi Aware NAN, Wi-Fi Direct P2P, and Local UDP Socket Mesh engine.
      */
     public synchronized void startWifiMesh() {
         Log.i(TAG, "Starting NeerNetra High-Speed Long-Range Wi-Fi Mesh Subsystem...");
+        acquireMulticastLock();
         startUdpSocketListener();
         initWifiAware();
+        initWifiP2p();
+    }
+
+    private void acquireMulticastLock() {
+        try {
+            if (multicastLock == null) {
+                WifiManager wm = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    multicastLock = wm.createMulticastLock("neernetra:WifiMeshMulticast");
+                    multicastLock.setReferenceCounted(false);
+                    multicastLock.acquire();
+                    Log.i(TAG, "⚡ Acquired WifiManager.MulticastLock for UDP broadcast mesh reception");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not acquire MulticastLock: " + e.getMessage());
+        }
+    }
+
+    private void releaseMulticastLock() {
+        try {
+            if (multicastLock != null && multicastLock.isHeld()) {
+                multicastLock.release();
+                multicastLock = null;
+                Log.i(TAG, "Released WifiManager.MulticastLock");
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Initializes Wi-Fi Direct (P2P) for devices without Wi-Fi Aware hardware.
+     */
+    private void initWifiP2p() {
+        try {
+            PackageManager pm = appContext.getPackageManager();
+            if (!pm.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)) {
+                Log.i(TAG, "Wi-Fi Direct (P2P) hardware feature not available on this device.");
+                return;
+            }
+            wifiP2pManager = (WifiP2pManager) appContext.getSystemService(Context.WIFI_P2P_SERVICE);
+            if (wifiP2pManager != null) {
+                wifiP2pChannel = wifiP2pManager.initialize(appContext, Looper.getMainLooper(), null);
+                Log.i(TAG, "⚡ Wi-Fi Direct (P2P) subsystem initialized successfully!");
+                startP2pPeerDiscovery();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Wi-Fi Direct init error: " + e.getMessage());
+        }
+    }
+
+    public void startP2pPeerDiscovery() {
+        if (wifiP2pManager == null || wifiP2pChannel == null) return;
+        try {
+            wifiP2pManager.discoverPeers(wifiP2pChannel, new WifiP2pManager.ActionListener() {
+                @Override
+                public void onSuccess() {
+                    Log.i(TAG, "⚡ Wi-Fi Direct peer discovery active for zero-network long-range mesh");
+                }
+
+                @Override
+                public void onFailure(int reason) {
+                    Log.w(TAG, "Wi-Fi Direct discoverPeers failure reason: " + reason);
+                }
+            });
+        } catch (SecurityException se) {
+            Log.w(TAG, "Wi-Fi Direct discoverPeers SecurityException: " + se.getMessage());
+        } catch (Exception ignored) {}
     }
 
     /**
@@ -94,7 +175,7 @@ public class NeerNetraWifiMeshManager {
      */
     private void initWifiAware() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || wifiAwareManager == null) {
-            Log.i(TAG, "Wi-Fi Aware (NAN) hardware not supported on this chipset. Relying on High-Performance UDP Socket Mesh.");
+            Log.i(TAG, "Wi-Fi Aware (NAN) hardware not supported on this chipset. Relying on Wi-Fi Direct P2P & High-Performance UDP Socket Mesh.");
             return;
         }
 
@@ -149,10 +230,13 @@ public class NeerNetraWifiMeshManager {
                 @Override
                 public void onMessageReceived(PeerHandle peerHandle, byte[] message) {
                     super.onMessageReceived(peerHandle, message);
-                    Log.i(TAG, "⚡ Wi-Fi Aware message received (" + (message != null ? message.length : 0) + " bytes)");
+                    if (peerHandle != null) {
+                        discoveredPublishPeers.put(peerHandle.hashCode(), peerHandle);
+                    }
+                    Log.i(TAG, "⚡ Wi-Fi Aware publisher received message (" + (message != null ? message.length : 0) + " bytes)");
                     if (message != null && message.length > 0) {
                         NeerNetraNativeMeshManager.getInstance(appContext)
-                            .handleIncomingPacketFromAnyTransport("wifi_aware", message);
+                            .handleIncomingPacketFromAnyTransport("wifi_aware_pub", message);
                     }
                 }
             }, mainHandler);
@@ -181,16 +265,22 @@ public class NeerNetraWifiMeshManager {
                 @Override
                 public void onServiceDiscovered(PeerHandle peerHandle, byte[] serviceSpecificInfo, List<byte[]> matchFilter) {
                     super.onServiceDiscovered(peerHandle, serviceSpecificInfo, matchFilter);
-                    discoveredAwarePeers.put(peerHandle.hashCode(), peerHandle);
-                    Log.i(TAG, "🎯 Wi-Fi Aware discovered long-range peer (PeerHandle #" + peerHandle.hashCode() + ")!");
+                    if (peerHandle != null) {
+                        discoveredSubscribePeers.put(peerHandle.hashCode(), peerHandle);
+                    }
+                    Log.i(TAG, "🎯 Wi-Fi Aware subscriber discovered long-range peer (PeerHandle #" + (peerHandle != null ? peerHandle.hashCode() : 0) + ")!");
                 }
 
                 @Override
                 public void onMessageReceived(PeerHandle peerHandle, byte[] message) {
                     super.onMessageReceived(peerHandle, message);
+                    if (peerHandle != null) {
+                        discoveredSubscribePeers.put(peerHandle.hashCode(), peerHandle);
+                    }
+                    Log.i(TAG, "⚡ Wi-Fi Aware subscriber received message (" + (message != null ? message.length : 0) + " bytes)");
                     if (message != null && message.length > 0) {
                         NeerNetraNativeMeshManager.getInstance(appContext)
-                            .handleIncomingPacketFromAnyTransport("wifi_aware", message);
+                            .handleIncomingPacketFromAnyTransport("wifi_aware_sub", message);
                     }
                 }
             }, mainHandler);
@@ -247,7 +337,7 @@ public class NeerNetraWifiMeshManager {
     }
 
     /**
-     * Broadcasts a mesh packet over local Wi-Fi, Wi-Fi Aware, and Local-Only Hotspot networks.
+     * Broadcasts a mesh packet over local Wi-Fi, Wi-Fi Aware, Wi-Fi Direct, and Local-Only Hotspot networks.
      */
     public void broadcastPacketOverWifi(byte[] data) {
         if (data == null || data.length == 0) return;
@@ -255,14 +345,21 @@ public class NeerNetraWifiMeshManager {
         executor.execute(() -> {
             // 1. Send via Wi-Fi Aware NAN to all discovered peers
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isAwareAttached) {
-                for (PeerHandle handle : discoveredAwarePeers.values()) {
-                    try {
-                        if (publishSession != null) {
-                            publishSession.sendMessage(handle, 1, data);
-                        } else if (subscribeSession != null) {
+                // Send to peers discovered by subscribeSession
+                if (subscribeSession != null) {
+                    for (PeerHandle handle : discoveredSubscribePeers.values()) {
+                        try {
                             subscribeSession.sendMessage(handle, 1, data);
-                        }
-                    } catch (Exception ignored) {}
+                        } catch (Exception ignored) {}
+                    }
+                }
+                // Send to peers who messaged publishSession
+                if (publishSession != null) {
+                    for (PeerHandle handle : discoveredPublishPeers.values()) {
+                        try {
+                            publishSession.sendMessage(handle, 1, data);
+                        } catch (Exception ignored) {}
+                    }
                 }
             }
 
@@ -290,8 +387,14 @@ public class NeerNetraWifiMeshManager {
     }
 
     private List<InetAddress> getBroadcastAddresses() {
-        List<InetAddress> broadcastList = new ArrayList<>();
+        Set<InetAddress> broadcastSet = new HashSet<>();
         try {
+            // Explicit standard Wi-Fi Direct and Hotspot subnet broadcast targets
+            try { broadcastSet.add(InetAddress.getByName("192.168.49.255")); } catch (Exception ignored) {}
+            try { broadcastSet.add(InetAddress.getByName("192.168.49.1")); } catch (Exception ignored) {}
+            try { broadcastSet.add(InetAddress.getByName("192.168.43.255")); } catch (Exception ignored) {}
+            try { broadcastSet.add(InetAddress.getByName("192.168.137.255")); } catch (Exception ignored) {}
+
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -300,12 +403,33 @@ public class NeerNetraWifiMeshManager {
                 for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
                     InetAddress broadcast = interfaceAddress.getBroadcast();
                     if (broadcast != null) {
-                        broadcastList.add(broadcast);
+                        broadcastSet.add(broadcast);
+                    } else {
+                        // Compute subnet broadcast from address and prefix length
+                        InetAddress ip = interfaceAddress.getAddress();
+                        if (ip instanceof java.net.Inet4Address) {
+                            short prefix = interfaceAddress.getNetworkPrefixLength();
+                            if (prefix > 0 && prefix < 32) {
+                                int ipInt = 0;
+                                byte[] ipBytes = ip.getAddress();
+                                for (byte b : ipBytes) {
+                                    ipInt = (ipInt << 8) | (b & 0xFF);
+                                }
+                                int mask = ~((1 << (32 - prefix)) - 1);
+                                int bcastInt = ipInt | (~mask);
+                                byte[] bcastBytes = new byte[4];
+                                bcastBytes[0] = (byte) ((bcastInt >> 24) & 0xFF);
+                                bcastBytes[1] = (byte) ((bcastInt >> 16) & 0xFF);
+                                bcastBytes[2] = (byte) ((bcastInt >> 8) & 0xFF);
+                                bcastBytes[3] = (byte) (bcastInt & 0xFF);
+                                broadcastSet.add(InetAddress.getByAddress(bcastBytes));
+                            }
+                        }
                     }
                 }
             }
         } catch (Exception ignored) {}
-        return broadcastList;
+        return new ArrayList<>(broadcastSet);
     }
 
     public boolean isWifiAwareAvailable() {
@@ -313,10 +437,11 @@ public class NeerNetraWifiMeshManager {
     }
 
     public int getDiscoveredWifiPeersCount() {
-        return discoveredAwarePeers.size();
+        return discoveredSubscribePeers.size() + discoveredPublishPeers.size();
     }
 
     public synchronized void stopWifiMesh() {
+        releaseMulticastLock();
         isUdpListening = false;
         if (udpSocket != null && !udpSocket.isClosed()) {
             try { udpSocket.close(); } catch (Exception ignored) {}
@@ -340,7 +465,8 @@ public class NeerNetraWifiMeshManager {
                 awareSession = null;
             }
             isAwareAttached = false;
-            discoveredAwarePeers.clear();
+            discoveredSubscribePeers.clear();
+            discoveredPublishPeers.clear();
         }
         Log.i(TAG, "Wi-Fi Mesh subsystem stopped");
     }
