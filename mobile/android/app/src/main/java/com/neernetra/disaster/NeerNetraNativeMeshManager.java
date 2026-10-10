@@ -947,6 +947,7 @@ public class NeerNetraNativeMeshManager {
                         relayedRoute.lng = n.optDouble("lng", relayedRoute.lng);
                         relayedRoute.battery = n.optInt("battery", 80);
                         relayedRoute.status = n.optString("status", "SAFE");
+                        routingTable.put(nId, relayedRoute);
                         String distStr = (nHop * 200 >= 1000) ? String.format(java.util.Locale.US, "%.1fkm", (nHop * 200.0) / 1000.0) : (nHop * 200) + "m";
                         Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + distStr + ")");
                     }
