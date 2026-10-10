@@ -1162,7 +1162,7 @@ class NeerNetraBLEMesh {
           const nId = n.peer_id || n.id || n.device_id || n.nodeId;
           if (!nId || nId === this.myDeviceId) continue;
           const nHop = (n.hop_count || n.hops || 1) + 1;
-          const nDist = nHop * 60;
+          const nDist = nHop * 200;
           const existing = this.activePeers.get(nId);
           const nowMs = Date.now();
           const isFreshDirect = existing && (existing.hopCount || 1) === 1 && (nowMs - new Date(existing.lastSeen).getTime() < 45000);
@@ -1199,7 +1199,7 @@ class NeerNetraBLEMesh {
       const explicitHop = info.hop_count !== undefined ? info.hop_count : (info.hops !== undefined ? info.hops : undefined);
       const hopCount = explicitHop !== undefined ? explicitHop : Math.max(1, 8 - ttl);
       const isRelayed = hopCount > 1;
-      const calculatedDistance = isRelayed ? (hopCount * 60) : (info.distance || 45);
+      const calculatedDistance = isRelayed ? (hopCount * 200) : (info.distance || 45);
 
       const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
       const rawBaseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);

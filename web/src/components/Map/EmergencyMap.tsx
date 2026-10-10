@@ -626,7 +626,7 @@ export default function EmergencyMap({
                     </div>
                     {citizen.mesh_hops > 0 && (
                       <div className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded flex items-center gap-1 mt-1">
-                        📡 {citizen.mesh_hops === 1 ? "Direct • 1 Hop (~45m)" : `Relayed Mesh • ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 60}m)`}
+                        📡 {citizen.mesh_hops === 1 ? "Direct • 1 Hop (~150m)" : `Relayed Mesh • ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 200 >= 1000 ? `${((citizen.mesh_hops * 200) / 1000).toFixed(1)} km` : `${citizen.mesh_hops * 200}m`})`}
                       </div>
                     )}
                   </div>

@@ -188,11 +188,22 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                           color: (!item.hopCount || item.hopCount <= 1) ? '#047857' : item.hopCount === 2 ? '#a16207' : '#1d4ed8',
                         }
                       ]}>
-                        {(!item.hopCount || item.hopCount <= 1)
-                          ? `🟢 Direct • ~${item.distanceMeters ?? 45}m`
-                          : item.hopCount === 2
-                          ? `🟡 Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ~${item.distanceMeters ?? 120}m`
-                          : `🔵 Relayed • ${item.hopCount} hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ~${item.distanceMeters ?? 180}m`}
+                        {(() => {
+                          const hops = item.hopCount || 1;
+                          const rawDist = item.distanceMeters && item.distanceMeters > 0
+                            ? item.distanceMeters
+                            : (hops <= 1 ? 45 : hops * 200);
+                          const distLabel = rawDist >= 1000
+                            ? `~${(rawDist / 1000).toFixed(1)} km`
+                            : `~${Math.round(rawDist)}m`;
+                          if (hops <= 1) {
+                            return `🟢 Direct • ${distLabel}`;
+                          } else if (hops === 2) {
+                            return `🟡 Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}`;
+                          } else {
+                            return `🔵 Relayed • ${hops} hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}`;
+                          }
+                        })()}
                       </Text>
                     </View>
                     <Text style={styles.peerDist}>

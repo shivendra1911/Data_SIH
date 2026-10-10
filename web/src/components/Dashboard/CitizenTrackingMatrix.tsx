@@ -257,7 +257,7 @@ export default function CitizenTrackingMatrix({
                       </span>
                     </span>
                     <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0 font-bold">
-                      {citizen.mesh_hops <= 1 ? "🟢 Direct 1 Hop" : `📡 ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 60}m)`}
+                      {citizen.mesh_hops <= 1 ? "🟢 Direct 1 Hop (~150m)" : `📡 ${citizen.mesh_hops} Hops (~${citizen.mesh_hops * 200 >= 1000 ? `${((citizen.mesh_hops * 200) / 1000).toFixed(1)} km` : `${citizen.mesh_hops * 200}m`})`}
                     </span>
                   </div>
                 )}
