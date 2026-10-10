@@ -105,7 +105,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     if (!peers || peers.length === 0) return;
     const meshCitizens: NearbyCitizen[] = peers.map((p, idx) => {
       const hops = p.hopCount || 1;
-      const dist = p.distanceMeters || (hops === 1 ? 45 : hops * 60);
+      const dist = p.distanceMeters || (hops === 1 ? 45 : hops * 200);
       const angle = (idx * (2 * Math.PI / Math.max(1, peers.length)));
       const latOffset = (dist * Math.cos(angle)) / 111000;
       const lngOffset = (dist * Math.sin(angle)) / (111000 * Math.cos((currentLat * Math.PI) / 180));

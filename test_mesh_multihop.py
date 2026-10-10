@@ -268,8 +268,8 @@ def run_all_tests():
     else:
         log(f"FAIL: Incoming call for self not detected: {incoming_call_match}")
 
-    # Dismiss call so phone doesn't keep ringing
-    time.sleep(1.5)
+    # Dismiss call immediately so phone doesn't keep ringing or vibrating
+    time.sleep(0.1)
     end_call_packet = {
         "t": 10, # CALL_END
         "m": f"end_{int(time.time()*1000)}",

@@ -392,7 +392,32 @@ export const fetchNearbyCitizens = async (lat?: number, lng?: number): Promise<N
       headers: { Accept: 'application/json' },
     });
     const data = await response.json();
-    return data.citizens || [];
+    if (data.citizens && data.citizens.length > 0) {
+      return data.citizens;
+    }
+  } catch {}
+
+  // Resilient fallback to /api/citizen/locations
+  try {
+    const fallbackResponse = await apiFetch('/api/citizen/locations', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const fbData = await fallbackResponse.json();
+    return (fbData.citizens || []).map((c: any) => ({
+      id: c.id || c.device_uuid,
+      name: c.name || "Citizen Node",
+      phone: c.phone || "+91 98765 43210",
+      lat: c.lat,
+      lng: c.lng,
+      distance_meters: c.distance_meters ?? (c.mesh_hops ? c.mesh_hops * 200 : 45),
+      battery_level: c.battery_pct ?? c.battery_level ?? 85,
+      safety_status: c.status === "SOS" ? "DANGER" : (c.status === "HELPING" ? "HELPING" : "SAFE"),
+      status: c.status || "SAFE",
+      location_name: c.location_name || (c.mesh_hops > 1 ? `Multi-Hop Relay (${c.mesh_hops} hops)` : "Direct Mesh Range"),
+      hop_count: c.mesh_hops || 0,
+      next_hop: c.next_hop || null,
+    }));
   } catch {
     return [];
   }
