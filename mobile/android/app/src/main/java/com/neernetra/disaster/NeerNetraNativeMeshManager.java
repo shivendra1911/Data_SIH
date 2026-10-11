@@ -840,16 +840,16 @@ public class NeerNetraNativeMeshManager {
         if (fullBytes == null || fullBytes.length == 0) return;
         try {
             long now = System.currentTimeMillis();
-            // Automated cache eviction: evict entries older than 45 seconds (45000 ms) on every packet ingest
+            // Automated cache eviction: evict entries older than 30 seconds (30000 ms) on every packet ingest
             for (Map.Entry<String, Long> entry : seenMessageIds.entrySet()) {
-                if (now - entry.getValue() > 45000) {
+                if (now - entry.getValue() > 30000) {
                     seenMessageIds.remove(entry.getKey());
                 }
             }
-            if (seenMessageIds.size() > 200) {
+            if (seenMessageIds.size() > 50) {
                 List<Map.Entry<String, Long>> list = new ArrayList<>(seenMessageIds.entrySet());
                 list.sort(Map.Entry.comparingByValue());
-                int toRemove = seenMessageIds.size() - 100;
+                int toRemove = seenMessageIds.size() - 25;
                 for (int i = 0; i < toRemove && i < list.size(); i++) {
                     seenMessageIds.remove(list.get(i).getKey());
                 }
@@ -991,6 +991,17 @@ public class NeerNetraNativeMeshManager {
                         routingTable.put(nId, relayedRoute);
                         String distStr = (nHop * 200 >= 1000) ? String.format(java.util.Locale.US, "%.1fkm", (nHop * 200.0) / 1000.0) : (nHop * 200) + "m";
                         Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + distStr + ")");
+
+                        // Emit to React Native so multi-hop peers immediately appear in UI peer lists!
+                        try {
+                            WritableMap peerMap = Arguments.createMap();
+                            peerMap.putString("id", nId);
+                            peerMap.putString("name", cleanName);
+                            peerMap.putInt("rssi", -70 - (nHop * 5));
+                            peerMap.putInt("hopCount", nHop);
+                            peerMap.putInt("distanceMeters", nHop * 200);
+                            emitEventMapToReactNative("onNativePeerFound", peerMap);
+                        } catch (Exception ignored) {}
                     }
                 }
             }

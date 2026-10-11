@@ -108,6 +108,33 @@ function isNeerManufacturerData(b64?: string | null): boolean {
   return false;
 }
 
+export function isMockOrFalsePeer(id?: string, name?: string): boolean {
+  if (!id && !name) return true;
+  const s = `${id || ''} ${name || ''}`.toLowerCase();
+  return (
+    s.includes('test') ||
+    s.includes('dummy') ||
+    s.includes('mock') ||
+    s.includes('demo') ||
+    s.includes('synthetic') ||
+    s.includes('ramesh') ||
+    s.includes('anita') ||
+    s.includes('katy') ||
+    s.includes('seed') ||
+    s.includes('sample') ||
+    s.includes('priyanshu (citizen node 01)') ||
+    s.includes('dev_priyanshu_phone') ||
+    s.includes('dev_ramesh_kumar') ||
+    s.includes('dev_katy_fuller') ||
+    s.includes('dev_anita_sharma') ||
+    s.includes('node_b_relay') ||
+    s.includes('node_c_dist') ||
+    s.includes('node_d_shelter') ||
+    s.includes('node_x_relay') ||
+    s.includes('node_l_2400m')
+  );
+}
+
 function encodePacket(
   type: BLEMsgType,
   senderId: string,
@@ -257,13 +284,13 @@ class NeerNetraBLEMesh {
   private isMessageSeen(msgId: string): boolean {
     const now = Date.now();
     for (const [id, ts] of this.seenMsgIds.entries()) {
-      if (now - ts > 45000) {
+      if (now - ts > 30000) {
         this.seenMsgIds.delete(id);
       }
     }
-    if (this.seenMsgIds.size > 200) {
+    if (this.seenMsgIds.size > 50) {
       const sorted = Array.from(this.seenMsgIds.entries()).sort((a, b) => a[1] - b[1]);
-      const toRemove = this.seenMsgIds.size - 100;
+      const toRemove = this.seenMsgIds.size - 25;
       for (let i = 0; i < toRemove && i < sorted.length; i++) {
         this.seenMsgIds.delete(sorted[i][0]);
       }
@@ -494,21 +521,25 @@ class NeerNetraBLEMesh {
             this.emitPeersUpdate();
           }
         },
-        // Native scanner callback: Java found a NeerNetra peer via its own BLE scan
-        (nativeDeviceId, nativeDeviceName, rssi) => {
+        // Native scanner callback: Java found a NeerNetra peer via its own BLE scan or multi-hop routing table
+        (nativeDeviceId, nativeDeviceName, rssi, nativeHopCount, nativeDistanceMeters) => {
+          if (isMockOrFalsePeer(nativeDeviceId, nativeDeviceName)) return;
           const existing = this.activePeers.get(nativeDeviceId);
           const resolvedName = (nativeDeviceName && !nativeDeviceName.startsWith('Citizen_'))
             ? nativeDeviceName
             : (existing?.name || `Citizen_${nativeDeviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`);
+          const hopCount = nativeHopCount || (existing ? existing.hopCount || 1 : 1);
+          const isRelayed = hopCount > 1;
           const peer: MeshPeer = {
             id: nativeDeviceId,
             name: existing?.name && !existing.name.startsWith('Citizen_') ? existing.name : resolvedName,
             signalStrength: rssi,
             relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
-            role: 'Citizen Node',
-            distanceMeters: this.rssiToDistance(rssi),
+            role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',
+            distanceMeters: nativeDistanceMeters || (existing?.distanceMeters && !isRelayed ? existing.distanceMeters : (isRelayed ? hopCount * 200 : this.rssiToDistance(rssi))),
             status: existing ? existing.status : 'SAFE',
             lastSeen: new Date(),
+            hopCount,
           };
           this.activePeers.set(nativeDeviceId, peer);
           this.emitPeersUpdate();
@@ -615,7 +646,7 @@ class NeerNetraBLEMesh {
 
     try {
       this.manager.startDeviceScan(
-        null,
+        [NEERNETRA_SERVICE_UUID, '00004e65-0000-1000-8000-00805f9b34fb'],
         { allowDuplicates: true, scanMode: 2 }, // scanMode 2 = SCAN_MODE_LOW_LATENCY
         async (error: any, device: any) => {
           if (error) {
@@ -628,6 +659,7 @@ class NeerNetraBLEMesh {
           if (!device) return;
 
           const devName = (device.name || (device as any).localName || '').toLowerCase();
+          if (isMockOrFalsePeer(device.id, devName)) return;
           const devUuids = (device.serviceUUIDs || []).map((u: string) => u.toLowerCase().replace(/-/g, ''));
           const targetUuid = NEERNETRA_SERVICE_UUID.toLowerCase().replace(/-/g, '');
 
@@ -1085,8 +1117,18 @@ class NeerNetraBLEMesh {
 
     // Deterministic 1-to-1 Node Addressing Filter
     const isBroadcast = !packet.targetId || packet.targetId === 'BROADCAST' || packet.targetId === 'GROUP_CALL';
-    const isForMe = isBroadcast || packet.targetId === this.myDeviceId ||
-                    (this.myName && packet.targetId.includes(this.myName));
+    const isStrictlyOtherPeer = Boolean(
+      packet.targetId &&
+      !isBroadcast &&
+      this.activePeers.has(packet.targetId) &&
+      packet.targetId !== this.myDeviceId
+    );
+    const isForMe = isBroadcast ||
+                    packet.targetId === this.myDeviceId ||
+                    packet.targetId === 'self' ||
+                    packet.targetId === 'me' ||
+                    (Boolean(this.myName) && Boolean(packet.targetId) && packet.targetId.toLowerCase().includes(this.myName.toLowerCase())) ||
+                    !isStrictlyOtherPeer;
 
     if (isForMe || packet.type === BLEMsgType.HELLO) {
       switch (packet.type) {
@@ -1190,6 +1232,7 @@ class NeerNetraBLEMesh {
 
           const rawBaseName = n.name || (existing ? existing.name : `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
           const cleanName = rawBaseName.replace(/\s*\(\d+\s*Hops[^\)]*\)/gi, '').trim();
+          if (isMockOrFalsePeer(nId, cleanName)) continue;
 
           const relayedPeer: MeshPeer = {
             id: nId,
@@ -1224,6 +1267,16 @@ class NeerNetraBLEMesh {
       const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
       const rawBaseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
       const cleanPeerName = rawBaseName.replace(/\s*\(\d+\s*Hops[^\)]*\)/gi, '').trim();
+
+      if (isMockOrFalsePeer(actualNodeId || deviceId, cleanPeerName)) return;
+
+      if (actualNodeId && actualNodeId !== deviceId) {
+        this.activePeers.delete(deviceId);
+      }
+      if (actualNodeId && deviceId) {
+        this.peerNodeIdToMac.set(actualNodeId, deviceId);
+        this.macToNodeId.set(deviceId, actualNodeId);
+      }
 
       const updatedPeer: MeshPeer = {
         id: actualNodeId || deviceId,
@@ -1464,11 +1517,23 @@ class NeerNetraBLEMesh {
       const isGroup = Boolean(data.isGroupCall || data.targetId === 'GROUP_CALL' || data.targetId === 'BROADCAST' || !data.targetId);
 
       if (!isGroup) {
-        // Strict 1-to-1 audio filtering: only play audio if targeted to us
+        // 1-to-1 audio filtering: play audio if targeted to us or if target is not another distinct known peer
+        const isStrictlyOtherPeer = Boolean(
+          data.targetId &&
+          this.activePeers.has(data.targetId) &&
+          data.targetId !== this.myDeviceId &&
+          data.targetNodeId !== this.myDeviceId
+        );
         const isForMe =
           data.targetNodeId === this.myDeviceId ||
           data.targetId === this.myDeviceId ||
-          (this.myName && data.targetName && this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase());
+          data.targetId === 'self' ||
+          data.targetId === 'me' ||
+          (this.myName && data.targetName && (
+            this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase() ||
+            data.targetName.trim().toLowerCase().includes(this.myName.trim().toLowerCase())
+          )) ||
+          !isStrictlyOtherPeer;
 
         if (!isForMe) {
           console.log(`[BLE Mesh] 🔇 Ignoring private 1-to-1 voice burst meant for ${data.targetName || data.targetId}`);

@@ -71,7 +71,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           permStatus.recordAudio &&
           permStatus.nearbyWifi;
 
-        // Eliminate false positive popups when background permission and battery optimizations are already granted
+        // Eliminate false positive popups: core permissions are strictly required, background/battery are optimal
         const allSatisfied =
           coreGranted &&
           permStatus.backgroundLocation &&
@@ -79,18 +79,16 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         setHasAllPermissions(allSatisfied);
 
-        // If core permissions are missing, or if first run and not all granted, show informative popup
+        // If core permissions are missing (declined/revoked), or if first run, show informative popup.
+        // Never show fake popups when core permissions are satisfied and onboarding has been shown.
         const onboardingShown = await AsyncStorage.getItem(ONBOARDING_SHOWN_KEY);
-        if (!allSatisfied) {
-          if (!onboardingShown || !coreGranted) {
-            setIsModalVisible(true);
-          }
+        if (!onboardingShown || !coreGranted) {
+          setIsModalVisible(true);
         } else {
-          // If already granted, ensure modal is closed and never trigger false positive
           setIsModalVisible(false);
         }
 
-        return allSatisfied;
+        return coreGranted;
       }
       return false;
     } catch (err) {
@@ -106,18 +104,28 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // 1. Request Android runtime permissions via meshEngine helper
       await meshEngine.requestAndroidPermissions();
 
-      // 2. Request background battery optimizations only if not already granted
+      // 2. Sequential background location request on Android 11+ (API 30+)
+      if (Platform.OS === 'android' && Number(Platform.Version) >= 30) {
+        try {
+          const fineLocationGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+          if (fineLocationGranted) {
+            await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
+          }
+        } catch (bgErr) {
+          console.warn('[PermissionContext] Background location request error:', bgErr);
+        }
+      }
+
+      // 3. Request background battery optimizations only if not already granted
       if (status && !status.isIgnoringBatteryOptimizations) {
         await requestIgnoreBatteryOptimizations().catch(() => {});
       }
 
       await AsyncStorage.setItem(ONBOARDING_SHOWN_KEY, 'true');
 
-      // 3. Re-verify actual granted status
+      // 4. Re-verify actual granted status
       const updated = await checkPermissions();
-      if (updated) {
-        setIsModalVisible(false);
-      }
+      setIsModalVisible(false);
       return updated;
     } catch (err) {
       console.warn('[PermissionContext] requestAllPermissions error:', err);

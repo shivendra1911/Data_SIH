@@ -28,7 +28,7 @@ import {
   Wifi,
 } from 'lucide-react-native';
 import { MeshPeer } from '../types';
-import { meshEngine } from '../services/bluetoothMesh';
+import { meshEngine, isMockOrFalsePeer } from '../services/bluetoothMesh';
 import { fetchNearbyCitizens, NearbyCitizen } from '../services/api';
 
 interface MeshScreenProps {
@@ -98,11 +98,13 @@ const BLEMessageModal: React.FC<{
 
   useEffect(() => {
     fetchNearbyCitizens().then((list) => {
-      if (list && list.length > 0) setSectorCitizens(list);
+      if (list && list.length > 0) {
+        setSectorCitizens(list.filter((c) => !isMockOrFalsePeer(c.id, c.name)));
+      }
     });
   }, [visible]);
 
-  const displayPeers: (MeshPeer & { phone?: string })[] = peers;
+  const displayPeers: (MeshPeer & { phone?: string })[] = peers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -361,11 +363,13 @@ const BLECallModal: React.FC<{
 
   useEffect(() => {
     fetchNearbyCitizens().then((list) => {
-      if (list && list.length > 0) setSectorCitizens(list);
+      if (list && list.length > 0) {
+        setSectorCitizens(list.filter((c) => !isMockOrFalsePeer(c.id, c.name)));
+      }
     });
   }, [visible]);
 
-  const displayPeers: (MeshPeer & { phone?: string })[] = peers;
+  const displayPeers: (MeshPeer & { phone?: string })[] = peers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
   const handleWifiCall = (peer: MeshPeer) => {
     onClose();
@@ -792,7 +796,7 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
     };
   }, []);
 
-  const livePeers = localPeers;
+  const livePeers = localPeers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
   const handleManualScan = async () => {
     setIsScanning(true);

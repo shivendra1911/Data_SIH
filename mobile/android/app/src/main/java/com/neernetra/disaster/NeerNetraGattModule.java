@@ -386,11 +386,26 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 mediaRecorder = new MediaRecorder();
             }
 
-            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
+            try {
+                mediaRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
+            } catch (Exception e) {
+                Log.w(TAG, "VOICE_COMMUNICATION audio source failed, falling back to MIC");
+                mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            }
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.AMR_NB);
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
             mediaRecorder.setOutputFile(audioRecordFile.getAbsolutePath());
-            mediaRecorder.prepare();
+            try {
+                mediaRecorder.prepare();
+            } catch (Exception prepErr) {
+                Log.w(TAG, "MediaRecorder prepare failed with VOICE_COMMUNICATION, retrying with MIC: " + prepErr.getMessage());
+                try { mediaRecorder.reset(); } catch (Exception ignored) {}
+                mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.AMR_NB);
+                mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+                mediaRecorder.setOutputFile(audioRecordFile.getAbsolutePath());
+                mediaRecorder.prepare();
+            }
             mediaRecorder.start();
             Log.d(TAG, "Native audio recording started: " + audioRecordFile.getAbsolutePath());
             promise.resolve(true);
@@ -524,6 +539,20 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             acquireAudioFocus(audioManager);
             enableSpeakerphone(audioManager, true);
 
+            // Ensure stream volumes are unmuted for audible playback
+            try {
+                int musicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int maxMusic = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                if (musicVol < maxMusic / 4 && maxMusic > 0) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (int)(maxMusic * 0.75), 0);
+                }
+                int callVol = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL);
+                int maxCall = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
+                if (callVol < maxCall / 4 && maxCall > 0) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (int)(maxCall * 0.75), 0);
+                }
+            } catch (Exception ignored) {}
+
             if (audioTrack == null || audioTrack.getState() != AudioTrack.STATE_INITIALIZED) {
                 int channelConfig = AudioFormat.CHANNEL_OUT_MONO;
                 int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
@@ -536,32 +565,51 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 int bufferSize = Math.max(minBufSize * 2, 8192);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build();
-                    AudioFormat format = new AudioFormat.Builder()
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(channelConfig)
-                        .setEncoding(audioFormat)
-                        .build();
-                    audioTrack = new AudioTrack(audioAttributes, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
+                    // Try USAGE_MEDIA first for loud speaker output, fallback to USAGE_VOICE_COMMUNICATION
+                    try {
+                        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build();
+                        AudioFormat format = new AudioFormat.Builder()
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelConfig)
+                            .setEncoding(audioFormat)
+                            .build();
+                        audioTrack = new AudioTrack(audioAttributes, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
+                    } catch (Exception e) {
+                        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build();
+                        AudioFormat format = new AudioFormat.Builder()
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelConfig)
+                            .setEncoding(audioFormat)
+                            .build();
+                        audioTrack = new AudioTrack(audioAttributes, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
+                    }
                 } else {
-                    //noinspection deprecation
-                    audioTrack = new AudioTrack(AudioManager.STREAM_VOICE_CALL, sampleRate, channelConfig, audioFormat, bufferSize, AudioTrack.MODE_STREAM);
-                }
-
-                if (audioTrack.getState() != AudioTrack.STATE_INITIALIZED) {
-                    // Fallback to STREAM_MUSIC if STREAM_VOICE_CALL failed on hardware
                     //noinspection deprecation
                     audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig, audioFormat, bufferSize, AudioTrack.MODE_STREAM);
                 }
 
-                audioTrack.play();
+                if (audioTrack.getState() != AudioTrack.STATE_INITIALIZED) {
+                    // Fallback to STREAM_VOICE_CALL
+                    //noinspection deprecation
+                    audioTrack = new AudioTrack(AudioManager.STREAM_VOICE_CALL, sampleRate, channelConfig, audioFormat, bufferSize, AudioTrack.MODE_STREAM);
+                }
             }
 
-            audioTrack.write(pcmData, 0, pcmData.length);
-            if (promise != null) promise.resolve(true);
+            if (audioTrack != null && audioTrack.getState() == AudioTrack.STATE_INITIALIZED) {
+                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                    audioTrack.play();
+                }
+                audioTrack.write(pcmData, 0, pcmData.length);
+                if (promise != null) promise.resolve(true);
+            } else {
+                if (promise != null) promise.resolve(false);
+            }
         } catch (Exception e) {
             Log.e(TAG, "playAudioChunk error: " + e.getMessage(), e);
             if (promise != null) promise.reject("CHUNK_PLAY_ERROR", e.getMessage());
@@ -713,17 +761,25 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             acquireAudioFocus(audioManager);
             enableSpeakerphone(audioManager, true);
 
+            // Ensure stream volumes are unmuted for audible playback
+            try {
+                int musicVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int maxMusic = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                if (musicVol < maxMusic / 4 && maxMusic > 0) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (int)(maxMusic * 0.75), 0);
+                }
+            } catch (Exception ignored) {}
+
             mediaPlayer = new MediaPlayer();
             if (android.os.Build.VERSION.SDK_INT >= 21) {
                 mediaPlayer.setAudioAttributes(
                     new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 );
             } else {
-                //noinspection deprecation
-                mediaPlayer.setAudioStreamType(AudioManager.STREAM_VOICE_CALL);
+                mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
             }
             mediaPlayer.setVolume(1.0f, 1.0f);
             mediaPlayer.setDataSource(tempPlayFile.getAbsolutePath());
@@ -742,9 +798,38 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 enableSpeakerphone(audioManager, false);
                 return true;
             });
-            mediaPlayer.prepare();
-            mediaPlayer.start();
-            promise.resolve(true);
+            try {
+                mediaPlayer.prepare();
+                mediaPlayer.start();
+                promise.resolve(true);
+            } catch (Exception prepErr) {
+                Log.w(TAG, "MediaPlayer prepare failed with USAGE_MEDIA, retrying with USAGE_VOICE_COMMUNICATION: " + prepErr.getMessage());
+                try {
+                    mediaPlayer.reset();
+                    if (android.os.Build.VERSION.SDK_INT >= 21) {
+                        mediaPlayer.setAudioAttributes(
+                            new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build()
+                        );
+                    } else {
+                        //noinspection deprecation
+                        mediaPlayer.setAudioStreamType(AudioManager.STREAM_VOICE_CALL);
+                    }
+                    mediaPlayer.setDataSource(tempPlayFile.getAbsolutePath());
+                    mediaPlayer.prepare();
+                    mediaPlayer.start();
+                    promise.resolve(true);
+                } catch (Exception fallbackErr) {
+                    tempPlayFile.delete();
+                    mediaPlayer = null;
+                    abandonAudioFocus(audioManager);
+                    enableSpeakerphone(audioManager, false);
+                    Log.w(TAG, "MediaPlayer failed completely, falling back to playAudioChunk: " + fallbackErr.getMessage());
+                    playAudioChunk(base64Audio, promise);
+                }
+            }
         } catch (Exception e) {
             Log.e(TAG, "Failed to play voice audio: " + e.getMessage(), e);
             promise.reject("PLAY_ERROR", e.getMessage());

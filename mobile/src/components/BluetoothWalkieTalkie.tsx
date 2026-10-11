@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { MeshChatMessage, MeshPeer } from '../types';
-import { meshEngine } from '../services/bluetoothMesh';
+import { meshEngine, isMockOrFalsePeer } from '../services/bluetoothMesh';
 import { startVoiceRecording, stopVoiceRecording, playPttTone } from '../services/gattServerBridge';
 import { Radio, Mic, MicOff, Send, WifiOff, Volume2, Shield, Phone, MessageSquare, Wifi, Bluetooth } from 'lucide-react-native';
 
@@ -36,7 +36,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
 
-  const displayPeers = peers;
+  const displayPeers = peers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
   useEffect(() => {
     if (propPeers) {

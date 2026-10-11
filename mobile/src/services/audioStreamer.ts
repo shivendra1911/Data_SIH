@@ -105,10 +105,19 @@ class AudioStreamer {
         await playPttTone('incoming').catch(() => {});
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
-      return await playVoiceAudio(base64Audio);
+      const success = await playVoiceAudio(base64Audio);
+      if (!success) {
+        // Fallback to raw PCM AudioTrack playback
+        return await playAudioChunk(base64Audio);
+      }
+      return true;
     } catch (err) {
-      console.warn('[AudioStreamer] playVoice error:', err);
-      return false;
+      console.warn('[AudioStreamer] playVoice error, attempting playAudioChunk fallback:', err);
+      try {
+        return await playAudioChunk(base64Audio);
+      } catch {
+        return false;
+      }
     } finally {
       setTimeout(() => {
         this.isPlaying = false;

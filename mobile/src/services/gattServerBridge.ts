@@ -25,7 +25,7 @@ export const startGattServer = async (
   onPacketReceived: (fromDevice: string, base64Data: string) => void,
   onCentralConnected?: (clientAddress: string) => void,
   onCentralDisconnected?: (clientAddress: string) => void,
-  onNativePeerFound?: (deviceId: string, deviceName: string, rssi: number) => void
+  onNativePeerFound?: (deviceId: string, deviceName: string, rssi: number, hopCount?: number, distanceMeters?: number) => void
 ): Promise<boolean> => {
   if (Platform.OS !== 'android') return false;
   if (!NeerNetraGatt) {
@@ -61,8 +61,8 @@ export const startGattServer = async (
     });
 
     // Native background scanner found a NeerNetra peer (fires even when JS BLE scanner is throttled)
-    emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number }) => {
-      if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi);
+    emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number; hopCount?: number; distanceMeters?: number }) => {
+      if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi, peer.hopCount, peer.distanceMeters);
     });
 
     return true;

@@ -134,6 +134,28 @@ public class NeerNetraWifiMeshManager {
                 payload.put("isBeacon", true);
                 payload.put("battery", 85);
 
+                // Ingest active distance-vector gossip routing table for long-range multi-hop (up to kilometers)
+                org.json.JSONArray neighborsArray = new org.json.JSONArray();
+                try {
+                    long nowMs = System.currentTimeMillis();
+                    Map<String, NeerNetraNativeMeshManager.MeshRoute> routes = NeerNetraNativeMeshManager.getInstance(appContext).getRoutingTable();
+                    for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
+                        if (r != null && !myNodeId.equalsIgnoreCase(r.peerId) && (nowMs - r.lastSeen < 120000)) {
+                            org.json.JSONObject nObj = new org.json.JSONObject();
+                            nObj.put("peer_id", r.peerId);
+                            nObj.put("name", r.name);
+                            nObj.put("hop_count", r.hopCount);
+                            nObj.put("next_hop", r.nextHop);
+                            nObj.put("status", r.status != null ? r.status : "SAFE");
+                            nObj.put("lat", r.lat);
+                            nObj.put("lng", r.lng);
+                            nObj.put("battery", r.battery > 0 ? r.battery : 85);
+                            neighborsArray.put(nObj);
+                        }
+                    }
+                } catch (Exception ignored) {}
+                payload.put("neighbors", neighborsArray);
+
                 org.json.JSONObject envelope = new org.json.JSONObject();
                 envelope.put("t", 1); // BLEMsgType.HELLO
                 envelope.put("m", "wb_" + System.currentTimeMillis() + "_" + (myNodeId.length() > 6 ? myNodeId.substring(0, 6) : myNodeId));
