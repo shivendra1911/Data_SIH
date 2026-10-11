@@ -377,10 +377,6 @@ const BLECallModal: React.FC<{
       onInitiateCall(peer);
     }
     meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
-    Alert.alert(
-      '📶 Wi-Fi Direct Call Sent',
-      `Calling ${peer.name} over Wi-Fi Direct (250m direct range, 2km+ via relays).\n\nZero cellular network or internet required.\nWaiting for peer to accept.`
-    );
   };
 
   const handleBLECall = (peer: MeshPeer) => {
@@ -390,10 +386,6 @@ const BLECallModal: React.FC<{
     } else {
       meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
     }
-    Alert.alert(
-      '🔵 BLE Call Sent',
-      `Calling ${peer.name} over Bluetooth Low Energy (50m range).\n\nBattery-saving mesh intercom.\nWaiting for peer to accept.`
-    );
   };
 
   const handlePhoneCall = (targetNum?: string, isCitizen: boolean = false) => {
@@ -512,10 +504,6 @@ const BLECallModal: React.FC<{
                         onInitiateGroupCall();
                       }
                       meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
-                      Alert.alert(
-                        '📶 Wi-Fi Direct Group Call Sent',
-                        `Emergency broadcast ring sent over Wi-Fi Direct (250m range) to all ${displayPeers.length} nearby devices.`
-                      );
                     }}
                     activeOpacity={0.8}
                   >

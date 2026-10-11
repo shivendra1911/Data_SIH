@@ -372,6 +372,22 @@ export const HomeScreen: React.FC = () => {
             status: 'CALLING',
           });
         });
+        DeviceEventEmitter.addListener('NEERNETRA_CALL_ANSWERED', (data: any) => {
+          console.log('[HomeScreen] 📞 Call answered via DeviceEventEmitter:', data);
+          setActiveCallPeer((prev) => ({
+            id: data?.peerId || prev?.id || 'peer',
+            name: data?.responderName || prev?.name || 'Citizen Node',
+            distance: prev?.distance || 50,
+            hopCount: prev?.hopCount || 1,
+            isGroupCall: prev?.isGroupCall || false,
+            status: 'CONNECTED',
+          }));
+        });
+        DeviceEventEmitter.addListener('NEERNETRA_CALL_ENDED', () => {
+          console.log('[HomeScreen] 📞 Call ended via DeviceEventEmitter');
+          setActiveCallPeer(null);
+          setIncomingCaller(null);
+        });
         (meshEngine as any).onCallAnswered = (peerId: string, peerName?: string) => {
           console.log('[HomeScreen] 📞 Call answered by:', peerId);
           setActiveCallPeer((prev) => ({

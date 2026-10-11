@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import { MeshChatMessage, MeshPeer } from '../types';
 import { meshEngine, isMockOrFalsePeer } from '../services/bluetoothMesh';
@@ -37,6 +38,44 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
 
   const displayPeers = peers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
+
+  useEffect(() => {
+    const subOutgoing = DeviceEventEmitter.addListener('NEERNETRA_OUTGOING_CALL', (call: any) => {
+      console.log('[WalkieTalkie] 📞 Outgoing call event received:', call);
+      setIsCalling(true);
+      setActivePeerName(call?.name || 'Citizen Node');
+      if (call?.transport === 'wifi_direct') {
+        setSelectedRadio('wifi');
+      }
+    });
+
+    const subIncoming = DeviceEventEmitter.addListener('NEERNETRA_INCOMING_CALL', (call: any) => {
+      console.log('[WalkieTalkie] 📞 Incoming call event received:', call);
+      setActivePeerName(call?.callerName || 'Citizen Node');
+    });
+
+    const subAnswered = DeviceEventEmitter.addListener('NEERNETRA_CALL_ANSWERED', (data: any) => {
+      console.log('[WalkieTalkie] 📞 Call answered event received:', data);
+      setIsCalling(true);
+      if (data?.responderName) {
+        setActivePeerName(data.responderName);
+      }
+    });
+
+    const subEnded = DeviceEventEmitter.addListener('NEERNETRA_CALL_ENDED', () => {
+      console.log('[WalkieTalkie] 📞 Call ended event received');
+      setIsCalling(false);
+      setActivePeerName(null);
+      setVoiceNotice(null);
+    });
+
+    return () => {
+      subOutgoing.remove();
+      subIncoming.remove();
+      subAnswered.remove();
+      subEnded.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (propPeers) {
@@ -113,25 +152,19 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
     if (isCalling && activePeerName === peer.name) {
       setIsCalling(false);
       setActivePeerName(null);
+      setVoiceNotice(null);
       meshEngine.endCall(peer.id).catch(() => {});
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
+      setVoiceNotice(`📞 Calling ${peer.name}... Hold PTT to speak`);
       if (onCallPeer) {
         onCallPeer(peer);
       }
       if (selectedRadio === 'wifi') {
         meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
-        Alert.alert(
-          '📶 Wi-Fi Direct Call Sent',
-          `Calling ${peer.name} over Wi-Fi Direct (250m direct range, 2km+ via multi-hop mesh).\n\nZero cellular network required.\nWaiting for peer to accept.`
-        );
       } else {
         meshEngine.initiateCall(peer.id, peer.name).catch(() => {});
-        Alert.alert(
-          '🔵 Bluetooth Mesh Call Sent',
-          `Calling ${peer.name} over Bluetooth Low Energy (50m range).\n\nBattery-saving mesh intercom.\nWaiting for peer to accept.`
-        );
       }
     }
   };
@@ -220,15 +253,15 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
           }
         ]}
         onPress={() => {
+          setIsCalling(true);
+          const groupName = selectedRadio === 'wifi' ? 'ALL NEARBY CITIZENS (WI-FI 250m)' : 'ALL NEARBY CITIZENS (BLE GROUP)';
+          setActivePeerName(groupName);
+          setVoiceNotice('🚨 Group Voice Channel Open • Hold PTT to broadcast to all nodes');
           if (selectedRadio === 'wifi') {
             if (onGroupEmergencyCall) {
               onGroupEmergencyCall();
             }
             meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
-            Alert.alert(
-              '📶 Wi-Fi Direct Group Call Sent',
-              `Emergency broadcast ring sent over Wi-Fi Direct (250m range) to all ${displayPeers.length} nearby devices.`
-            );
           } else {
             if (onGroupEmergencyCall) {
               onGroupEmergencyCall();
@@ -360,26 +393,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                       selectedRadio === 'wifi' ? { backgroundColor: '#059669' } : { backgroundColor: '#2563eb' }
                     ]}
                     onPress={() => {
-                      if (selectedRadio === 'wifi') {
-                        if (onCallPeer) {
-                          onCallPeer(item);
-                        }
-                        if (meshEngine.initiateWifiDirectCall) {
-                          meshEngine.initiateWifiDirectCall(item.id, item.name).catch(() => {});
-                        } else {
-                          meshEngine.initiateCall(item.id, item.name).catch(() => {});
-                        }
-                        Alert.alert(
-                          '📶 Wi-Fi Direct Call Sent',
-                          `Calling ${item.name} over Wi-Fi Direct (250m range).\n\nZero cellular network required.\nWaiting for peer to accept.`
-                        );
-                      } else {
-                        if (onCallPeer) {
-                          onCallPeer(item);
-                        } else {
-                          handleStartWalkieTalkie(item);
-                        }
-                      }
+                      handleStartWalkieTalkie(item);
                     }}
                     activeOpacity={0.8}
                   >

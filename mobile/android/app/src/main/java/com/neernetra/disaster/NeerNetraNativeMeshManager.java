@@ -712,7 +712,11 @@ public class NeerNetraNativeMeshManager {
         return true;
     }
 
+    private final android.os.Handler notificationWatchdogHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Map<String, Runnable> notificationWatchdogs = new ConcurrentHashMap<>();
+
     private void processNextNotification(BluetoothDevice device) {
+        if (device == null) return;
         String addr = device.getAddress();
         synchronized (isNotifying) {
             if (Boolean.TRUE.equals(isNotifying.get(addr))) {
@@ -727,7 +731,27 @@ public class NeerNetraNativeMeshManager {
                     boolean sent = sendRawNotification(device, chunk);
                     if (!sent) {
                         isNotifying.put(addr, false);
+                        return;
                     }
+
+                    // Cancel any previous watchdog for this device
+                    Runnable oldWatchdog = notificationWatchdogs.remove(addr);
+                    if (oldWatchdog != null) {
+                        notificationWatchdogHandler.removeCallbacks(oldWatchdog);
+                    }
+
+                    // Auto-advance watchdog: if onNotificationSent is not invoked within 60ms by OEM BLE stack, pump next chunk
+                    Runnable watchdog = () -> {
+                        synchronized (isNotifying) {
+                            if (Boolean.TRUE.equals(isNotifying.get(addr))) {
+                                Log.w(TAG, "⏰ Notification watchdog timed out for " + addr + " — auto-advancing queue");
+                                isNotifying.put(addr, false);
+                                processNextNotification(device);
+                            }
+                        }
+                    };
+                    notificationWatchdogs.put(addr, watchdog);
+                    notificationWatchdogHandler.postDelayed(watchdog, 60);
                 }
             }
         }
@@ -749,6 +773,10 @@ public class NeerNetraNativeMeshManager {
                 emitEventToReactNative("onCentralConnected", device.getAddress());
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "Central disconnected: " + device.getAddress());
+                Runnable watchdog = notificationWatchdogs.remove(device.getAddress());
+                if (watchdog != null) {
+                    notificationWatchdogHandler.removeCallbacks(watchdog);
+                }
                 deviceMtus.remove(device.getAddress());
                 notificationQueues.remove(device.getAddress());
                 isNotifying.remove(device.getAddress());
@@ -794,6 +822,10 @@ public class NeerNetraNativeMeshManager {
         public void onNotificationSent(BluetoothDevice device, int status) {
             if (device == null) return;
             String addr = device.getAddress();
+            Runnable watchdog = notificationWatchdogs.remove(addr);
+            if (watchdog != null) {
+                notificationWatchdogHandler.removeCallbacks(watchdog);
+            }
             synchronized (isNotifying) {
                 isNotifying.put(addr, false);
             }
@@ -840,7 +872,7 @@ public class NeerNetraNativeMeshManager {
         try {
             long now = System.currentTimeMillis();
             for (Map.Entry<String, Long> entry : new ArrayList<>(incomingWriteTimestamps.entrySet())) {
-                if (now - entry.getValue() > 10000) {
+                if (now - entry.getValue() > 30000) {
                     incomingWriteBuffers.remove(entry.getKey());
                     incomingWriteTotals.remove(entry.getKey());
                     incomingWriteTimestamps.remove(entry.getKey());
@@ -904,6 +936,16 @@ public class NeerNetraNativeMeshManager {
 
     public void handleIncomingPacketFromAnyTransport(String fromTransportOrDevice, byte[] fullBytes) {
         if (fullBytes == null || fullBytes.length == 0) return;
+
+        // Check if this is a sliced chunk frame: [0x53 ('S'), pktId, seq, total, ...sliceData]
+        if (fullBytes.length >= 4 && fullBytes[0] == (byte) 0x53) {
+            int seq = fullBytes[2] & 0xFF;
+            int total = fullBytes[3] & 0xFF;
+            if (total > 1 && seq < total) {
+                handleIncomingRawOrSlicedWrite(fromTransportOrDevice, fullBytes);
+                return;
+            }
+        }
         try {
             long now = System.currentTimeMillis();
             // Automated cache eviction: evict entries older than 20 seconds (20000 ms) on every packet ingest
@@ -991,6 +1033,15 @@ public class NeerNetraNativeMeshManager {
                     if (directRoute != null) {
                         directRoute.lastSeen = now;
                     }
+                    try {
+                        WritableMap peerMap = Arguments.createMap();
+                        peerMap.putString("id", senderId);
+                        peerMap.putString("name", directRoute != null ? directRoute.name : ("Citizen [" + senderId.substring(Math.max(0, senderId.length() - 4)) + "]"));
+                        peerMap.putInt("rssi", -60);
+                        peerMap.putInt("hopCount", 1);
+                        peerMap.putInt("distanceMeters", 45);
+                        emitEventMapToReactNative("onNativePeerFound", peerMap);
+                    } catch (Exception ignored) {}
                 }
                 Log.i(TAG, "🔁 [MeshDeduplication] Dropping duplicate packet msg_id=" + msgId);
                 return;
@@ -1018,6 +1069,17 @@ public class NeerNetraNativeMeshManager {
                 directRoute.lastSeen = now;
                 directRoute.status = "SAFE";
                 routingTable.put(senderId, directRoute);
+
+                // Emit to React Native so the direct peer is immediately visible / refreshed in UI
+                try {
+                    WritableMap peerMap = Arguments.createMap();
+                    peerMap.putString("id", senderId);
+                    peerMap.putString("name", directRoute.name);
+                    peerMap.putInt("rssi", -60);
+                    peerMap.putInt("hopCount", 1);
+                    peerMap.putInt("distanceMeters", 45);
+                    emitEventMapToReactNative("onNativePeerFound", peerMap);
+                } catch (Exception ignored) {}
             }
 
             // Parse gossip neighbors table if present

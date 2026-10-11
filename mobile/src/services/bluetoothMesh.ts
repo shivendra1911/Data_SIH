@@ -709,7 +709,10 @@ class NeerNetraBLEMesh {
           // Stale peer cleanup: 240s window (4 min) — keep peers visible in the UI during quiet intervals
           const nowMs = Date.now();
           this.activePeers.forEach((p, id) => {
-            if (!this.connectedDevices.has(id) && !this.peripheralClients.has(id)) {
+            const mac = this.peerNodeIdToMac.get(id) || id;
+            const isConn = this.connectedDevices.has(id) || this.connectedDevices.has(mac) ||
+                           this.peripheralClients.has(id) || this.peripheralClients.has(mac);
+            if (!isConn) {
               if (p.lastSeen && (nowMs - new Date(p.lastSeen).getTime() > 240000)) {
                 this.activePeers.delete(id);
               }
@@ -751,13 +754,13 @@ class NeerNetraBLEMesh {
       return;
     }
 
-    // Refresh scan every 20 seconds (shorter cycle = faster re-discovery after earbud connects/disconnects)
+    // Passive watchdog: only restart scan if scanner became completely idle (> 3 minutes without results)
     if (this.scanTimer) clearInterval(this.scanTimer);
     this.scanTimer = setInterval(() => {
-      if (this.manager) {
+      if (this.manager && !this.isScanning) {
         this.startScanning().catch(() => {});
       }
-    }, 20000);
+    }, 180000);
   }
 
   async triggerManualScan(): Promise<MeshPeer[]> {
@@ -885,6 +888,7 @@ class NeerNetraBLEMesh {
           if (knownDevices && knownDevices.length > 0) {
             const dev = knownDevices[0];
             const discovered = await dev.discoverAllServicesAndCharacteristics();
+            (discovered as any).mtu = 512;
             await this.subscribeToNotifications(discovered);
             this.connectedDevices.set(devId, discovered);
             console.log(`[BLE Mesh] ✅ Adopted connected device: ${devId}`);
@@ -928,9 +932,9 @@ class NeerNetraBLEMesh {
       }
       const rawLen = rawString.length;
       const headerSize = 4;
-      const mtu = (device as any).mtu || 23;
-      // 180-byte maximum chunk size guarantees it easily fits in any negotiated MTU >= 185
-      const sliceSize = Math.max(16, Math.min(180, mtu - headerSize));
+      const mtu = (device as any).mtu || 240;
+      // Up to 236-byte chunk size guarantees high throughput while fitting safely in negotiated MTU
+      const sliceSize = Math.max(20, Math.min(236, mtu - headerSize));
       const totalSlices = Math.min(255, Math.ceil(rawLen / sliceSize));
       const pktId = Math.floor(Math.random() * 255) & 0xFF;
 
@@ -963,7 +967,7 @@ class NeerNetraBLEMesh {
         }
 
         if (i < totalSlices - 1) {
-          await new Promise((r) => setTimeout(r, 15));
+          await new Promise((r) => setTimeout(r, 20));
         }
       }
       return true;
@@ -1069,7 +1073,7 @@ class NeerNetraBLEMesh {
             chunks: new Map(),
             timer: setTimeout(() => {
               this.notifySlices.delete(sliceKey);
-            }, 6000),
+            }, 30000),
           };
           this.notifySlices.set(sliceKey, buf);
         }
@@ -1084,7 +1088,19 @@ class NeerNetraBLEMesh {
           for (let s = 0; s < total; s++) {
             fullRaw += buf.chunks.get(s) || '';
           }
-          packetBase64 = btoa(fullRaw);
+          if (fullRaw.startsWith('{')) {
+            packetBase64 = fullRaw;
+          } else {
+            try {
+              packetBase64 = btoa(unescape(encodeURIComponent(fullRaw)));
+            } catch {
+              try {
+                packetBase64 = btoa(fullRaw);
+              } catch {
+                packetBase64 = fullRaw;
+              }
+            }
+          }
           console.log(`[BLE Mesh] Reassembled sliced notification from ${fromDeviceId} (${fullRaw.length} bytes across ${total} slices)`);
         } else {
           // Waiting for remaining slices
@@ -1282,9 +1298,6 @@ class NeerNetraBLEMesh {
 
       if (isMockOrFalsePeer(actualNodeId || deviceId, cleanPeerName)) return;
 
-      if (actualNodeId && actualNodeId !== deviceId) {
-        this.activePeers.delete(deviceId);
-      }
       if (actualNodeId && deviceId) {
         this.peerNodeIdToMac.set(actualNodeId, deviceId);
         this.macToNodeId.set(deviceId, actualNodeId);
@@ -1307,6 +1320,9 @@ class NeerNetraBLEMesh {
         batteryLevel: info.battery || info.battery_level || existing?.batteryLevel || 85,
       };
       this.activePeers.set(actualNodeId || deviceId, updatedPeer);
+      if (deviceId && actualNodeId && deviceId !== actualNodeId) {
+        this.activePeers.set(deviceId, updatedPeer);
+      }
       this.emitPeersUpdate();
       if (this.onPeerDiscovered) {
         this.onPeerDiscovered(updatedPeer);
@@ -1511,6 +1527,9 @@ class NeerNetraBLEMesh {
       if (senderId === this.myDeviceId) return;
       console.log(`[BLE Mesh] 📞 CALL ACCEPTED by ${senderId}`);
       if (this.onCallAnswered) this.onCallAnswered(senderId, data.responderName);
+      try {
+        DeviceEventEmitter.emit('NEERNETRA_CALL_ANSWERED', { peerId: senderId, responderName: data.responderName });
+      } catch {}
     } catch (e) {}
   }
 
@@ -1519,6 +1538,9 @@ class NeerNetraBLEMesh {
       if (senderId === this.myDeviceId) return;
       console.log(`[BLE Mesh] 📞 CALL DECLINED by ${senderId}`);
       if (this.onCallDeclined) this.onCallDeclined(senderId);
+      try {
+        DeviceEventEmitter.emit('NEERNETRA_CALL_ENDED', { peerId: senderId, reason: 'declined' });
+      } catch {}
     } catch (e) {}
   }
 
@@ -1527,6 +1549,9 @@ class NeerNetraBLEMesh {
       if (senderId === this.myDeviceId) return;
       console.log(`[BLE Mesh] 📞 CALL ENDED by ${senderId}`);
       if (this.onCallEnded) this.onCallEnded(senderId);
+      try {
+        DeviceEventEmitter.emit('NEERNETRA_CALL_ENDED', { peerId: senderId, reason: 'remote_ended' });
+      } catch {}
     } catch (e) {}
   }
 
@@ -1850,6 +1875,9 @@ class NeerNetraBLEMesh {
     // Dismiss IncomingCallActivity on THIS device immediately (0ms)
     dismissIncomingCall().catch(() => {});
     this.broadcastToAll(BLEMsgType.CALL_END, payload, 16, undefined, this.myDeviceId, targetNodeId).catch(() => {});
+    try {
+      DeviceEventEmitter.emit('NEERNETRA_CALL_ENDED', { peerId, reason: 'user_ended' });
+    } catch {}
   }
 
   /** Send real compressed microphone audio burst across BLE mesh (TTL=10) */

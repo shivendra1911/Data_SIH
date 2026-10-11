@@ -417,47 +417,84 @@ public class NeerNetraWifiMeshManager {
         if (data == null || data.length == 0) return;
 
         executor.execute(() -> {
-            // 1. Send via Wi-Fi Aware NAN to all discovered peers
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isAwareAttached) {
-                // Send to peers discovered by subscribeSession
-                if (subscribeSession != null) {
-                    for (PeerHandle handle : discoveredSubscribePeers.values()) {
-                        try {
-                            subscribeSession.sendMessage(handle, 1, data);
-                        } catch (Exception ignored) {}
-                    }
-                }
-                // Send to peers who messaged publishSession
-                if (publishSession != null) {
-                    for (PeerHandle handle : discoveredPublishPeers.values()) {
-                        try {
-                            publishSession.sendMessage(handle, 1, data);
-                        } catch (Exception ignored) {}
-                    }
-                }
+            // Slicing for packets exceeding safe UDP MTU (1200 bytes) to prevent OS IP fragmentation drop
+            if (data.length > 1200) {
+                broadcastSlicedPacketOverWifi(data);
+                return;
             }
 
-            // 2. Send via UDP Broadcast to 255.255.255.255 and all local subnet broadcast addresses
-            try (DatagramSocket sendSocket = new DatagramSocket()) {
-                sendSocket.setBroadcast(true);
+            sendSingleUdpPacketOverWifi(data);
+        });
+    }
 
-                // Global broadcast
-                InetAddress globalBroadcast = InetAddress.getByName("255.255.255.255");
-                DatagramPacket globalPacket = new DatagramPacket(data, data.length, globalBroadcast, MESH_PORT);
-                sendSocket.send(globalPacket);
+    private void broadcastSlicedPacketOverWifi(byte[] data) {
+        int headerSize = 4;
+        int slicePayloadSize = 1100;
+        int totalSlices = (int) Math.ceil((double) data.length / slicePayloadSize);
+        if (totalSlices > 255) totalSlices = 255;
 
-                // Interface-specific broadcasts (hotspot, P2P, local Wi-Fi)
-                List<InetAddress> broadcastAddresses = getBroadcastAddresses();
-                for (InetAddress broadcastAddr : broadcastAddresses) {
+        int pktId = (int) (System.currentTimeMillis() & 0xFF);
+
+        for (int i = 0; i < totalSlices; i++) {
+            int start = i * slicePayloadSize;
+            int end = Math.min(start + slicePayloadSize, data.length);
+            int len = end - start;
+
+            byte[] chunk = new byte[headerSize + len];
+            chunk[0] = (byte) 0x53; // 'S'
+            chunk[1] = (byte) pktId;
+            chunk[2] = (byte) i;
+            chunk[3] = (byte) totalSlices;
+            System.arraycopy(data, start, chunk, headerSize, len);
+
+            sendSingleUdpPacketOverWifi(chunk);
+            try {
+                Thread.sleep(8); // 8ms pacing between UDP datagram slices
+            } catch (InterruptedException ignored) {}
+        }
+    }
+
+    private void sendSingleUdpPacketOverWifi(byte[] packetBytes) {
+        // 1. Send via Wi-Fi Aware NAN to all discovered peers
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isAwareAttached) {
+            // Send to peers discovered by subscribeSession
+            if (subscribeSession != null) {
+                for (PeerHandle handle : discoveredSubscribePeers.values()) {
                     try {
-                        DatagramPacket ifPacket = new DatagramPacket(data, data.length, broadcastAddr, MESH_PORT);
-                        sendSocket.send(ifPacket);
+                        subscribeSession.sendMessage(handle, 1, packetBytes);
                     } catch (Exception ignored) {}
                 }
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to broadcast UDP packet over Wi-Fi: " + e.getMessage());
             }
-        });
+            // Send to peers who messaged publishSession
+            if (publishSession != null) {
+                for (PeerHandle handle : discoveredPublishPeers.values()) {
+                    try {
+                        publishSession.sendMessage(handle, 1, packetBytes);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        // 2. Send via UDP Broadcast to 255.255.255.255 and all local subnet broadcast addresses
+        try (DatagramSocket sendSocket = new DatagramSocket()) {
+            sendSocket.setBroadcast(true);
+
+            // Global broadcast
+            InetAddress globalBroadcast = InetAddress.getByName("255.255.255.255");
+            DatagramPacket globalPacket = new DatagramPacket(packetBytes, packetBytes.length, globalBroadcast, MESH_PORT);
+            sendSocket.send(globalPacket);
+
+            // Interface-specific broadcasts (hotspot, P2P, local Wi-Fi)
+            List<InetAddress> broadcastAddresses = getBroadcastAddresses();
+            for (InetAddress broadcastAddr : broadcastAddresses) {
+                try {
+                    DatagramPacket ifPacket = new DatagramPacket(packetBytes, packetBytes.length, broadcastAddr, MESH_PORT);
+                    sendSocket.send(ifPacket);
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to broadcast UDP packet over Wi-Fi: " + e.getMessage());
+        }
     }
 
     private List<InetAddress> getBroadcastAddresses() {
