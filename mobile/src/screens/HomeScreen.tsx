@@ -126,6 +126,7 @@ export const HomeScreen: React.FC = () => {
     distance?: number;
     hopCount?: number;
     isGroupCall?: boolean;
+    status?: 'CALLING' | 'CONNECTED';
   } | null>(null);
   const [incomingCaller, setIncomingCaller] = useState<{
     id: string;
@@ -190,6 +191,7 @@ export const HomeScreen: React.FC = () => {
             name: data.caller_name || 'Emergency Node',
             hopCount: 1,
             isGroupCall: Boolean(data.is_group_call || data.emergency_type === 'GROUP_CALL'),
+            status: 'CONNECTED' as const,
           };
           setActiveCallPeer(caller);
           setIncomingCaller(null);
@@ -337,6 +339,17 @@ export const HomeScreen: React.FC = () => {
           console.log('[HomeScreen] 📞 Received incoming call:', caller);
           setIncomingCaller(caller);
         };
+        (meshEngine as any).onOutgoingCall = (call: any) => {
+          console.log('[HomeScreen] 📞 Outgoing call initiated:', call);
+          setActiveCallPeer({
+            id: call.id,
+            name: call.name,
+            distance: call.distance || 50,
+            hopCount: call.hopCount || 1,
+            isGroupCall: Boolean(call.isGroupCall),
+            status: 'CALLING',
+          });
+        };
         // Backup: also listen via DeviceEventEmitter so call modal ALWAYS shows even if notification permission is denied
         DeviceEventEmitter.addListener('NEERNETRA_INCOMING_CALL', (data: any) => {
           console.log('[HomeScreen] 📞 Incoming call via DeviceEventEmitter:', data);
@@ -348,9 +361,27 @@ export const HomeScreen: React.FC = () => {
             isGroupCall: data.isGroupCall || false,
           });
         });
+        DeviceEventEmitter.addListener('NEERNETRA_OUTGOING_CALL', (call: any) => {
+          console.log('[HomeScreen] 📞 Outgoing call via DeviceEventEmitter:', call);
+          setActiveCallPeer({
+            id: call.id,
+            name: call.name,
+            distance: call.distance || 50,
+            hopCount: call.hopCount || 1,
+            isGroupCall: Boolean(call.isGroupCall),
+            status: 'CALLING',
+          });
+        });
         (meshEngine as any).onCallAnswered = (peerId: string, peerName?: string) => {
           console.log('[HomeScreen] 📞 Call answered by:', peerId);
-          setActiveCallPeer({ id: peerId, name: peerName || `Citizen [${peerId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`, hopCount: 1 });
+          setActiveCallPeer((prev) => ({
+            id: peerId,
+            name: peerName || prev?.name || `Citizen [${peerId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`,
+            distance: prev?.distance || 50,
+            hopCount: prev?.hopCount || 1,
+            isGroupCall: prev?.isGroupCall || false,
+            status: 'CONNECTED',
+          }));
         };
         (meshEngine as any).onCallDeclined = (peerId: string) => {
           console.log('[HomeScreen] 📞 Call declined by:', peerId);
@@ -487,7 +518,7 @@ export const HomeScreen: React.FC = () => {
   const handleAcceptIncomingCall = async () => {
     if (!incomingCaller) return;
     await (meshEngine as any).acceptCall(incomingCaller.id);
-    setActiveCallPeer(incomingCaller);
+    setActiveCallPeer({ ...incomingCaller, status: 'CONNECTED' });
     setIncomingCaller(null);
   };
 
@@ -725,7 +756,7 @@ export const HomeScreen: React.FC = () => {
             peers={peers}
             networkMode={networkMode}
             onInitiateCall={(peer: any) => {
-              setActiveCallPeer(peer);
+              setActiveCallPeer({ ...peer, status: 'CALLING' });
               (meshEngine as any).initiateCall(peer.id, peer.name).catch(() => {});
             }}
             onInitiateGroupCall={() => {
@@ -734,6 +765,7 @@ export const HomeScreen: React.FC = () => {
                 name: '🚨 ALL EMERGENCY NODES (GROUP CALL)',
                 hopCount: 1,
                 isGroupCall: true,
+                status: 'CALLING',
               });
               (meshEngine as any).initiateGroupCall().catch(() => {});
             }}

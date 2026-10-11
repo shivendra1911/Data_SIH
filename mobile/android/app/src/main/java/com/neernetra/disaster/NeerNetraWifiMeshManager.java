@@ -140,7 +140,7 @@ public class NeerNetraWifiMeshManager {
                     long nowMs = System.currentTimeMillis();
                     Map<String, NeerNetraNativeMeshManager.MeshRoute> routes = NeerNetraNativeMeshManager.getInstance(appContext).getRoutingTable();
                     for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
-                        if (r != null && !myNodeId.equalsIgnoreCase(r.peerId) && (nowMs - r.lastSeen < 120000)) {
+                        if (r != null && !myNodeId.equalsIgnoreCase(r.peerId) && (nowMs - r.lastSeen < 240000)) {
                             org.json.JSONObject nObj = new org.json.JSONObject();
                             nObj.put("peer_id", r.peerId);
                             nObj.put("name", r.name);
@@ -158,7 +158,7 @@ public class NeerNetraWifiMeshManager {
 
                 org.json.JSONObject envelope = new org.json.JSONObject();
                 envelope.put("t", 1); // BLEMsgType.HELLO
-                envelope.put("m", "wb_" + System.currentTimeMillis() + "_" + (myNodeId.length() > 6 ? myNodeId.substring(0, 6) : myNodeId));
+                envelope.put("m", "wb_" + myNodeId + "_" + System.currentTimeMillis() + "_" + (System.nanoTime() & 0xFFFF));
                 envelope.put("s", myNodeId);
                 envelope.put("name", myNodeName);
                 envelope.put("d", "BROADCAST");

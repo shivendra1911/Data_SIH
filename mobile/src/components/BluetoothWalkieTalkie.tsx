@@ -117,6 +117,9 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
+      if (onCallPeer) {
+        onCallPeer(peer);
+      }
       if (selectedRadio === 'wifi') {
         meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
         Alert.alert(
@@ -218,6 +221,9 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
         ]}
         onPress={() => {
           if (selectedRadio === 'wifi') {
+            if (onGroupEmergencyCall) {
+              onGroupEmergencyCall();
+            }
             meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
             Alert.alert(
               '📶 Wi-Fi Direct Group Call Sent',
@@ -355,6 +361,9 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                     ]}
                     onPress={() => {
                       if (selectedRadio === 'wifi') {
+                        if (onCallPeer) {
+                          onCallPeer(item);
+                        }
                         if (meshEngine.initiateWifiDirectCall) {
                           meshEngine.initiateWifiDirectCall(item.id, item.name).catch(() => {});
                         } else {

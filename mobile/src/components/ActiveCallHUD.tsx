@@ -16,12 +16,14 @@ interface ActiveCallHUDProps {
     name: string;
     distance?: number;
     hopCount?: number;
+    isGroupCall?: boolean;
+    status?: 'CALLING' | 'CONNECTED';
   };
   onEndCall: () => void;
 }
 
 export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({ peer, onEndCall }) => {
-  const isGroupCall = peer.id === 'GROUP_CALL' || peer.name.includes('GROUP');
+  const isGroupCall = Boolean(peer.isGroupCall || peer.id === 'GROUP_CALL' || peer.name.includes('GROUP'));
   const [seconds, setSeconds] = useState(0);
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [isPeerSpeaking, setIsPeerSpeaking] = useState(false);
@@ -131,9 +133,11 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({ peer, onEndCall })
               ? (isGroupCall ? '🚨 BROADCASTING TO ALL...' : '🎙️ TRANSMITTING VOICE...')
               : isPeerSpeaking
               ? '🔊 RECEIVING VOICE (SPEAKER)'
+              : peer.status === 'CALLING'
+              ? '📞 CALLING... READY (PTT)'
               : isGroupCall
               ? '🚨 GROUP EMERGENCY INTERCOM'
-              : 'OFFLINE 1-TO-1 INTERCOM'}
+              : '🟢 ACTIVE 1-TO-1 INTERCOM'}
           </Text>
         </View>
 

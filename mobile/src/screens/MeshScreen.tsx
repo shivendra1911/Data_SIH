@@ -373,6 +373,9 @@ const BLECallModal: React.FC<{
 
   const handleWifiCall = (peer: MeshPeer) => {
     onClose();
+    if (onInitiateCall) {
+      onInitiateCall(peer);
+    }
     meshEngine.initiateWifiDirectCall(peer.id, peer.name).catch(() => {});
     Alert.alert(
       '📶 Wi-Fi Direct Call Sent',
@@ -505,6 +508,9 @@ const BLECallModal: React.FC<{
                     }}
                     onPress={() => {
                       onClose();
+                      if (onInitiateGroupCall) {
+                        onInitiateGroupCall();
+                      }
                       meshEngine.initiateWifiDirectCall('GROUP_CALL', 'ALL NEARBY CITIZENS');
                       Alert.alert(
                         '📶 Wi-Fi Direct Group Call Sent',

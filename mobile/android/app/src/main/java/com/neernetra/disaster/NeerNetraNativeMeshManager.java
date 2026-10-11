@@ -104,10 +104,10 @@ public class NeerNetraNativeMeshManager {
         @Override
         public void run() {
             if (isRunning) {
-                Log.i(TAG, "[MeshWatchdog] Recycling native BLE scan to prevent 30-min OS limit");
+                Log.i(TAG, "[MeshWatchdog] Recycling native BLE scan to prevent OS background scan throttling");
                 restartNativeScanning();
             }
-            scanRecycleHandler.postDelayed(this, 10 * 60 * 1000);
+            scanRecycleHandler.postDelayed(this, 4 * 60 * 1000);
         }
     };
 
@@ -158,7 +158,7 @@ public class NeerNetraNativeMeshManager {
             long now = System.currentTimeMillis();
             JSONArray neighborArray = new JSONArray();
             for (MeshRoute route : routingTable.values()) {
-                if (now - route.lastSeen < 120000 && !route.peerId.equalsIgnoreCase(myNodeId)) {
+                if (now - route.lastSeen < 240000 && !route.peerId.equalsIgnoreCase(myNodeId)) {
                     JSONObject n = new JSONObject();
                     n.put("peer_id", route.peerId);
                     n.put("name", route.name);
@@ -175,7 +175,7 @@ public class NeerNetraNativeMeshManager {
             payload.put("neighbors", neighborArray);
 
             JSONObject envelope = new JSONObject();
-            String msgId = "gossip_" + now + "_" + myNodeId.substring(0, Math.min(6, myNodeId.length()));
+            String msgId = "gossip_" + myNodeId + "_" + now + "_" + (System.nanoTime() & 0xFFFF);
             envelope.put("t", 1); // BLEMsgType.HELLO
             envelope.put("type", "GOSSIP");
             envelope.put("m", msgId);
@@ -285,7 +285,7 @@ public class NeerNetraNativeMeshManager {
             startNativeScanning();
 
             scanRecycleHandler.removeCallbacks(scanRecycleRunnable);
-            scanRecycleHandler.postDelayed(scanRecycleRunnable, 10 * 60 * 1000);
+            scanRecycleHandler.postDelayed(scanRecycleRunnable, 4 * 60 * 1000);
 
             gossipHandler.removeCallbacks(gossipRunnable);
             gossipHandler.postDelayed(gossipRunnable, 3000);
@@ -476,6 +476,7 @@ public class NeerNetraNativeMeshManager {
 
             // Filter for our NeerNetra service UUID or manufacturer data — no location data involved
             List<ScanFilter> filters = new ArrayList<>();
+            filters.add(new ScanFilter.Builder().build()); // Open filter ensures packets aren't dropped if OEM puts UUID in scan response
             filters.add(new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
                 .build());
@@ -506,6 +507,31 @@ public class NeerNetraNativeMeshManager {
                         deviceName = result.getDevice().getName();
                         if (deviceName == null) deviceName = "";
                     } catch (SecurityException ignored) {}
+
+                    // Validate NeerNetra signature
+                    ScanRecord record = result.getScanRecord();
+                    boolean isNeer = false;
+                    String devLower = deviceName.toLowerCase();
+                    if (devLower.contains("neer") || devLower.contains("citizen")) {
+                        isNeer = true;
+                    } else if (record != null) {
+                        List<ParcelUuid> uuids = record.getServiceUuids();
+                        if (uuids != null) {
+                            for (ParcelUuid u : uuids) {
+                                if (u != null && (u.getUuid().equals(NEERNETRA_SERVICE_UUID) || u.getUuid().equals(NEERNETRA_16BIT_UUID))) {
+                                    isNeer = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!isNeer) {
+                            byte[] mfr = record.getManufacturerSpecificData(0x4E65);
+                            if (mfr != null && mfr.length >= 2 && mfr[0] == 'N' && mfr[1] == 'E') {
+                                isNeer = true;
+                            }
+                        }
+                    }
+                    if (!isNeer) return;
 
                     long now = System.currentTimeMillis();
                     Long lastSeen = nativePeerLastSeen.get(address);
@@ -825,7 +851,8 @@ public class NeerNetraNativeMeshManager {
                 int pktId = value[1] & 0xFF;
                 int seq = value[2] & 0xFF;
                 int total = value[3] & 0xFF;
-                String bufferKey = deviceAddress + "_" + pktId;
+                if (total > 1 && seq < total) {
+                    String bufferKey = deviceAddress + "_" + pktId;
 
                 Map<Integer, byte[]> buffer = incomingWriteBuffers.get(bufferKey);
                 if (buffer == null) {
@@ -852,6 +879,9 @@ public class NeerNetraNativeMeshManager {
 
                     handleIncomingFullPacket(deviceAddress, fullOut.toByteArray());
                 }
+                } else {
+                    handleIncomingFullPacket(deviceAddress, value);
+                }
             } else {
                 handleIncomingFullPacket(deviceAddress, value);
             }
@@ -876,16 +906,16 @@ public class NeerNetraNativeMeshManager {
         if (fullBytes == null || fullBytes.length == 0) return;
         try {
             long now = System.currentTimeMillis();
-            // Automated cache eviction: evict entries older than 30 seconds (30000 ms) on every packet ingest
+            // Automated cache eviction: evict entries older than 20 seconds (20000 ms) on every packet ingest
             for (Map.Entry<String, Long> entry : seenMessageIds.entrySet()) {
-                if (now - entry.getValue() > 30000) {
+                if (now - entry.getValue() > 20000) {
                     seenMessageIds.remove(entry.getKey());
                 }
             }
-            if (seenMessageIds.size() > 50) {
+            if (seenMessageIds.size() > 500) {
                 List<Map.Entry<String, Long>> list = new ArrayList<>(seenMessageIds.entrySet());
                 list.sort(Map.Entry.comparingByValue());
-                int toRemove = seenMessageIds.size() - 25;
+                int toRemove = seenMessageIds.size() - 250;
                 for (int i = 0; i < toRemove && i < list.size(); i++) {
                     seenMessageIds.remove(list.get(i).getKey());
                 }
@@ -950,11 +980,18 @@ public class NeerNetraNativeMeshManager {
             int ttl = packet.optInt("ttl", 1);
 
             if (msgId.isEmpty()) {
-                msgId = "m_" + now + "_" + (senderId.isEmpty() ? "anon" : senderId);
+                msgId = "m_" + now + "_" + System.nanoTime() + "_" + (senderId.isEmpty() ? "anon" : senderId);
             }
 
             // Loop Detection: Suppress duplicate packet
             if (seenMessageIds.containsKey(msgId)) {
+                // If it is a HELLO packet, refresh lastSeen so peer never goes stale even on duplicate beacon
+                if (type == 1 && !senderId.isEmpty()) {
+                    MeshRoute directRoute = routingTable.get(senderId);
+                    if (directRoute != null) {
+                        directRoute.lastSeen = now;
+                    }
+                }
                 Log.i(TAG, "🔁 [MeshDeduplication] Dropping duplicate packet msg_id=" + msgId);
                 return;
             }
@@ -1007,10 +1044,10 @@ public class NeerNetraNativeMeshManager {
 
                     // Bellman-Ford Distance-Vector rule:
                     // 1. Never overwrite a fresh direct 1-hop route with a multi-hop relayed route.
-                    // 2. Only update if route is new, OR new hop count is shorter, OR update comes from same nextHop, OR existing route has timed out (> 45s).
-                    boolean isFreshDirect = (existingRoute != null && existingRoute.hopCount == 1 && (now - existingRoute.lastSeen < 45000));
+                    // 2. Only update if route is new, OR new hop count is shorter, OR update comes from same nextHop, OR existing route has timed out (> 180s).
+                    boolean isFreshDirect = (existingRoute != null && existingRoute.hopCount == 1 && (now - existingRoute.lastSeen < 180000));
                     boolean shouldUpdate = (existingRoute == null)
-                            || (!isFreshDirect && (nHop < existingRoute.hopCount || (existingRoute.nextHop != null && existingRoute.nextHop.equals(senderId)) || (now - existingRoute.lastSeen > 45000)));
+                            || (!isFreshDirect && (nHop < existingRoute.hopCount || (existingRoute.nextHop != null && existingRoute.nextHop.equals(senderId)) || (now - existingRoute.lastSeen > 180000)));
 
                     if (shouldUpdate) {
                         MeshRoute relayedRoute = (existingRoute != null) ? existingRoute : new MeshRoute();

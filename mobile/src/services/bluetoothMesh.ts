@@ -143,7 +143,7 @@ function encodePacket(
   msgId?: string,
   targetId?: string
 ): string {
-  const m = msgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4));
+  const m = msgId || (Math.random().toString(36).substring(2, 10) + Date.now().toString(36).slice(-4) + Math.floor(Math.random() * 1000).toString(36));
   let callerName: string | undefined;
   if (type === BLEMsgType.CALL_REQUEST && payload) {
     try {
@@ -284,13 +284,13 @@ class NeerNetraBLEMesh {
   private isMessageSeen(msgId: string): boolean {
     const now = Date.now();
     for (const [id, ts] of this.seenMsgIds.entries()) {
-      if (now - ts > 30000) {
+      if (now - ts > 20000) {
         this.seenMsgIds.delete(id);
       }
     }
-    if (this.seenMsgIds.size > 50) {
+    if (this.seenMsgIds.size > 500) {
       const sorted = Array.from(this.seenMsgIds.entries()).sort((a, b) => a[1] - b[1]);
-      const toRemove = this.seenMsgIds.size - 25;
+      const toRemove = this.seenMsgIds.size - 250;
       for (let i = 0; i < toRemove && i < sorted.length; i++) {
         this.seenMsgIds.delete(sorted[i][0]);
       }
@@ -327,6 +327,14 @@ class NeerNetraBLEMesh {
   public onMessageReceived?: (msg: MeshChatMessage) => void;
   public onSOSReceived?: (senderId: string, lat: number, lng: number) => void;
   public onStateChange?: (state: string) => void;
+  public onOutgoingCall?: (call: {
+    id: string;
+    name: string;
+    distance?: number;
+    hopCount?: number;
+    isGroupCall?: boolean;
+    transport?: string;
+  }) => void;
   public onIncomingCall?: (caller: {
     id: string;
     name: string;
@@ -698,11 +706,11 @@ class NeerNetraBLEMesh {
 
           this.activePeers.set(device.id, peer);
 
-          // Stale peer cleanup: 90s window — keep peers visible in the UI even without a full GATT connect
+          // Stale peer cleanup: 240s window (4 min) — keep peers visible in the UI during quiet intervals
           const nowMs = Date.now();
           this.activePeers.forEach((p, id) => {
             if (!this.connectedDevices.has(id) && !this.peripheralClients.has(id)) {
-              if (p.lastSeen && (nowMs - new Date(p.lastSeen).getTime() > 90000)) {
+              if (p.lastSeen && (nowMs - new Date(p.lastSeen).getTime() > 240000)) {
                 this.activePeers.delete(id);
               }
             }
@@ -912,28 +920,27 @@ class NeerNetraBLEMesh {
   // ── Sliced Write Fallback for unnegotiated MTU (Safe chunks adapted to MTU) ──
   private async sendSlicedWriteToPeer(device: Device, rawBase64Packet: string): Promise<boolean> {
     try {
-      let raw = '';
+      let rawString = '';
       try {
-        raw = atob(cleanBase64(rawBase64Packet));
+        rawString = atob(cleanBase64(rawBase64Packet));
       } catch {
-        raw = rawBase64Packet;
+        rawString = rawBase64Packet;
       }
-      const rawLen = raw.length;
+      const rawLen = rawString.length;
       const headerSize = 4;
-      const sliceSize = Math.max(16, ((device.mtu || 23) - headerSize));
+      const mtu = (device as any).mtu || 23;
+      // 180-byte maximum chunk size guarantees it easily fits in any negotiated MTU >= 185
+      const sliceSize = Math.max(16, Math.min(180, mtu - headerSize));
       const totalSlices = Math.min(255, Math.ceil(rawLen / sliceSize));
-      const pktId = Math.floor(Math.random() * 255);
+      const pktId = Math.floor(Math.random() * 255) & 0xFF;
 
       for (let i = 0; i < totalSlices; i++) {
         const start = i * sliceSize;
         const end = Math.min(start + sliceSize, rawLen);
-        const chunkRaw = String.fromCharCode(0x53, pktId & 0xFF, i & 0xFF, totalSlices & 0xFF) + raw.substring(start, end);
-        let chunkBase64 = '';
-        try {
-          chunkBase64 = btoa(unescape(encodeURIComponent(chunkRaw)));
-        } catch {
-          chunkBase64 = btoa(chunkRaw.replace(/[^\x00-\xFF]/g, ''));
-        }
+        const chunkHeader = String.fromCharCode(0x53, pktId, i, totalSlices);
+        const chunkBinary = chunkHeader + rawString.substring(start, end);
+        // Direct btoa on 8-bit binary string ensures exact byte values without UTF-8 corruption
+        const chunkBase64 = btoa(chunkBinary);
 
         try {
           const chunkPromise = device.writeCharacteristicWithResponseForService(
@@ -980,7 +987,12 @@ class NeerNetraBLEMesh {
       const packet = encodePacket(type, sender, payload, ttl, msgId, targetId);
       const writeTimeoutMs = type === BLEMsgType.VOICE_BURST ? 4000 : 1800;
 
-      // Primary: Write with response (Android automatically handles Prepare/Execute Write for packets > MTU)
+      // Enforce automatic slicing for any packet > 450 bytes to prevent GATT MTU write failure
+      if (packet.length > 450) {
+        return await this.sendSlicedWriteToPeer(device, packet);
+      }
+
+      // Primary: Write with response (for standard small packets)
       try {
         const writePromise = device.writeCharacteristicWithResponseForService(
           NEERNETRA_SERVICE_UUID,
@@ -993,22 +1005,8 @@ class NeerNetraBLEMesh {
         await Promise.race([writePromise, timeoutPromise]);
         return true;
       } catch (respErr) {
-        // Fallback 1: Write without response
-        try {
-          const fallbackPromise = device.writeCharacteristicWithoutResponseForService(
-            NEERNETRA_SERVICE_UUID,
-            WRITE_CHAR_UUID,
-            packet
-          );
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('WriteWithoutResponse timeout')), 1200)
-          );
-          await Promise.race([fallbackPromise, timeoutPromise]);
-          return true;
-        } catch (noRespErr) {
-          // Fallback 2: safe slicing
-          return await this.sendSlicedWriteToPeer(device, packet);
-        }
+        // Fallback: safe slicing
+        return await this.sendSlicedWriteToPeer(device, packet);
       }
     } catch (err: any) {
       console.warn('[BLE Mesh] sendToPeer failed:', err?.message);
@@ -1057,7 +1055,7 @@ class NeerNetraBLEMesh {
     // Check if this is a sliced packet frame: [0x53, pktId, seq, total, ...sliceData]
     try {
       const raw = atob(cleanBase64(base64Value));
-      if (raw.length >= 4 && raw.charCodeAt(0) === 0x53) {
+      if (raw.length >= 4 && raw.charCodeAt(0) === 0x53 && raw.charCodeAt(3) > 1 && raw.charCodeAt(2) < raw.charCodeAt(3)) {
         const pktId = raw.charCodeAt(1);
         const seq = raw.charCodeAt(2);
         const total = raw.charCodeAt(3);
@@ -1111,8 +1109,13 @@ class NeerNetraBLEMesh {
       }
     }
 
-    // 2. Ignore if already processed this message ID
-    if (this.isMessageSeen(packet.msgId)) return;
+    // 2. Ignore if already processed this message ID (except for HELLO beacons, which refresh lastSeen)
+    if (this.isMessageSeen(packet.msgId)) {
+      if (packet.type === BLEMsgType.HELLO) {
+        this.handleHello(fromDeviceId, packet.senderId, packet.payload, packet.ttl);
+      }
+      return;
+    }
     this.markMessageSeen(packet.msgId);
 
     console.log(`[BLE Mesh] 📥 Packet type=${packet.type} from=${packet.senderId} id=${packet.msgId} target=${packet.targetId} ttl=${packet.ttl}`);
@@ -1235,8 +1238,8 @@ class NeerNetraBLEMesh {
           const nDist = nHop * 200;
           const existing = this.activePeers.get(nId);
           const nowMs = Date.now();
-          const isFreshDirect = Boolean(existing && (existing.hopCount || 1) === 1 && existing.lastSeen && (nowMs - new Date(existing.lastSeen).getTime() < 45000));
-          const shouldUpdate = !existing || (!isFreshDirect && (nHop <= (existing.hopCount || 99) || (existing.nextHop && existing.nextHop === actualNodeId) || !existing.lastSeen || (nowMs - new Date(existing.lastSeen).getTime() > 45000)));
+          const isFreshDirect = Boolean(existing && (existing.hopCount || 1) === 1 && existing.lastSeen && (nowMs - new Date(existing.lastSeen).getTime() < 180000));
+          const shouldUpdate = !existing || (!isFreshDirect && (nHop <= (existing.hopCount || 99) || (existing.nextHop && existing.nextHop === actualNodeId) || !existing.lastSeen || (nowMs - new Date(existing.lastSeen).getTime() > 180000)));
           if (!shouldUpdate) continue;
 
           const rawBaseName = n.name || (existing ? existing.name : `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
@@ -1728,16 +1731,32 @@ class NeerNetraBLEMesh {
 
     const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
     const targetNodeId = isGroup ? 'GROUP_CALL' : (peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId);
+    const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
 
     const payload = JSON.stringify({
       callerId: this.myDeviceId,
       callerName: this.myName || 'Citizen Node',
       targetId: isGroup ? 'GROUP_CALL' : targetPeerId,
       targetNodeId,
-      targetName: isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node'),
+      targetName: resolvedName,
       isGroupCall: isGroup,
       timestamp: Date.now(),
     });
+
+    const callInfo = {
+      id: isGroup ? 'GROUP_CALL' : targetPeerId,
+      name: resolvedName,
+      distance: peer?.distanceMeters || (peer?.signalStrength ? this.rssiToDistance(peer.signalStrength) : 50),
+      hopCount: 1,
+      isGroupCall: isGroup,
+      status: 'CALLING',
+    };
+    if (this.onOutgoingCall) {
+      try { this.onOutgoingCall(callInfo); } catch {}
+    }
+    try {
+      DeviceEventEmitter.emit('NEERNETRA_OUTGOING_CALL', callInfo);
+    } catch {}
 
     await this.broadcastToAll(BLEMsgType.CALL_REQUEST, payload, 16, undefined, this.myDeviceId, targetNodeId);
     return true;
@@ -1754,11 +1773,29 @@ class NeerNetraBLEMesh {
     console.log(`[Mesh Engine] 📶 INITIATING LONG-RANGE WI-FI DIRECT CALL to ${targetPeerId} (${targetName || 'Citizen'})`);
     const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
     const targetNodeId = peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId;
-    
+    const isGroup = Boolean(targetPeerId === 'GROUP_CALL');
+    const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
+
+    const callInfo = {
+      id: targetPeerId,
+      name: resolvedName,
+      distance: peer?.distanceMeters || 100,
+      hopCount: 1,
+      isGroupCall: isGroup,
+      transport: 'wifi_direct',
+      status: 'CALLING',
+    };
+    if (this.onOutgoingCall) {
+      try { this.onOutgoingCall(callInfo); } catch {}
+    }
+    try {
+      DeviceEventEmitter.emit('NEERNETRA_OUTGOING_CALL', callInfo);
+    } catch {}
+
     // 1. Dispatch explicit native Wi-Fi Direct socket packet
     await triggerWifiDirectCall(targetNodeId, targetName || this.myName);
     // 2. Also mirror via standard mesh broadcast for multi-hop resilience
-    await this.initiateCall(targetPeerId, targetName, false);
+    await this.initiateCall(targetPeerId, targetName, isGroup);
     return true;
   }
 
