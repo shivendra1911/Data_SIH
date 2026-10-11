@@ -71,20 +71,21 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           permStatus.recordAudio &&
           permStatus.nearbyWifi;
 
-        // Eliminate false positive popups: core permissions are strictly required, background/battery are optimal
-        const allSatisfied =
-          coreGranted &&
-          permStatus.backgroundLocation &&
-          permStatus.isIgnoringBatteryOptimizations;
+        // hasAllPermissions = core perms granted. Background location and battery optimization are optional extras.
+        setHasAllPermissions(!!coreGranted);
 
-        setHasAllPermissions(allSatisfied);
-
-        // If core permissions are missing (declined/revoked), or if first run, show informative popup.
-        // Never show fake popups when core permissions are satisfied and onboarding has been shown.
+        // Show permission modal ONLY if core perms are missing.
+        // NEVER show if all core permissions are granted — this prevents false-positive popups.
         const onboardingShown = await AsyncStorage.getItem(ONBOARDING_SHOWN_KEY);
-        if (!onboardingShown || !coreGranted) {
+        if (!coreGranted) {
+          // Core permissions missing — always show the modal
           setIsModalVisible(true);
+        } else if (!onboardingShown) {
+          // First launch with all core perms — show once to explain optional perms, then never again
+          setIsModalVisible(false); // Don't nag if core perms are fine
+          await AsyncStorage.setItem(ONBOARDING_SHOWN_KEY, 'true');
         } else {
+          // All core permissions satisfied and user has seen the modal before — never show
           setIsModalVisible(false);
         }
 

@@ -73,6 +73,32 @@ public class NeerNetraNativeMeshManager {
     private boolean isScanningNative = false;
     private boolean isRunning = false;
 
+    // BT state receiver: restarts advertising + scanning if BT toggles (e.g. headphones connect/disconnect)
+    private boolean btReceiverRegistered = false;
+    private final android.content.BroadcastReceiver btStateReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context ctx, android.content.Intent intent) {
+            String action = intent.getAction();
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                if (state == BluetoothAdapter.STATE_ON) {
+                    Log.i(TAG, "Bluetooth re-enabled — restarting NeerNetra mesh advertising and scan");
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        if (isRunning) {
+                            try {
+                                if (advertiser != null) advertiser.stopAdvertising(advertiseCallback);
+                            } catch (Exception ignored) {}
+                            startAdvertising(bluetoothAdapter != null ? bluetoothAdapter.getName() : "NeerNetra-Node");
+                            restartNativeScanning();
+                        } else {
+                            startMeshEngine("NeerNetra-Node");
+                        }
+                    }, 1500);
+                }
+            }
+        }
+    };
+
     private final android.os.Handler scanRecycleHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable scanRecycleRunnable = new Runnable() {
         @Override
@@ -265,6 +291,16 @@ public class NeerNetraNativeMeshManager {
             gossipHandler.postDelayed(gossipRunnable, 3000);
 
             isRunning = true;
+
+            // Register BT state listener to handle headphone connect/disconnect
+            if (!btReceiverRegistered) {
+                try {
+                    android.content.IntentFilter btFilter = new android.content.IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+                    appContext.registerReceiver(btStateReceiver, btFilter);
+                    btReceiverRegistered = true;
+                } catch (Exception ignored) {}
+            }
+
             Log.i(TAG, "24/7 Native BLE Mesh Engine successfully started!");
             return true;
 

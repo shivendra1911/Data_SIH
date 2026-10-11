@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Alert, DeviceEventEmitter } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -337,6 +337,17 @@ export const HomeScreen: React.FC = () => {
           console.log('[HomeScreen] 📞 Received incoming call:', caller);
           setIncomingCaller(caller);
         };
+        // Backup: also listen via DeviceEventEmitter so call modal ALWAYS shows even if notification permission is denied
+        DeviceEventEmitter.addListener('NEERNETRA_INCOMING_CALL', (data: any) => {
+          console.log('[HomeScreen] 📞 Incoming call via DeviceEventEmitter:', data);
+          setIncomingCaller({
+            id: data.callerId,
+            name: data.callerName,
+            distance: data.distance || 50,
+            hopCount: data.hopCount || 1,
+            isGroupCall: data.isGroupCall || false,
+          });
+        });
         (meshEngine as any).onCallAnswered = (peerId: string, peerName?: string) => {
           console.log('[HomeScreen] 📞 Call answered by:', peerId);
           setActiveCallPeer({ id: peerId, name: peerName || `Citizen [${peerId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`, hopCount: 1 });

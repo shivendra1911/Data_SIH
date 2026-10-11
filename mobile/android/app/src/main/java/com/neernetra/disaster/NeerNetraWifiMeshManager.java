@@ -380,9 +380,16 @@ public class NeerNetraWifiMeshManager {
 
                     int length = packet.getLength();
                     if (length > 0) {
+                        java.net.InetAddress srcAddr = packet.getAddress();
+                        if (srcAddr != null) {
+                            // Ignore loopback or packets sent from our own local network interface IP
+                            if (srcAddr.isLoopbackAddress() || java.net.NetworkInterface.getByInetAddress(srcAddr) != null) {
+                                continue;
+                            }
+                        }
                         byte[] receivedBytes = new byte[length];
                         System.arraycopy(packet.getData(), packet.getOffset(), receivedBytes, 0, length);
-                        String senderIp = packet.getAddress().getHostAddress();
+                        String senderIp = srcAddr != null ? srcAddr.getHostAddress() : "unknown";
 
                         // Dispatch to unified native mesh router
                         NeerNetraNativeMeshManager.getInstance(appContext)

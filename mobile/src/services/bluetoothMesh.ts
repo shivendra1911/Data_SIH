@@ -11,7 +11,7 @@
  *  - Dedup cache and instant UI state dispatch
  */
 
-import { Alert, Platform, PermissionsAndroid } from 'react-native';
+import { Alert, Platform, PermissionsAndroid, DeviceEventEmitter } from 'react-native';
 import { MeshPeer, MeshChatMessage, SOSPayload } from '../types';
 import { saveSOSToOfflineQueue } from './offlineStorage';
 import {
@@ -646,7 +646,7 @@ class NeerNetraBLEMesh {
 
     try {
       this.manager.startDeviceScan(
-        [NEERNETRA_SERVICE_UUID, '00004e65-0000-1000-8000-00805f9b34fb'],
+        null,  // No OS-level UUID filter — scan ALL BLE devices, filter in JS callback
         { allowDuplicates: true, scanMode: 2 }, // scanMode 2 = SCAN_MODE_LOW_LATENCY
         async (error: any, device: any) => {
           if (error) {
@@ -659,7 +659,6 @@ class NeerNetraBLEMesh {
           if (!device) return;
 
           const devName = (device.name || (device as any).localName || '').toLowerCase();
-          if (isMockOrFalsePeer(device.id, devName)) return;
           const devUuids = (device.serviceUUIDs || []).map((u: string) => u.toLowerCase().replace(/-/g, ''));
           const targetUuid = NEERNETRA_SERVICE_UUID.toLowerCase().replace(/-/g, '');
 
@@ -672,7 +671,10 @@ class NeerNetraBLEMesh {
           );
 
           const isNeerDevice = hasNeerName || hasNeerUuid || hasNeerMfr || hasNeerServiceData;
-          if (!isNeerDevice) return;
+          if (!isNeerDevice) return; // Silently skip non-NeerNetra BLE devices
+
+          // Only filter mock/fake peers AFTER confirming this is a NeerNetra device
+          if (isMockOrFalsePeer(device.id, devName)) return;
 
           const peerRssi = device.rssi || -68;
           const rawName = device.name || (device as any).localName;
@@ -1116,6 +1118,8 @@ class NeerNetraBLEMesh {
     console.log(`[BLE Mesh] 📥 Packet type=${packet.type} from=${packet.senderId} id=${packet.msgId} target=${packet.targetId} ttl=${packet.ttl}`);
 
     // Deterministic 1-to-1 Node Addressing Filter
+    // Senders often target the receiver's Bluetooth MAC address rather than its logical nodeId (dev_xxxx).
+    // Accept the packet UNLESS it is explicitly addressed to a DIFFERENT known peer in our activePeers.
     const isBroadcast = !packet.targetId || packet.targetId === 'BROADCAST' || packet.targetId === 'GROUP_CALL';
     const isStrictlyOtherPeer = Boolean(
       packet.targetId &&
@@ -1127,7 +1131,8 @@ class NeerNetraBLEMesh {
                     packet.targetId === this.myDeviceId ||
                     packet.targetId === 'self' ||
                     packet.targetId === 'me' ||
-                    (Boolean(this.myName) && Boolean(packet.targetId) && packet.targetId.toLowerCase().includes(this.myName.toLowerCase())) ||
+                    (Boolean(this.myName) && Boolean(packet.targetId) &&
+                     packet.targetId.toLowerCase().includes(this.myName.toLowerCase())) ||
                     !isStrictlyOtherPeer;
 
     if (isForMe || packet.type === BLEMsgType.HELLO) {
@@ -1210,6 +1215,10 @@ class NeerNetraBLEMesh {
     try {
       const info = JSON.parse(payload);
       const actualNodeId = senderId || info.id;
+      // Never register our own node ID as a remote peer
+      if (actualNodeId === this.myDeviceId || senderId === this.myDeviceId) {
+        return;
+      }
       if (actualNodeId) {
         this.peerNodeIdToMac.set(actualNodeId, deviceId);
         this.macToNodeId.set(deviceId, actualNodeId);
@@ -1467,6 +1476,18 @@ class NeerNetraBLEMesh {
 
       console.log(`[BLE Mesh] 📞 ${isGroup ? '🚨 INCOMING GROUP EMERGENCY CALL' : 'INCOMING 1-TO-1 CALL'} from ${callerName} (${senderId})`);
       wakeUpScreenAndShowCall(callerName, isGroup, senderId);
+
+      // Emit in-app call event so any screen can show incoming call UI
+      // regardless of POST_NOTIFICATIONS permission status
+      DeviceEventEmitter.emit('NEERNETRA_INCOMING_CALL', {
+        callerId: senderId,
+        callerName,
+        distance,
+        hopCount,
+        isGroupCall: isGroup,
+        timestamp: Date.now(),
+      });
+
       if (this.onIncomingCall) {
         this.onIncomingCall({
           id: senderId,
