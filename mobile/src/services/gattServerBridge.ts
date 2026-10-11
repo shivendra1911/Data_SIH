@@ -435,5 +435,84 @@ export const getBatteryOptimizationStatus = async (): Promise<{
   }
 };
 
+export interface AppPermissionsStatus {
+  fineLocation: boolean;
+  backgroundLocation: boolean;
+  recordAudio: boolean;
+  bluetooth: boolean;
+  nearbyWifi: boolean;
+  postNotifications: boolean;
+  isIgnoringBatteryOptimizations: boolean;
+}
+
+export const playAudioChunk = async (base64Chunk: string): Promise<boolean> => {
+  if (!NeerNetraGatt?.playAudioChunk) return false;
+  try {
+    return await NeerNetraGatt.playAudioChunk(base64Chunk);
+  } catch (err: any) {
+    console.warn('[GattBridge] playAudioChunk error:', err?.message);
+    return false;
+  }
+};
+
+export const stopAudioChunkPlayback = async (): Promise<boolean> => {
+  if (!NeerNetraGatt?.stopAudioChunkPlayback) return false;
+  try {
+    return await NeerNetraGatt.stopAudioChunkPlayback();
+  } catch (err: any) {
+    console.warn('[GattBridge] stopAudioChunkPlayback error:', err?.message);
+    return false;
+  }
+};
+
+export const startAudioCaptureStream = async (): Promise<boolean> => {
+  if (!NeerNetraGatt?.startAudioCaptureStream) return false;
+  try {
+    return await NeerNetraGatt.startAudioCaptureStream();
+  } catch (err: any) {
+    console.warn('[GattBridge] startAudioCaptureStream error:', err?.message);
+    return false;
+  }
+};
+
+export const stopAudioCaptureStream = async (): Promise<boolean> => {
+  if (!NeerNetraGatt?.stopAudioCaptureStream) return false;
+  try {
+    return await NeerNetraGatt.stopAudioCaptureStream();
+  } catch (err: any) {
+    console.warn('[GattBridge] stopAudioCaptureStream error:', err?.message);
+    return false;
+  }
+};
+
+export const subscribeToAudioCapture = (
+  callback: (event: { chunk: string; sampleRate: number; bytesRead: number }) => void
+) => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt) return () => {};
+  if (!emitter) {
+    emitter = new NativeEventEmitter(NeerNetraGatt);
+  }
+  const sub = emitter.addListener('onNativeAudioChunkRecorded', callback);
+  return () => sub.remove();
+};
+
+export const clearNativeMessageCache = async (): Promise<boolean> => {
+  if (!NeerNetraGatt?.clearMessageCache) return false;
+  try {
+    return await NeerNetraGatt.clearMessageCache();
+  } catch {
+    return false;
+  }
+};
+
+export const getAppPermissionsStatus = async (): Promise<AppPermissionsStatus | null> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.getAppPermissionsStatus) return null;
+  try {
+    return await NeerNetraGatt.getAppPermissionsStatus();
+  } catch {
+    return null;
+  }
+};
+
 
 

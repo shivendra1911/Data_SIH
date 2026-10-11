@@ -48,7 +48,6 @@ export function isGenuineDevice(device_uuid?: string, name?: string): boolean {
     "dev_ramesh_kumar",
     "dev_katy_fuller",
     "dev_anita_sharma",
-    "vivo-v2437-node-01",
     "dev_node_b_relay",
     "dev_node_c_dist",
     "dev_node_d_shelter",
@@ -82,7 +81,7 @@ export async function GET(req: NextRequest) {
   // Prune legacy simulated siren beacons and mock devices from in-memory cache
   if (global.__NEERNETRA_CITIZENS__) {
     global.__NEERNETRA_CITIZENS__ = global.__NEERNETRA_CITIZENS__.filter(
-      (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 720
+      (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 30
     );
   }
 
@@ -96,9 +95,9 @@ export async function GET(req: NextRequest) {
         if (!dev.device_uuid || !isGenuineDevice(dev.device_uuid, dev.name)) continue;
         const elapsedSecs = Number(dev.elapsed_seconds_since_sync) || 0;
         const lastSeenMins = Math.max(0, Math.round(elapsedSecs / 60));
-        if (lastSeenMins > 720) continue;
+        if (lastSeenMins > 30) continue;
         const existingIdx = result.findIndex((c) => c.device_uuid === dev.device_uuid);
-        const isLive = !dev.isUnresponsiveDanger && lastSeenMins < 720;
+        const isLive = !dev.isUnresponsiveDanger && lastSeenMins < 30;
         const citObj: CitizenLocation = {
           id: `cit-${dev.device_uuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
           device_uuid: dev.device_uuid,
@@ -149,8 +148,8 @@ export async function GET(req: NextRequest) {
         }
 
         const lastSeenMins = Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 60000));
-        // Reject stale history older than 12 hours (720 mins) so old test records do not appear as live
-        if (lastSeenMins > 720) {
+        // Reject stale history older than 30 mins so old test records do not appear as live
+        if (lastSeenMins > 30) {
           continue;
         }
 
@@ -227,8 +226,8 @@ export async function GET(req: NextRequest) {
           alert.sos_type === "COLLAPSE" ||
           parsedMedical !== "NONE";
 
-        // In disaster edge mesh mode, preserve active presence for 12 hours (720 mins)
-        const isLiveInDisasterMode = lastSeenMins < 720;
+        // In disaster edge mesh mode, preserve active presence for 30 mins
+        const isLiveInDisasterMode = lastSeenMins < 30;
 
         let cleanDisplayName = parsedName;
         if (cleanDisplayName.toLowerCase().includes("v2437")) {
@@ -266,9 +265,9 @@ export async function GET(req: NextRequest) {
     // Cloud sync fallback gracefully to in-memory
   }
 
-  // Strictly enforce only genuine devices that were active within the current window (< 12 hours)
+  // Strictly enforce only genuine devices that were active within the current window (< 30 mins)
   result = result.filter(
-    (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 720
+    (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 30
   );
 
   // Deduplicate multiple telemetry streams from the same physical smartphone

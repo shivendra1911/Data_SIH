@@ -3,7 +3,12 @@ package com.neernetra.disaster;
 import android.bluetooth.*;
 import android.content.Context;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFormat;
 import android.media.AudioManager;
+import android.media.AudioRecord;
+import android.media.AudioTrack;
+import android.media.AudioFocusRequest;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.media.ToneGenerator;
@@ -21,6 +26,7 @@ import android.provider.Settings;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.List;
 
 /**
  * NeerNetraGattModule
@@ -39,6 +45,13 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     private MediaRecorder mediaRecorder;
     private File audioRecordFile;
     private MediaPlayer mediaPlayer;
+    private AudioTrack audioTrack;
+    private AudioRecord audioRecord;
+    private Thread audioCaptureThread;
+    private volatile boolean isRecordingStream = false;
+    private AudioFocusRequest audioFocusRequest;
+    private static final int SAMPLE_RATE_16K = 16000;
+    private static final int SAMPLE_RATE_8K = 8000;
 
     public NeerNetraGattModule(ReactApplicationContext context) {
         super(context);
@@ -423,6 +436,248 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         }
     }
 
+    // ── Audio Focus & Speakerphone Helpers ─────────────────────────────────
+    private boolean acquireAudioFocus(AudioManager am) {
+        if (am == null) return false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build();
+                audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(playbackAttributes)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(focusChange -> {
+                        Log.d(TAG, "Audio focus changed: " + focusChange);
+                    })
+                    .build();
+                int res = am.requestAudioFocus(audioFocusRequest);
+                return res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            } else {
+                //noinspection deprecation
+                int res = am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
+                return res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "acquireAudioFocus error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void abandonAudioFocus(AudioManager am) {
+        if (am == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+                am.abandonAudioFocusRequest(audioFocusRequest);
+                audioFocusRequest = null;
+            } else {
+                //noinspection deprecation
+                am.abandonAudioFocus(null);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "abandonAudioFocus error: " + e.getMessage());
+        }
+    }
+
+    private void enableSpeakerphone(AudioManager am, boolean enable) {
+        if (am == null) return;
+        try {
+            if (enable) {
+                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    List<AudioDeviceInfo> devices = am.getAvailableCommunicationDevices();
+                    for (AudioDeviceInfo device : devices) {
+                        if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                            am.setCommunicationDevice(device);
+                            break;
+                        }
+                    }
+                }
+                am.setSpeakerphoneOn(true);
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    am.clearCommunicationDevice();
+                }
+                am.setSpeakerphoneOn(false);
+                am.setMode(AudioManager.MODE_NORMAL);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "enableSpeakerphone error: " + e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void playAudioChunk(String base64Chunk, Promise promise) {
+        try {
+            if (base64Chunk == null || base64Chunk.trim().isEmpty()) {
+                if (promise != null) promise.resolve(false);
+                return;
+            }
+            byte[] pcmData = android.util.Base64.decode(base64Chunk.trim(), android.util.Base64.NO_WRAP);
+            if (pcmData == null || pcmData.length == 0) {
+                if (promise != null) promise.resolve(false);
+                return;
+            }
+
+            final AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            acquireAudioFocus(audioManager);
+            enableSpeakerphone(audioManager, true);
+
+            if (audioTrack == null || audioTrack.getState() != AudioTrack.STATE_INITIALIZED) {
+                int channelConfig = AudioFormat.CHANNEL_OUT_MONO;
+                int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+                int sampleRate = SAMPLE_RATE_16K;
+                int minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+                if (minBufSize <= 0) {
+                    sampleRate = SAMPLE_RATE_8K;
+                    minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+                }
+                int bufferSize = Math.max(minBufSize * 2, 8192);
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build();
+                    AudioFormat format = new AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(channelConfig)
+                        .setEncoding(audioFormat)
+                        .build();
+                    audioTrack = new AudioTrack(audioAttributes, format, bufferSize, AudioTrack.MODE_STREAM, AudioManager.AUDIO_SESSION_ID_GENERATE);
+                } else {
+                    //noinspection deprecation
+                    audioTrack = new AudioTrack(AudioManager.STREAM_VOICE_CALL, sampleRate, channelConfig, audioFormat, bufferSize, AudioTrack.MODE_STREAM);
+                }
+
+                if (audioTrack.getState() != AudioTrack.STATE_INITIALIZED) {
+                    // Fallback to STREAM_MUSIC if STREAM_VOICE_CALL failed on hardware
+                    //noinspection deprecation
+                    audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig, audioFormat, bufferSize, AudioTrack.MODE_STREAM);
+                }
+
+                audioTrack.play();
+            }
+
+            audioTrack.write(pcmData, 0, pcmData.length);
+            if (promise != null) promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "playAudioChunk error: " + e.getMessage(), e);
+            if (promise != null) promise.reject("CHUNK_PLAY_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void stopAudioChunkPlayback(Promise promise) {
+        try {
+            if (audioTrack != null) {
+                try {
+                    audioTrack.stop();
+                    audioTrack.flush();
+                    audioTrack.release();
+                } catch (Exception ignored) {}
+                audioTrack = null;
+            }
+            final AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            abandonAudioFocus(audioManager);
+            enableSpeakerphone(audioManager, false);
+            if (promise != null) promise.resolve(true);
+        } catch (Exception e) {
+            if (promise != null) promise.reject("STOP_CHUNK_PLAY_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void startAudioCaptureStream(Promise promise) {
+        try {
+            if (isRecordingStream) {
+                promise.resolve(true);
+                return;
+            }
+
+            int sampleRate = SAMPLE_RATE_16K;
+            int channelConfig = AudioFormat.CHANNEL_IN_MONO;
+            int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+            int minBufSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+            if (minBufSize <= 0) {
+                sampleRate = SAMPLE_RATE_8K;
+                minBufSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+            }
+            int bufferSize = Math.max(minBufSize * 2, 4096);
+
+            int audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+            try {
+                audioRecord = new AudioRecord(audioSource, sampleRate, channelConfig, audioFormat, bufferSize);
+            } catch (Exception e) {
+                audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, audioFormat, bufferSize);
+            }
+
+            if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                sampleRate = SAMPLE_RATE_8K;
+                audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, audioFormat, bufferSize);
+            }
+
+            if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                promise.reject("RECORD_INIT_FAIL", "Failed to initialize AudioRecord");
+                return;
+            }
+
+            audioRecord.startRecording();
+            isRecordingStream = true;
+
+            final int finalSampleRate = sampleRate;
+            final int chunkSize = 1600;
+            audioCaptureThread = new Thread(() -> {
+                byte[] buffer = new byte[chunkSize * 2];
+                while (isRecordingStream) {
+                    if (audioRecord == null) break;
+                    int read = audioRecord.read(buffer, 0, buffer.length);
+                    if (read > 0 && staticReactContext != null && staticReactContext.hasActiveReactInstance()) {
+                        String base64Chunk = android.util.Base64.encodeToString(buffer, 0, read, android.util.Base64.NO_WRAP);
+                        WritableMap map = Arguments.createMap();
+                        map.putString("chunk", base64Chunk);
+                        map.putInt("sampleRate", finalSampleRate);
+                        map.putInt("bytesRead", read);
+                        try {
+                            staticReactContext
+                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                                .emit("onNativeAudioChunkRecorded", map);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }, "NeerNetraAudioCaptureThread");
+            audioCaptureThread.setPriority(Thread.MAX_PRIORITY);
+            audioCaptureThread.start();
+
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "startAudioCaptureStream error: " + e.getMessage(), e);
+            promise.reject("START_CAPTURE_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void stopAudioCaptureStream(Promise promise) {
+        try {
+            isRecordingStream = false;
+            if (audioCaptureThread != null) {
+                try { audioCaptureThread.interrupt(); } catch (Exception ignored) {}
+                audioCaptureThread = null;
+            }
+            if (audioRecord != null) {
+                try {
+                    audioRecord.stop();
+                    audioRecord.release();
+                } catch (Exception ignored) {}
+                audioRecord = null;
+            }
+            if (promise != null) promise.resolve(true);
+        } catch (Exception e) {
+            if (promise != null) promise.reject("STOP_CAPTURE_ERROR", e.getMessage());
+        }
+    }
+
     @ReactMethod
     public void playVoiceAudio(String base64Audio, Promise promise) {
         try {
@@ -455,10 +710,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             fos.close();
 
             final AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-            if (audioManager != null) {
-                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                audioManager.setSpeakerphoneOn(true);
-            }
+            acquireAudioFocus(audioManager);
+            enableSpeakerphone(audioManager, true);
 
             mediaPlayer = new MediaPlayer();
             if (android.os.Build.VERSION.SDK_INT >= 21) {
@@ -478,23 +731,15 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 try { mp.release(); } catch (Exception ignored) {}
                 tempPlayFile.delete();
                 mediaPlayer = null;
-                if (audioManager != null) {
-                    try {
-                        audioManager.setMode(AudioManager.MODE_NORMAL);
-                        audioManager.setSpeakerphoneOn(false);
-                    } catch (Exception ignored) {}
-                }
+                abandonAudioFocus(audioManager);
+                enableSpeakerphone(audioManager, false);
             });
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 try { mp.release(); } catch (Exception ignored) {}
                 tempPlayFile.delete();
                 mediaPlayer = null;
-                if (audioManager != null) {
-                    try {
-                        audioManager.setMode(AudioManager.MODE_NORMAL);
-                        audioManager.setSpeakerphoneOn(false);
-                    } catch (Exception ignored) {}
-                }
+                abandonAudioFocus(audioManager);
+                enableSpeakerphone(audioManager, false);
                 return true;
             });
             mediaPlayer.prepare();
@@ -514,12 +759,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 mediaPlayer = null;
             }
             AudioManager audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-            if (audioManager != null) {
-                try {
-                    audioManager.setMode(AudioManager.MODE_NORMAL);
-                    audioManager.setSpeakerphoneOn(false);
-                } catch (Exception ignored) {}
-            }
+            abandonAudioFocus(audioManager);
+            enableSpeakerphone(audioManager, false);
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("STOP_PLAY_ERROR", e.getMessage());
@@ -533,6 +774,70 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     public void removeListeners(Integer count) {}
 
     @ReactMethod
+    public void clearMessageCache(Promise promise) {
+        try {
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).clearMessageCache();
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
+    public void getAppPermissionsStatus(Promise promise) {
+        try {
+            Context ctx = getReactApplicationContext();
+            WritableMap map = Arguments.createMap();
+
+            boolean fineLocation = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            boolean backgroundLocation = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                backgroundLocation = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            }
+
+            boolean recordAudio = ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+
+            boolean bluetooth = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                boolean scan = ctx.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                boolean adv = ctx.checkSelfPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                boolean conn = ctx.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                bluetooth = scan && adv && conn;
+            }
+
+            boolean nearbyWifi = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                nearbyWifi = ctx.checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            }
+
+            boolean postNotifications = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                postNotifications = ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            }
+
+            boolean isIgnoringBatteryOpt = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    isIgnoringBatteryOpt = pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+                }
+            }
+
+            map.putBoolean("fineLocation", fineLocation);
+            map.putBoolean("backgroundLocation", backgroundLocation);
+            map.putBoolean("recordAudio", recordAudio);
+            map.putBoolean("bluetooth", bluetooth);
+            map.putBoolean("nearbyWifi", nearbyWifi);
+            map.putBoolean("postNotifications", postNotifications);
+            map.putBoolean("isIgnoringBatteryOptimizations", isIgnoringBatteryOpt);
+
+            promise.resolve(map);
+        } catch (Exception e) {
+            promise.reject("PERM_STATUS_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
     public void stopGattServer(Promise promise) {
         try {
             NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).stopMeshEngine();
@@ -544,6 +849,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 try { mediaRecorder.release(); } catch (Exception ignored) {}
                 mediaRecorder = null;
             }
+            stopAudioChunkPlayback(null);
+            stopAudioCaptureStream(null);
             promise.resolve("Stopped");
         } catch (Exception e) {
             promise.reject("STOP_ERROR", e.getMessage());

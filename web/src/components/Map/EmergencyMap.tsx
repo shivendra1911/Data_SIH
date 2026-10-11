@@ -370,7 +370,6 @@ export default function EmergencyMap({
     "dev_ramesh_kumar",
     "dev_katy_fuller",
     "dev_anita_sharma",
-    "vivo-v2437-node-01",
     "node_b_relay",
     "node_c_dist",
     "node_d_shelter",

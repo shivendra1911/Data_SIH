@@ -122,6 +122,28 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     );
   };
 
+  // Live GPS tracking state
+  const [liveCoords, setLiveCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    heading: number | null;
+    accuracy: number | null;
+    speed: number | null;
+  } | null>(null);
+  const liveCoordsRef = useRef<{
+    latitude: number;
+    longitude: number;
+    heading: number | null;
+    accuracy: number | null;
+    speed: number | null;
+  } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'ACQUIRING' | 'LOCKED' | 'PERMISSION_DENIED'>('ACQUIRING');
+  const [mapLoaded, setMapLoaded] = useState<boolean>(false);
+
+  // Active coordinates
+  const currentLat = liveCoords?.latitude ?? lastLocation?.lat ?? 27.6015;
+  const currentLng = liveCoords?.longitude ?? lastLocation?.lng ?? 77.5975;
+
   // Synchronize mesh peers (including multi-hop relays) onto the offline Leaflet radar
   useEffect(() => {
     if (!peers || peers.length === 0) return;
@@ -160,28 +182,6 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       return merged;
     });
   }, [peers, currentLat, currentLng]);
-
-  // Live GPS tracking state
-  const [liveCoords, setLiveCoords] = useState<{
-    latitude: number;
-    longitude: number;
-    heading: number | null;
-    accuracy: number | null;
-    speed: number | null;
-  } | null>(null);
-  const liveCoordsRef = useRef<{
-    latitude: number;
-    longitude: number;
-    heading: number | null;
-    accuracy: number | null;
-    speed: number | null;
-  } | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<'ACQUIRING' | 'LOCKED' | 'PERMISSION_DENIED'>('ACQUIRING');
-  const [mapLoaded, setMapLoaded] = useState<boolean>(false);
-
-  // Active coordinates
-  const currentLat = liveCoords?.latitude ?? lastLocation?.lat ?? 27.6015;
-  const currentLng = liveCoords?.longitude ?? lastLocation?.lng ?? 77.5975;
 
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;

@@ -28,7 +28,9 @@ import {
   triggerWifiDirectCall,
   triggerWifiDirectMessage,
   broadcastWifiBeacon,
+  clearNativeMessageCache,
 } from './gattServerBridge';
+import { audioStreamer } from './audioStreamer';
 import { startBLEAdvertising } from './bleAdvertiser';
 
 let BleManager: any;
@@ -254,11 +256,16 @@ class NeerNetraBLEMesh {
 
   private isMessageSeen(msgId: string): boolean {
     const now = Date.now();
-    if (this.seenMsgIds.size > 2048) {
-      for (const [id, ts] of this.seenMsgIds.entries()) {
-        if (now - ts > 120000) {
-          this.seenMsgIds.delete(id);
-        }
+    for (const [id, ts] of this.seenMsgIds.entries()) {
+      if (now - ts > 45000) {
+        this.seenMsgIds.delete(id);
+      }
+    }
+    if (this.seenMsgIds.size > 200) {
+      const sorted = Array.from(this.seenMsgIds.entries()).sort((a, b) => a[1] - b[1]);
+      const toRemove = this.seenMsgIds.size - 100;
+      for (let i = 0; i < toRemove && i < sorted.length; i++) {
+        this.seenMsgIds.delete(sorted[i][0]);
       }
     }
     return this.seenMsgIds.has(msgId);
@@ -266,6 +273,12 @@ class NeerNetraBLEMesh {
 
   private markMessageSeen(msgId: string) {
     this.seenMsgIds.set(msgId, Date.now());
+  }
+
+  public clearMessageCache() {
+    this.seenMsgIds.clear();
+    clearNativeMessageCache().catch(() => {});
+    console.log('[BLE Mesh] Deduplication message cache cleared');
   }
   private myDeviceId: string = '';
   private myName: string = '';
@@ -342,6 +355,9 @@ class NeerNetraBLEMesh {
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         ];
 
+        if (apiLevel >= 33 && (PermissionsAndroid.PERMISSIONS as any).NEARBY_WIFI_DEVICES) {
+          perms.push((PermissionsAndroid.PERMISSIONS as any).NEARBY_WIFI_DEVICES);
+        }
         if (apiLevel >= 33 && (PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS) {
           perms.push((PermissionsAndroid.PERMISSIONS as any).POST_NOTIFICATIONS);
         }
@@ -1168,8 +1184,8 @@ class NeerNetraBLEMesh {
           const nDist = nHop * 200;
           const existing = this.activePeers.get(nId);
           const nowMs = Date.now();
-          const isFreshDirect = existing && (existing.hopCount || 1) === 1 && (nowMs - new Date(existing.lastSeen).getTime() < 45000);
-          const shouldUpdate = !existing || (!isFreshDirect && (nHop <= (existing.hopCount || 99) || (existing.nextHop && existing.nextHop === actualNodeId) || (nowMs - new Date(existing.lastSeen).getTime() > 45000)));
+          const isFreshDirect = Boolean(existing && (existing.hopCount || 1) === 1 && existing.lastSeen && (nowMs - new Date(existing.lastSeen).getTime() < 45000));
+          const shouldUpdate = !existing || (!isFreshDirect && (nHop <= (existing.hopCount || 99) || (existing.nextHop && existing.nextHop === actualNodeId) || !existing.lastSeen || (nowMs - new Date(existing.lastSeen).getTime() > 45000)));
           if (!shouldUpdate) continue;
 
           const rawBaseName = n.name || (existing ? existing.name : `Citizen [${String(nId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
@@ -1196,6 +1212,7 @@ class NeerNetraBLEMesh {
           this.macToNodeId.set(deviceId, nId);
           console.log(`[BLE Mesh] 🗺️ [GossipRouting] Registered remote neighbor ${cleanName} via ${actualNodeId} (${nHop} hops, ${nDist}m)`);
         }
+        this.emitPeersUpdate();
       }
 
       // 2. Process the sender node itself
@@ -1229,7 +1246,7 @@ class NeerNetraBLEMesh {
       if (this.onPeerDiscovered) {
         this.onPeerDiscovered(updatedPeer);
       }
-      console.log(`[BLE Mesh] HELLO registered from ${peerName} (${senderId}) [Hop: ${hopCount}]`);
+      console.log(`[BLE Mesh] HELLO registered from ${cleanPeerName} (${senderId}) [Hop: ${hopCount}]`);
 
       // Bidirectional handshake: reply with our own identity so both nodes know each other across multi-hop links
       if (!info.isAck) {
@@ -1467,10 +1484,7 @@ class NeerNetraBLEMesh {
         }
 
         console.log(`[BLE Mesh] 🔊 Direct voice burst received from ${senderId} (${fullAudio.length} chars)! Playing on loudspeaker...`);
-        playPttTone('incoming').catch(() => {});
-        setTimeout(() => {
-          playVoiceAudio(fullAudio).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
-        }, 220);
+        audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
 
         if (this.onVoiceBurstReceived) {
           this.onVoiceBurstReceived(senderId, fullAudio);
@@ -1497,7 +1511,7 @@ class NeerNetraBLEMesh {
                   partialAudio = 'IyFBTVIK' + partialAudio;
                 }
                 console.log(`[BLE Mesh] Reassembled timed-out burst (${partialAudio.length} chars, ${currentBuf.chunks.size}/${currentBuf.total} chunks). Playing on speaker...`);
-                playVoiceAudio(partialAudio).catch(() => {});
+                audioStreamer.playVoice(partialAudio, false).catch(() => {});
                 if (this.onVoiceBurstReceived) this.onVoiceBurstReceived(senderId, partialAudio);
               }
             }
@@ -1524,11 +1538,7 @@ class NeerNetraBLEMesh {
             fullAudio = 'IyFBTVIK' + fullAudio;
           }
           console.log(`[BLE Mesh] 🔊 Full voice burst reassembled (${fullAudio.length} chars)! Playing on loudspeaker...`);
-          // 1. Play radio chime followed by real native voice audio directly through the phone speaker
-          playPttTone('incoming').catch(() => {});
-          setTimeout(() => {
-            playVoiceAudio(fullAudio).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
-          }, 80);
+          audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
 
           // 2. Notify any active HUD/screen
           if (this.onVoiceBurstReceived) {

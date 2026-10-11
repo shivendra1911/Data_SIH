@@ -266,13 +266,6 @@ export const HomeScreen: React.FC = () => {
       console.log(`[HomeScreen] Native background tremor telemetry: ${tremorG}g for ${durationMs}ms`);
     });
 
-    // 7. Battery & OEM Optimization (WhatsApp-grade background reliability)
-    isIgnoringBatteryOptimizations().then((isIgnoring) => {
-      if (!isIgnoring) {
-        requestIgnoreBatteryOptimizations().catch(() => {});
-      }
-    });
-
     const unsubNativeStorm = subscribeToNativeStorm(({ dropHpa, currentHpa }) => {
       const isCritical = dropHpa >= 6.0;
       setStormAlert({

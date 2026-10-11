@@ -347,6 +347,30 @@ public class NeerNetraNativeMeshManager {
             Log.w(TAG, "BLE Advertising failed with error code: " + errorCode);
             if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
                 Log.i(TAG, "Advertising was already running — treating as success");
+                return;
+            }
+            if (advertiser != null) {
+                try {
+                    AdvertiseSettings fallbackSettings = new AdvertiseSettings.Builder()
+                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+                        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                        .setConnectable(true)
+                        .setTimeout(0)
+                        .build();
+                    AdvertiseData fallbackData = new AdvertiseData.Builder()
+                        .setIncludeDeviceName(false)
+                        .setIncludeTxPowerLevel(false)
+                        .addServiceUuid(new ParcelUuid(NEERNETRA_16BIT_UUID))
+                        .build();
+                    advertiser.startAdvertising(fallbackSettings, fallbackData, new AdvertiseCallback() {
+                        @Override
+                        public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+                            Log.i(TAG, "BLE Advertising active with 16-bit UUID fallback");
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.w(TAG, "Fallback advertising error: " + e.getMessage());
+                }
             }
         }
     };
@@ -419,6 +443,11 @@ public class NeerNetraNativeMeshManager {
             filters.add(new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
                 .build());
+            try {
+                filters.add(new ScanFilter.Builder()
+                    .setServiceUuid(new ParcelUuid(NEERNETRA_16BIT_UUID))
+                    .build());
+            } catch (Exception ignored) {}
             try {
                 filters.add(new ScanFilter.Builder()
                     .setManufacturerData(0x4E65, new byte[] { 'N', 'E' })
@@ -798,6 +827,11 @@ public class NeerNetraNativeMeshManager {
     // Deduplication cache to prevent multi-hop routing loops
     private final Map<String, Long> seenMessageIds = new ConcurrentHashMap<>();
 
+    public void clearMessageCache() {
+        seenMessageIds.clear();
+        Log.i(TAG, "Deduplication message cache cleared");
+    }
+
     private void handleIncomingFullPacket(String deviceAddress, byte[] fullBytes) {
         handleIncomingPacketFromAnyTransport(deviceAddress, fullBytes);
     }
@@ -806,11 +840,18 @@ public class NeerNetraNativeMeshManager {
         if (fullBytes == null || fullBytes.length == 0) return;
         try {
             long now = System.currentTimeMillis();
-            if (seenMessageIds.size() > 2048) {
-                for (Map.Entry<String, Long> entry : new ArrayList<>(seenMessageIds.entrySet())) {
-                    if (now - entry.getValue() > 180000) {
-                        seenMessageIds.remove(entry.getKey());
-                    }
+            // Automated cache eviction: evict entries older than 45 seconds (45000 ms) on every packet ingest
+            for (Map.Entry<String, Long> entry : seenMessageIds.entrySet()) {
+                if (now - entry.getValue() > 45000) {
+                    seenMessageIds.remove(entry.getKey());
+                }
+            }
+            if (seenMessageIds.size() > 200) {
+                List<Map.Entry<String, Long>> list = new ArrayList<>(seenMessageIds.entrySet());
+                list.sort(Map.Entry.comparingByValue());
+                int toRemove = seenMessageIds.size() - 100;
+                for (int i = 0; i < toRemove && i < list.size(); i++) {
+                    seenMessageIds.remove(list.get(i).getKey());
                 }
             }
 

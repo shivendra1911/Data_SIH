@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MeshChatMessage, MeshPeer } from '../types';
 import { meshEngine } from '../services/bluetoothMesh';
+import { startVoiceRecording, stopVoiceRecording, playPttTone } from '../services/gattServerBridge';
 import { Radio, Mic, MicOff, Send, WifiOff, Volume2, Shield, Phone, MessageSquare, Wifi, Bluetooth } from 'lucide-react-native';
 
 interface BluetoothWalkieTalkieProps {
@@ -32,6 +33,8 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
   const [selectedRadio, setSelectedRadio] = useState<'wifi' | 'ble'>('wifi');
   const [peers, setPeers] = useState<MeshPeer[]>(propPeers || meshEngine.getConnectedPeers());
+  const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
 
   const displayPeers = peers;
 
@@ -59,6 +62,36 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       meshEngine.onMessageReceived = prevMsgHandler;
     };
   }, []);
+
+  const handlePttPressIn = async () => {
+    try {
+      playPttTone('start').catch(() => {});
+      setIsTransmitting(true);
+      setVoiceNotice('🎙️ Recording...');
+      await startVoiceRecording();
+    } catch (e) {
+      console.warn('[WalkieTalkie] PTT press in error:', e);
+    }
+  };
+
+  const handlePttPressOut = async () => {
+    try {
+      setIsTransmitting(false);
+      const audio = await stopVoiceRecording();
+      if (audio && audio.length > 0) {
+        setVoiceNotice(`📡 Sent ${(audio.length * 0.75 / 1024).toFixed(1)} KB`);
+        playPttTone('roger').catch(() => {});
+        const targetId = activePeerName ? (displayPeers.find((p) => p.name === activePeerName)?.id || 'BROADCAST') : 'BROADCAST';
+        await meshEngine.sendVoiceBurst(targetId, audio, targetId === 'BROADCAST' || targetId === 'GROUP_CALL');
+        setTimeout(() => setVoiceNotice(null), 2000);
+      } else {
+        setVoiceNotice('Hold >=1s to record');
+        setTimeout(() => setVoiceNotice(null), 1500);
+      }
+    } catch (e) {
+      console.warn('[WalkieTalkie] PTT press out error:', e);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputMsg.trim()) return;
@@ -143,10 +176,22 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       {isCalling && (
         <View style={styles.voiceCallBar}>
           <View style={styles.pulseDot} />
-          <Volume2 size={20} color="#34d399" />
-          <Text style={styles.callText}>
-            WALKIE-TALKIE LIVE [{selectedRadio === 'wifi' ? '📶 WI-FI 250m' : '🔵 BLE 50m'}]: <Text style={styles.peerNameText}>{activePeerName}</Text>
-          </Text>
+          <Volume2 size={18} color="#34d399" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.callText} numberOfLines={1}>
+              LIVE [{selectedRadio === 'wifi' ? '📶 WI-FI 250m' : '🔵 BLE 50m'}]: <Text style={styles.peerNameText}>{activePeerName}</Text>
+            </Text>
+            {voiceNotice && <Text style={styles.voiceNoticeText}>{voiceNotice}</Text>}
+          </View>
+          <TouchableOpacity
+            style={[styles.pttBtn, isTransmitting && styles.pttBtnActive]}
+            onPressIn={handlePttPressIn}
+            onPressOut={handlePttPressOut}
+            activeOpacity={0.7}
+          >
+            <Mic size={13} color="#ffffff" />
+            <Text style={styles.pttBtnText}>{isTransmitting ? 'TALKING...' : 'HOLD PTT'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.endCallBtn}
             onPress={() => {
@@ -475,7 +520,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   callText: {
-    flex: 1,
     color: '#1C1F24',
     fontSize: 12,
     fontWeight: '700',
@@ -483,6 +527,29 @@ const styles = StyleSheet.create({
   peerNameText: {
     color: '#1C1F24',
     fontWeight: '900',
+  },
+  voiceNoticeText: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  pttBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#059669',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  pttBtnActive: {
+    backgroundColor: '#dc2626',
+  },
+  pttBtnText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   endCallBtn: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
