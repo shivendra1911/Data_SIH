@@ -128,7 +128,7 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
         role="menu"
         aria-hidden={!open}
       >
-        <span className="text-[10px] font-black uppercase tracking-wider text-white bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-full shadow-md mb-0.5">
+        <span className="text-[10px] font-black uppercase tracking-wider text-white bg-black border border-white/20 backdrop-blur-md px-3 py-1 rounded-full shadow-md mb-0.5 self-center">
           {menuLabel}
         </span>
         {actions.map((action) => (
@@ -140,14 +140,12 @@ export default function CommandFAB({ actions, menuLabel = "Command Actions" }: C
               setOpen(false);
             }}
             title={action.title || action.label}
-            className={`h-[42px] pl-3.5 pr-4 rounded-full border text-xs font-bold flex items-center gap-2 shadow-lg backdrop-blur-md transition whitespace-nowrap ${toneClasses(
-              action.tone
-            )}`}
+            className="w-[205px] h-[44px] px-4 rounded-full bg-black hover:bg-neutral-900 text-white font-extrabold text-xs border border-white/20 shadow-xl backdrop-blur-md transition flex items-center gap-2.5 active:scale-95 text-left"
           >
-            {action.icon}
-            <span>{action.label}</span>
+            <span className="flex-shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4">{action.icon}</span>
+            <span className="flex-1 truncate text-white font-extrabold">{action.label}</span>
             {action.badge !== undefined && action.badge !== "" && (
-              <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-black/15 text-[10px] font-black flex items-center justify-center">
+              <span className="ml-auto min-w-[20px] h-[20px] px-1.5 rounded-full bg-white/20 text-white text-[10px] font-black flex items-center justify-center">
                 {action.badge}
               </span>
             )}

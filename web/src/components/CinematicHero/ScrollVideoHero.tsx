@@ -137,9 +137,6 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
               <span className="text-base font-bold text-white tracking-wider uppercase font-display">
                 Neer<span className="text-white/80">Netra</span>
               </span>
-              <span className="hidden sm:inline-flex ml-2.5 text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-white/10 text-white/90 border border-white/15 uppercase tracking-[2px] backdrop-blur-md font-sans">
-                /ALL-INDIA SENTINEL
-              </span>
             </div>
           </div>
 
@@ -347,60 +344,10 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
 
         </div>
 
-        {/* 6) Interactive HUD Progress & Scrub Controller (Bottom-Right, positioned left of CommandFAB) */}
-        <div className="absolute bottom-8 right-24 sm:right-28 z-40 pointer-events-auto flex items-center gap-3 bg-[#161a20]/80 backdrop-blur-xl border border-white/15 rounded-full px-4 py-2 shadow-2xl text-white font-sans">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase font-bold tracking-[2px] text-white/60">Scrub</span>
-            <span className="text-xs font-bold text-white">
-              {Math.round(p * 100)}%
-            </span>
-          </div>
-
-          <div className="w-px h-4 bg-white/15" />
-
-          {/* 3 Stage Navigation Dots */}
-          <div className="flex items-center gap-1.5">
-            {[
-              { num: 1, target: 0.05, label: "Overview" },
-              { num: 2, target: 0.45, label: "Radar" },
-              { num: 3, target: 0.85, label: "Rescue" },
-            ].map((s) => (
-              <button
-                key={s.num}
-                onClick={() => advanceScroll(s.target)}
-                title={`Jump to Stage ${s.num}: ${s.label}`}
-                aria-label={`Jump to Stage ${s.num}`}
-                className={`w-6 h-6 rounded-full text-[10px] font-bold uppercase transition flex items-center justify-center ${
-                  activeStage === s.num
-                    ? "bg-white text-[#161a20] shadow-md scale-105"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                {s.num}
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-4 bg-white/15" />
-
-          {/* Smooth Advance Button */}
-          <button
-            onClick={() => {
-              if (activeStage === 1) advanceScroll(0.45);
-              else if (activeStage === 2) advanceScroll(0.85);
-              else scrollToCommandCenter();
-            }}
-            aria-label="Advance to next stage"
-            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white hover:text-[#161a20] flex items-center justify-center transition active:scale-95 text-white"
-          >
-            <ArrowDown className="w-3 h-3" aria-hidden />
-          </button>
-        </div>
-
         {/* 7) Bottom Central Scroll Hint Indicator */}
         {p < 0.15 && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-1.5 text-white/70 text-[10px] font-sans tracking-[3px] uppercase animate-pulse">
-            <span>/Scroll To Scrub Video</span>
+            <span>Scroll</span>
             <ArrowDown className="w-3.5 h-3.5" />
           </div>
         )}
