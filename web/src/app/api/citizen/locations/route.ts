@@ -22,7 +22,6 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-export { isGenuineDevice } from "@/lib/deviceFilter";
 import { isGenuineDevice } from "@/lib/deviceFilter";
 
 export async function GET(req: NextRequest) {

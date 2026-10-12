@@ -32,12 +32,16 @@ export async function GET() {
     const threshold = Math.max(2, Math.ceil(totalPhones / 3.0));
 
     let status = sec.status;
-    if (uniqueDevices.length >= threshold || status === "CONFIRMED_LANDSLIDE") {
+    if (uniqueDevices.length >= threshold) {
       status = "CONFIRMED_LANDSLIDE";
+      sec.status = "CONFIRMED_LANDSLIDE";
     } else if (uniqueDevices.length > 0) {
       status = "PENDING_QUORUM";
+      sec.status = "PENDING_QUORUM";
     } else {
       status = "MONITORING";
+      sec.status = "MONITORING";
+      sec.has_active_directive = false;
     }
 
     const reportingCount = uniqueDevices.length;

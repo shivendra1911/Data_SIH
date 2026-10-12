@@ -134,7 +134,7 @@ class LandslideSentinel {
     }
 
     // Micro-tremor oscillation test (10-50 Hz harmonic rumblings)
-    const isMicroTremor = delta >= 0.02 && delta <= 0.28;
+    const isMicroTremor = delta >= 0.08 && delta <= 0.45;
 
     if (isMicroTremor) {
       if (this.tremorStartTime === 0) {

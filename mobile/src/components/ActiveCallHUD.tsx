@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Vibration,
+  DeviceEventEmitter,
 } from 'react-native';
 import { Mic, PhoneOff, Volume2, Radio, Play, CheckCircle2, RotateCcw } from 'lucide-react-native';
 import { meshEngine } from '../services/bluetoothMesh';
@@ -36,6 +37,17 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({ peer, onEndCall })
       setSeconds((prev) => prev + 1);
     }, 1000);
 
+    const subVoice = DeviceEventEmitter.addListener('NEERNETRA_VOICE_BURST', (event: any) => {
+      setIsPeerSpeaking(true);
+      if (event?.audio) setLastAudio(event.audio);
+      Vibration.vibrate(40);
+      setStatusNotice(`🔊 Audio from ${event?.senderName || 'Peer'}`);
+      setTimeout(() => {
+        setIsPeerSpeaking(false);
+        setStatusNotice(null);
+      }, 3500);
+    });
+
     const prevVoiceHandler = meshEngine.onVoiceBurstReceived;
     meshEngine.onVoiceBurstReceived = (senderId, audio) => {
       setIsPeerSpeaking(true);
@@ -51,6 +63,7 @@ export const ActiveCallHUD: React.FC<ActiveCallHUDProps> = ({ peer, onEndCall })
 
     return () => {
       clearInterval(timer);
+      subVoice.remove();
       meshEngine.onVoiceBurstReceived = prevVoiceHandler;
     };
   }, []);

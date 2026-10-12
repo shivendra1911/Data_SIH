@@ -806,37 +806,31 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
 
   const livePeers = localPeers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
-  const handleClearPeers = () => {
-    Alert.alert(
-      'Clean Mesh Peers',
-      'Purge all simulated test nodes and cached offline routes so only active nearby phones appear?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Purge Test Nodes',
-          style: 'destructive',
-          onPress: async () => {
-            await meshEngine.clearTestPeers();
-            const clean = meshEngine.getConnectedPeers();
-            setLocalPeers([...clean]);
-            Alert.alert('✅ Mesh Cleaned', 'Test nodes purged. Ready for physical peer discovery.');
-          },
-        },
-      ]
-    );
+  const handleClearPeers = async () => {
+    try {
+      await meshEngine.clearAllPeers();
+      setLocalPeers([]);
+      const updated = await meshEngine.triggerManualScan();
+      setLocalPeers([...updated]);
+      Alert.alert(
+        '✅ Mesh Purged & Cleaned',
+        'All fake, test, and stale nodes have been wiped from memory, AsyncStorage, and native storage. Ready for genuine physical peer discovery.'
+      );
+    } catch (e: any) {
+      console.warn('Clear peers error:', e);
+    }
   };
 
   const handleManualScan = async () => {
     setIsScanning(true);
     try {
       await meshEngine.clearTestPeers();
-      await meshEngine.triggerManualScan();
-      const updated = meshEngine.getConnectedPeers();
+      const updated = await meshEngine.triggerManualScan();
       setLocalPeers([...updated]);
     } catch (e) {
       console.warn('Manual scan error:', e);
     } finally {
-      setTimeout(() => setIsScanning(false), 3000);
+      setTimeout(() => setIsScanning(false), 2500);
     }
   };
 

@@ -1,7 +1,11 @@
 package com.neernetra.disaster;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.aware.AttachCallback;
 import android.net.wifi.aware.DiscoverySessionCallback;
@@ -12,6 +16,8 @@ import android.net.wifi.aware.SubscribeConfig;
 import android.net.wifi.aware.SubscribeDiscoverySession;
 import android.net.wifi.aware.WifiAwareManager;
 import android.net.wifi.aware.WifiAwareSession;
+import android.net.wifi.p2p.WifiP2pDevice;
+import android.net.wifi.p2p.WifiP2pDeviceList;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Build;
 import android.os.Handler;
@@ -26,6 +32,7 @@ import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -55,8 +62,9 @@ public class NeerNetraWifiMeshManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    // Multicast lock to prevent Android Wi-Fi power-saving from dropping UDP broadcast packets
+    // Multicast and High-Performance Wi-Fi locks
     private WifiManager.MulticastLock multicastLock;
+    private WifiManager.WifiLock wifiLock;
 
     // Wi-Fi Aware state
     private WifiAwareManager wifiAwareManager;
@@ -70,6 +78,15 @@ public class NeerNetraWifiMeshManager {
     // Wi-Fi Direct (P2P) state
     private WifiP2pManager wifiP2pManager;
     private WifiP2pManager.Channel wifiP2pChannel;
+    private boolean isP2pReceiverRegistered = false;
+    private final Handler p2pDiscoveryHandler = new Handler(Looper.getMainLooper());
+    private final Runnable p2pDiscoveryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            startP2pPeerDiscovery();
+            p2pDiscoveryHandler.postDelayed(this, 15000); // 15-second continuous P2P discovery loop in the air
+        }
+    };
 
     // UDP Broadcast Socket state
     private DatagramSocket udpSocket;
@@ -109,11 +126,12 @@ public class NeerNetraWifiMeshManager {
      */
     public synchronized void startWifiMesh() {
         Log.i(TAG, "Starting NeerNetra High-Speed Long-Range Wi-Fi Mesh Subsystem...");
-        acquireMulticastLock();
+        acquireMulticastAndWifiLocks();
         startUdpSocketListener();
         initWifiAware();
         initWifiP2p();
         beaconHandler.postDelayed(beaconRunnable, 2000);
+        startPeriodicP2pDiscovery();
     }
 
     /**
@@ -172,31 +190,92 @@ public class NeerNetraWifiMeshManager {
         });
     }
 
-    private void acquireMulticastLock() {
+    private void acquireMulticastAndWifiLocks() {
         try {
-            if (multicastLock == null) {
-                WifiManager wm = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
-                if (wm != null) {
+            WifiManager wm = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                if (multicastLock == null) {
                     multicastLock = wm.createMulticastLock("neernetra:WifiMeshMulticast");
                     multicastLock.setReferenceCounted(false);
                     multicastLock.acquire();
                     Log.i(TAG, "⚡ Acquired WifiManager.MulticastLock for UDP broadcast mesh reception");
                 }
+                if (wifiLock == null) {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "neernetra:WifiLock");
+                    wifiLock.setReferenceCounted(false);
+                    wifiLock.acquire();
+                    Log.i(TAG, "⚡ Acquired WifiManager.WifiLock (FULL_HIGH_PERF) for 24/7 background mesh");
+                }
             }
         } catch (Exception e) {
-            Log.w(TAG, "Could not acquire MulticastLock: " + e.getMessage());
+            Log.w(TAG, "Could not acquire Wi-Fi locks: " + e.getMessage());
         }
     }
 
-    private void releaseMulticastLock() {
+    private void releaseLocks() {
         try {
             if (multicastLock != null && multicastLock.isHeld()) {
                 multicastLock.release();
                 multicastLock = null;
                 Log.i(TAG, "Released WifiManager.MulticastLock");
             }
+            if (wifiLock != null && wifiLock.isHeld()) {
+                wifiLock.release();
+                wifiLock = null;
+                Log.i(TAG, "Released WifiManager.WifiLock");
+            }
         } catch (Exception ignored) {}
     }
+
+    private final BroadcastReceiver wifiP2pReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null || intent.getAction() == null) return;
+            String action = intent.getAction();
+
+            if (WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION.equals(action)) {
+                if (wifiP2pManager != null && wifiP2pChannel != null) {
+                    try {
+                        wifiP2pManager.requestPeers(wifiP2pChannel, new WifiP2pManager.PeerListListener() {
+                            @Override
+                            public void onPeersAvailable(WifiP2pDeviceList peerList) {
+                                if (peerList == null) return;
+                                Collection<WifiP2pDevice> devices = peerList.getDeviceList();
+                                if (devices != null && !devices.isEmpty()) {
+                                    Log.i(TAG, "🎯 Wi-Fi Direct discovered " + devices.size() + " peer(s) in air!");
+                                    for (WifiP2pDevice dev : devices) {
+                                        if (dev == null || dev.deviceAddress == null) continue;
+                                        String devName = (dev.deviceName != null && !dev.deviceName.isEmpty())
+                                                ? dev.deviceName
+                                                : "Citizen [" + dev.deviceAddress.replace(":", "").substring(Math.max(0, dev.deviceAddress.length() - 4)) + "]";
+
+                                        NeerNetraNativeMeshManager.getInstance(appContext)
+                                                .registerDiscoveredPeer(dev.deviceAddress, devName, -55, 1, 45, "wifi_direct");
+                                    }
+                                }
+                            }
+                        });
+                    } catch (SecurityException se) {
+                        Log.w(TAG, "requestPeers SecurityException: " + se.getMessage());
+                    } catch (Exception ignored) {}
+                }
+            } else if (WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION.equals(action)) {
+                try {
+                    NetworkInfo networkInfo = intent.getParcelableExtra(WifiP2pManager.EXTRA_NETWORK_INFO);
+                    if (networkInfo != null && networkInfo.isConnected()) {
+                        if (wifiP2pManager != null && wifiP2pChannel != null) {
+                            wifiP2pManager.requestConnectionInfo(wifiP2pChannel, info -> {
+                                if (info != null && info.groupFormed) {
+                                    String goIp = info.groupOwnerAddress != null ? info.groupOwnerAddress.getHostAddress() : "unknown";
+                                    Log.i(TAG, "⚡ Wi-Fi Direct group formed! IsGO=" + info.isGroupOwner + ", GroupOwnerIP=" + goIp);
+                                }
+                            });
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+    };
 
     /**
      * Initializes Wi-Fi Direct (P2P) for devices without Wi-Fi Aware hardware.
@@ -212,11 +291,32 @@ public class NeerNetraWifiMeshManager {
             if (wifiP2pManager != null) {
                 wifiP2pChannel = wifiP2pManager.initialize(appContext, Looper.getMainLooper(), null);
                 Log.i(TAG, "⚡ Wi-Fi Direct (P2P) subsystem initialized successfully!");
+
+                if (!isP2pReceiverRegistered) {
+                    IntentFilter filter = new IntentFilter();
+                    filter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
+                    filter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
+                    filter.addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
+                    filter.addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        appContext.registerReceiver(wifiP2pReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                    } else {
+                        appContext.registerReceiver(wifiP2pReceiver, filter);
+                    }
+                    isP2pReceiverRegistered = true;
+                    Log.i(TAG, "⚡ Registered Wi-Fi Direct P2P BroadcastReceiver for air scanning");
+                }
+
                 startP2pPeerDiscovery();
             }
         } catch (Exception e) {
             Log.w(TAG, "Wi-Fi Direct init error: " + e.getMessage());
         }
+    }
+
+    public void startPeriodicP2pDiscovery() {
+        p2pDiscoveryHandler.removeCallbacks(p2pDiscoveryRunnable);
+        p2pDiscoveryHandler.post(p2pDiscoveryRunnable);
     }
 
     public void startP2pPeerDiscovery() {
@@ -225,12 +325,12 @@ public class NeerNetraWifiMeshManager {
             wifiP2pManager.discoverPeers(wifiP2pChannel, new WifiP2pManager.ActionListener() {
                 @Override
                 public void onSuccess() {
-                    Log.i(TAG, "⚡ Wi-Fi Direct peer discovery active for zero-network long-range mesh");
+                    Log.d(TAG, "⚡ Wi-Fi Direct peer discovery active for zero-network long-range mesh");
                 }
 
                 @Override
                 public void onFailure(int reason) {
-                    Log.w(TAG, "Wi-Fi Direct discoverPeers failure reason: " + reason);
+                    Log.d(TAG, "Wi-Fi Direct discoverPeers failure reason: " + reason);
                 }
             });
         } catch (SecurityException se) {
@@ -556,7 +656,14 @@ public class NeerNetraWifiMeshManager {
     }
 
     public synchronized void stopWifiMesh() {
-        releaseMulticastLock();
+        releaseLocks();
+        p2pDiscoveryHandler.removeCallbacks(p2pDiscoveryRunnable);
+        if (isP2pReceiverRegistered) {
+            try {
+                appContext.unregisterReceiver(wifiP2pReceiver);
+            } catch (Exception ignored) {}
+            isP2pReceiverRegistered = false;
+        }
         isUdpListening = false;
         if (udpSocket != null && !udpSocket.isClosed()) {
             try { udpSocket.close(); } catch (Exception ignored) {}
