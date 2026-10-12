@@ -51,11 +51,35 @@ export async function POST(req: NextRequest) {
   }
 
   const sec = state.sectors[sectorId];
+
+  if (body.reset) {
+    sec.reporting_devices = [];
+    sec.reports = [];
+    sec.status = "MONITORING";
+    sec.confirmed_at = null;
+    sec.has_active_directive = false;
+    sec.latest_tremor_g = 0.0;
+    sec.latest_frequency_hz = 0.0;
+    if (global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.delete(sectorId);
+    }
+    return NextResponse.json({
+      success: true,
+      status: sec.status,
+      reporting_count: 0,
+      quorum_threshold: sec.quorum_threshold,
+      message: "Sector reset to normal monitoring",
+    }, { headers: corsHeaders });
+  }
+
+  const currentCount = sec.reporting_devices.length;
+  const newCount = currentCount >= sec.quorum_threshold ? 1 : currentCount + 1;
+
   const simPeers = [
-    { device_uuid: "SIM_PEER_ALPHA", tremor_g: 0.18, frequency_hz: 18.2 },
-    { device_uuid: "SIM_PEER_BETA", tremor_g: 0.22, frequency_hz: 18.5 },
-    { device_uuid: "SIM_PEER_GAMMA", tremor_g: 0.19, frequency_hz: 18.1 },
-  ];
+    { device_uuid: "PHONE_ALPHA_SENSOR", tremor_g: 0.18, frequency_hz: 18.2 },
+    { device_uuid: "PHONE_BETA_SENSOR", tremor_g: 0.22, frequency_hz: 18.5 },
+    { device_uuid: "PHONE_GAMMA_SENSOR", tremor_g: 0.24, frequency_hz: 18.1 },
+  ].slice(0, newCount);
 
   sec.reports = simPeers.map((p, i) => ({
     id: `sim_rep_${i}`,
@@ -68,53 +92,62 @@ export async function POST(req: NextRequest) {
   }));
 
   sec.reporting_devices = simPeers.map((p) => p.device_uuid);
-  sec.status = "CONFIRMED_LANDSLIDE";
-  sec.confirmed_at = nowIso;
-  sec.first_detected_at = nowIso;
+  sec.latest_tremor_g = simPeers[simPeers.length - 1].tremor_g;
+  sec.latest_frequency_hz = simPeers[simPeers.length - 1].frequency_hz;
+  sec.first_detected_at = sec.first_detected_at || nowIso;
   sec.last_report_at = nowIso;
-  sec.latest_tremor_g = 0.22;
-  sec.latest_frequency_hz = 18.5;
-  sec.has_active_directive = true;
 
-  const directiveEntry = {
-    id: `broad_landslide_${sectorId}`,
-    type: "LANDSLIDE_1_3RD_CONSENSUS",
-    severity: "CRITICAL",
-    title: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
-    message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
-    sector_id: sectorId,
-    sector_name: sec.sector_name,
-    consensus_count: 3,
-    total_active_phones: 9,
-    quorum_threshold: 3,
-    status: "ACTIVE_SIREN",
-    authorized_by: "SIMULATION_TEST_ENGINE",
-    created_at: nowIso,
-  };
+  const isQuorumReached = newCount >= sec.quorum_threshold;
+  let directiveEntry = null;
+  if (isQuorumReached) {
+    sec.status = "CONFIRMED_LANDSLIDE";
+    sec.confirmed_at = nowIso;
+    sec.has_active_directive = true;
 
-  const existingDirIdx = state.directives.findIndex((d) => d.sector_id === sectorId);
-  if (existingDirIdx >= 0) {
-    state.directives[existingDirIdx] = directiveEntry;
+    directiveEntry = {
+      id: `broad_landslide_${sectorId}`,
+      type: "LANDSLIDE_1_3RD_CONSENSUS",
+      severity: "CRITICAL",
+      title: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
+      message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+      sector_id: sectorId,
+      sector_name: sec.sector_name,
+      consensus_count: newCount,
+      total_active_phones: sec.total_active_phones,
+      quorum_threshold: sec.quorum_threshold,
+      status: "ACTIVE_SIREN",
+      authorized_by: "THRESHOLD_QUORUM_ENGINE",
+      created_at: nowIso,
+    };
+
+    const existingDirIdx = state.directives.findIndex((d) => d.sector_id === sectorId);
+    if (existingDirIdx >= 0) {
+      state.directives[existingDirIdx] = directiveEntry;
+    } else {
+      state.directives.push(directiveEntry);
+    }
+
+    // Activate mobile siren dispatch on phones
+    if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
+      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
+    }
+    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
+      zone_id: sectorId,
+      zone_name: sec.sector_name,
+      is_active: true,
+      dispatched_at: nowIso,
+      authorized_by: "THRESHOLD_QUORUM_ENGINE",
+      target_devices_count: sec.total_active_phones,
+      cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
+      mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
+      vibration_pattern: [1000, 400, 1000, 400, 1500],
+      emergency_message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
+    });
   } else {
-    state.directives.push(directiveEntry);
+    sec.status = "PENDING_QUORUM";
+    sec.confirmed_at = null;
+    sec.has_active_directive = false;
   }
-
-  // Activate mobile siren
-  if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
-    global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
-  }
-  global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
-    zone_id: sectorId,
-    zone_name: sec.sector_name,
-    is_active: true,
-    dispatched_at: nowIso,
-    authorized_by: "SIMULATION_TEST_ENGINE",
-    target_devices_count: 9,
-    cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
-    mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
-    vibration_pattern: [1000, 400, 1000, 400, 1500],
-    emergency_message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
-  });
 
   return NextResponse.json(
     {
