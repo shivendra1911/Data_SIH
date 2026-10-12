@@ -112,6 +112,8 @@ public class NeerNetraNativeMeshManager {
     };
 
     // ── Native Distance-Vector Routing Table & Gossip Engine ──────────────
+    public static final int MAX_HOP_COUNT = 15;
+
     public static class MeshRoute {
         public String peerId;
         public String name;
@@ -130,11 +132,12 @@ public class NeerNetraNativeMeshManager {
         if ((id == null || id.trim().isEmpty()) && (name == null || name.trim().isEmpty())) return true;
         String s = ((id != null ? id : "") + " " + (name != null ? name : "")).toLowerCase();
 
-        // Generic mock / simulation tokens
+        // Generic mock / simulation tokens and non-phone PC hosts
         if (s.contains("mock") || s.contains("test_") || s.contains("test node") || s.contains("sim_") ||
             s.contains("dummy") || s.contains("synthetic") || s.contains("audit") || s.contains("fake") ||
             s.contains("sample") || s.contains("seed") || s.contains("cloud_device") ||
             s.contains("ramesh") || s.contains("anita") || s.contains("katy") ||
+            s.contains("laptop") || s.contains("desktop") || s.contains("windows") || s.contains("macbook") ||
             s.contains("priyanshu (citizen node 01)") || s.contains("dev_priyanshu_phone") ||
             s.contains("dev_ramesh_kumar") || s.contains("dev_katy_fuller") || s.contains("dev_anita_sharma")) {
             return true;
@@ -145,9 +148,18 @@ public class NeerNetraNativeMeshManager {
 
     public Map<String, MeshRoute> getRoutingTable() {
         Map<String, MeshRoute> clean = new ConcurrentHashMap<>();
+        android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+        String myNodeId = sp.getString("local_node_id", "");
+        String myNodeName = sp.getString("local_node_name", "");
+        long now = System.currentTimeMillis();
         for (Map.Entry<String, MeshRoute> entry : routingTable.entrySet()) {
             MeshRoute r = entry.getValue();
-            if (r != null && !isTestOrSimulatedPeer(entry.getKey(), r.name)) {
+            if (r != null) {
+                if (!myNodeId.isEmpty() && (entry.getKey().equalsIgnoreCase(myNodeId) || entry.getKey().contains(myNodeId) || (r.peerId != null && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId))))) continue;
+                if (!myNodeName.isEmpty() && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName))) continue;
+                if (isTestOrSimulatedPeer(entry.getKey(), r.name)) continue;
+                if (r.hopCount > MAX_HOP_COUNT) continue;
+                if (now - r.lastSeen > 120000) continue;
                 clean.put(entry.getKey(), r);
             }
         }
@@ -156,6 +168,13 @@ public class NeerNetraNativeMeshManager {
 
     public synchronized void registerDiscoveredPeer(String peerId, String name, int rssi, int hopCount, int distanceMeters, String transport) {
         if (peerId == null || peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) return;
+        if (hopCount > MAX_HOP_COUNT) return;
+        android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+        String myNodeId = sp.getString("local_node_id", "");
+        String myNodeName = sp.getString("local_node_name", "");
+        if (!myNodeId.isEmpty() && (peerId.equalsIgnoreCase(myNodeId) || peerId.contains(myNodeId))) return;
+        if (!myNodeName.isEmpty() && name != null && (name.equalsIgnoreCase(myNodeName) || name.contains(myNodeName))) return;
+
         long now = System.currentTimeMillis();
         MeshRoute route = routingTable.get(peerId);
         if (route == null) route = new MeshRoute();
@@ -182,11 +201,17 @@ public class NeerNetraNativeMeshManager {
 
     public synchronized void clearTestPeers() {
         long now = System.currentTimeMillis();
+        android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+        String myNodeId = sp.getString("local_node_id", "");
+        String myNodeName = sp.getString("local_node_name", "");
+
         java.util.Iterator<Map.Entry<String, MeshRoute>> it = routingTable.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, MeshRoute> entry = it.next();
             MeshRoute r = entry.getValue();
-            if (r == null || isTestOrSimulatedPeer(entry.getKey(), r.name) || (now - r.lastSeen > 120000)) {
+            boolean isSelf = (!myNodeId.isEmpty() && (entry.getKey().equalsIgnoreCase(myNodeId) || entry.getKey().contains(myNodeId) || (r != null && r.peerId != null && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId)))))
+                    || (!myNodeName.isEmpty() && r != null && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName)));
+            if (r == null || isSelf || isTestOrSimulatedPeer(entry.getKey(), r.name) || r.hopCount > MAX_HOP_COUNT || (now - r.lastSeen > 120000)) {
                 it.remove();
             }
         }
@@ -197,6 +222,7 @@ public class NeerNetraNativeMeshManager {
     public synchronized void clearAllPeers() {
         routingTable.clear();
         nativePeerLastSeen.clear();
+        seenMessageIds.clear();
         try {
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
             sp.edit().remove("persistent_routing_table").putString("persistent_routing_table", "[]").commit();
@@ -207,11 +233,16 @@ public class NeerNetraNativeMeshManager {
     public synchronized void persistRoutingTable() {
         try {
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
             long now = System.currentTimeMillis();
             JSONArray array = new JSONArray();
             for (MeshRoute r : routingTable.values()) {
                 if (r == null || r.peerId == null) continue;
+                if (!myNodeId.isEmpty() && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId))) continue;
+                if (!myNodeName.isEmpty() && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName))) continue;
                 if (isTestOrSimulatedPeer(r.peerId, r.name)) continue;
+                if (r.hopCount > MAX_HOP_COUNT) continue;
                 if (now - r.lastSeen > 120000) continue; // Evict stale routes older than 2 minutes from storage
                 JSONObject obj = new JSONObject();
                 obj.put("peerId", r.peerId);
@@ -234,6 +265,8 @@ public class NeerNetraNativeMeshManager {
     private void loadRoutingTableFromStorage() {
         try {
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
             String raw = sp.getString("persistent_routing_table", null);
             if (raw == null || raw.trim().isEmpty()) return;
             JSONArray array = new JSONArray(raw);
@@ -243,13 +276,18 @@ public class NeerNetraNativeMeshManager {
                 if (obj == null) continue;
                 String peerId = obj.optString("peerId", "");
                 String name = obj.optString("name", "Citizen [" + peerId + "]");
-                if (peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) continue;
+                if (peerId.isEmpty()) continue;
+                if (!myNodeId.isEmpty() && (peerId.equalsIgnoreCase(myNodeId) || peerId.contains(myNodeId))) continue;
+                if (!myNodeName.isEmpty() && (name.equalsIgnoreCase(myNodeName) || name.contains(myNodeName))) continue;
+                if (isTestOrSimulatedPeer(peerId, name)) continue;
+                int hopCount = obj.optInt("hopCount", 1);
+                if (hopCount > MAX_HOP_COUNT) continue;
                 long lastSeen = obj.optLong("lastSeen", now);
                 if (now - lastSeen > 120000) continue; // Evict stale routes older than 2 minutes on boot
                 MeshRoute r = new MeshRoute();
                 r.peerId = peerId;
                 r.name = name;
-                r.hopCount = obj.optInt("hopCount", 1);
+                r.hopCount = hopCount;
                 r.nextHop = obj.optString("nextHop", peerId);
                 r.lastSeen = lastSeen;
                 r.lat = obj.optDouble("lat", 0.0);
@@ -1202,6 +1240,19 @@ public class NeerNetraNativeMeshManager {
                 msgId = "m_" + now + "_" + System.nanoTime() + "_" + (senderId.isEmpty() ? "anon" : senderId);
             }
 
+            // Ignore our own echoes & test peers before deduplication or UI emission
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
+            boolean isSelf = (!myNodeId.isEmpty() && (senderId.equalsIgnoreCase(myNodeId) || senderId.contains(myNodeId)))
+                    || (!myNodeName.isEmpty() && packet.has("name") && (packet.optString("name", "").equalsIgnoreCase(myNodeName) || packet.optString("name", "").contains(myNodeName)));
+            if (isSelf) {
+                return;
+            }
+            if (isTestOrSimulatedPeer(senderId, packet.optString("name", ""))) {
+                return;
+            }
+
             // Loop Detection: Suppress duplicate packet
             if (seenMessageIds.containsKey(msgId)) {
                 // If it is a HELLO packet, refresh lastSeen so peer never goes stale even on duplicate beacon
@@ -1225,18 +1276,10 @@ public class NeerNetraNativeMeshManager {
             }
             seenMessageIds.put(msgId, now);
 
-            // Ignore our own echoes
-            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
-            String myNodeId = sp.getString("local_node_id", "");
-            String myNodeName = sp.getString("local_node_name", "");
-            if (!myNodeId.isEmpty() && senderId.equalsIgnoreCase(myNodeId)) {
-                return;
-            }
-
             Log.i(TAG, "📥 [MeshPacket] Ingested type=" + type + " id=" + msgId + " from=" + senderId + " target=" + targetId + " ttl=" + ttl + " via=" + fromTransportOrDevice);
 
             // 0. Update native distance-vector routing table
-            if (!senderId.isEmpty() && !isTestOrSimulatedPeer(senderId, packet.optString("name", ""))) {
+            if (!senderId.isEmpty()) {
                 MeshRoute directRoute = routingTable.get(senderId);
                 if (directRoute == null) directRoute = new MeshRoute();
                 directRoute.peerId = senderId;
@@ -1279,8 +1322,11 @@ public class NeerNetraNativeMeshManager {
                     if (n == null) continue;
                     String nId = n.optString("peer_id", n.optString("id", ""));
                     String nName = n.optString("name", "");
-                    if (nId.isEmpty() || nId.equalsIgnoreCase(myNodeId) || isTestOrSimulatedPeer(nId, nName)) continue;
+                    if (nId.isEmpty() || (!myNodeId.isEmpty() && (nId.equalsIgnoreCase(myNodeId) || nId.contains(myNodeId)))
+                            || (!myNodeName.isEmpty() && (nName.equalsIgnoreCase(myNodeName) || nName.contains(myNodeName)))
+                            || isTestOrSimulatedPeer(nId, nName)) continue;
                     int nHop = n.optInt("hop_count", n.optInt("hops", 1)) + 1;
+                    if (nHop > MAX_HOP_COUNT) continue;
                     MeshRoute existingRoute = routingTable.get(nId);
 
                     // Bellman-Ford Distance-Vector rule:

@@ -273,9 +273,10 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             long now = System.currentTimeMillis();
             for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
                 if (r == null || r.peerId == null) continue;
-                if (!myNodeId.isEmpty() && r.peerId.equalsIgnoreCase(myNodeId)) continue;
-                if (!myNodeName.isEmpty() && r.peerId.equalsIgnoreCase(myNodeName)) continue;
+                if (!myNodeId.isEmpty() && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId) || myNodeId.contains(r.peerId))) continue;
+                if (!myNodeName.isEmpty() && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName) || myNodeName.contains(r.name))) continue;
                 if (NeerNetraNativeMeshManager.isTestOrSimulatedPeer(r.peerId, r.name)) continue;
+                if (r.hopCount > NeerNetraNativeMeshManager.MAX_HOP_COUNT) continue;
                 if (now - r.lastSeen > 120000) continue; // Do not return stale peers older than 2 minutes
 
                 WritableMap map = Arguments.createMap();

@@ -810,11 +810,9 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
     try {
       await meshEngine.clearAllPeers();
       setLocalPeers([]);
-      const updated = await meshEngine.triggerManualScan();
-      setLocalPeers([...updated]);
       Alert.alert(
-        '✅ Mesh Purged & Cleaned',
-        'All fake, test, and stale nodes have been wiped from memory, AsyncStorage, and native storage. Ready for genuine physical peer discovery.'
+        '✅ Mesh Cleaned',
+        'All fake, test, ghost, and stale nodes have been completely wiped from memory, AsyncStorage, and native storage.'
       );
     } catch (e: any) {
       console.warn('Clear peers error:', e);
