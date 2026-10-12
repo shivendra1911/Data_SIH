@@ -261,6 +261,40 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void getKnownPeers(Promise promise) {
+        try {
+            WritableArray array = Arguments.createArray();
+            java.util.Map<String, NeerNetraNativeMeshManager.MeshRoute> routes =
+                NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).getRoutingTable();
+            long now = System.currentTimeMillis();
+            for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
+                if (r == null || r.peerId == null) continue;
+                WritableMap map = Arguments.createMap();
+                map.putString("id", r.peerId);
+                map.putString("name", r.name != null ? r.name : ("Citizen [" + r.peerId + "]"));
+                int hops = r.hopCount > 0 ? r.hopCount : 1;
+                map.putInt("hopCount", hops);
+                map.putString("nextHop", r.nextHop != null ? r.nextHop : r.peerId);
+                map.putDouble("lastSeen", (double) r.lastSeen);
+                map.putDouble("lat", r.lat);
+                map.putDouble("lng", r.lng);
+                map.putInt("battery", r.battery > 0 ? r.battery : 85);
+                int rssi = -60 - (hops > 1 ? (hops * 5) : 0);
+                map.putInt("rssi", rssi);
+                map.putInt("distanceMeters", hops <= 1 ? 45 : (hops * 200));
+                String status = (now - r.lastSeen > 240000 && !"SOS".equals(r.status)) ? "IDLE" : (r.status != null ? r.status : "SAFE");
+                map.putString("status", status);
+                map.putString("role", hops > 1 ? "Mesh Relay Node" : "Citizen Node");
+                array.pushMap(map);
+            }
+            promise.resolve(array);
+        } catch (Exception e) {
+            Log.e(TAG, "getKnownPeers error", e);
+            promise.reject("GET_KNOWN_PEERS_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
     public void notifyAllClients(String base64Data, Promise promise) {
         try {
             int count = NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(base64Data);
@@ -296,6 +330,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
 
             byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
             NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
+            String b64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(b64);
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("WIFI_CALL_ERROR", e.getMessage());
@@ -338,6 +374,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
 
             byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
             NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
+            String b64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(b64);
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("WIFI_MSG_ERROR", e.getMessage());

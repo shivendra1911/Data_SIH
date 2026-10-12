@@ -52,6 +52,18 @@ const getHopBadge = (peer: MeshPeer) => {
   const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 200);
   const viaNode = peer.nextHop ? ` via ${peer.nextHop}` : '';
   const distText = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${dist}m`;
+  const isIdle = peer.status === 'IDLE' || peer.status === 'PREVIOUSLY_SEEN';
+  const statusSuffix = isIdle ? ' • Idle' : '';
+
+  if (isIdle) {
+    return {
+      label: `⚪ ${hops <= 1 ? 'Direct' : `${hops} hops`}${viaNode} • ~${distText}${statusSuffix}`,
+      bg: '#f1f5f9',
+      border: '#94a3b8',
+      text: '#475569',
+    };
+  }
+
   if (hops <= 1) {
     return {
       label: `🟢 Direct (Wi-Fi/BLE) • ~${distText}`,

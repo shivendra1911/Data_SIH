@@ -140,13 +140,14 @@ public class NeerNetraWifiMeshManager {
                     long nowMs = System.currentTimeMillis();
                     Map<String, NeerNetraNativeMeshManager.MeshRoute> routes = NeerNetraNativeMeshManager.getInstance(appContext).getRoutingTable();
                     for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
-                        if (r != null && !myNodeId.equalsIgnoreCase(r.peerId) && (nowMs - r.lastSeen < 240000)) {
+                        if (r != null && !myNodeId.equalsIgnoreCase(r.peerId)) {
                             org.json.JSONObject nObj = new org.json.JSONObject();
                             nObj.put("peer_id", r.peerId);
                             nObj.put("name", r.name);
                             nObj.put("hop_count", r.hopCount);
                             nObj.put("next_hop", r.nextHop);
-                            nObj.put("status", r.status != null ? r.status : "SAFE");
+                            String st = (nowMs - r.lastSeen > 240000 && !"SOS".equals(r.status)) ? "IDLE" : (r.status != null ? r.status : "SAFE");
+                            nObj.put("status", st);
                             nObj.put("lat", r.lat);
                             nObj.put("lng", r.lng);
                             nObj.put("battery", r.battery > 0 ? r.battery : 85);
@@ -381,11 +382,14 @@ public class NeerNetraWifiMeshManager {
                     int length = packet.getLength();
                     if (length > 0) {
                         java.net.InetAddress srcAddr = packet.getAddress();
-                        if (srcAddr != null) {
-                            // Ignore loopback or packets sent from our own local network interface IP
-                            if (srcAddr.isLoopbackAddress() || java.net.NetworkInterface.getByInetAddress(srcAddr) != null) {
-                                continue;
-                            }
+                        if (srcAddr != null && !srcAddr.isLoopbackAddress()) {
+                            // Ignore self-echoes broadcast from our own physical Wi-Fi/cellular network interfaces
+                            try {
+                                java.net.NetworkInterface nif = java.net.NetworkInterface.getByInetAddress(srcAddr);
+                                if (nif != null && !nif.isLoopback()) {
+                                    continue;
+                                }
+                            } catch (Exception ignored) {}
                         }
                         byte[] receivedBytes = new byte[length];
                         System.arraycopy(packet.getData(), packet.getOffset(), receivedBytes, 0, length);

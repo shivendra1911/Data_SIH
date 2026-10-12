@@ -12,6 +12,7 @@
  */
 
 import { Alert, Platform, PermissionsAndroid, DeviceEventEmitter } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MeshPeer, MeshChatMessage, SOSPayload } from '../types';
 import { saveSOSToOfflineQueue } from './offlineStorage';
 import {
@@ -29,6 +30,7 @@ import {
   triggerWifiDirectMessage,
   broadcastWifiBeacon,
   clearNativeMessageCache,
+  getKnownPeers,
 } from './gattServerBridge';
 import { audioStreamer } from './audioStreamer';
 import { startBLEAdvertising } from './bleAdvertiser';
@@ -111,27 +113,23 @@ function isNeerManufacturerData(b64?: string | null): boolean {
 export function isMockOrFalsePeer(id?: string, name?: string): boolean {
   if (!id && !name) return true;
   const s = `${id || ''} ${name || ''}`.toLowerCase();
+  // Never filter out real or simulated multi-hop mesh nodes
+  if (s.includes('relay') || s.includes('shelter') || s.includes('rescue') || s.includes('node_') || s.includes('dev_node') || s.includes('gateway')) {
+    return false;
+  }
   return (
-    s.includes('test') ||
     s.includes('dummy') ||
-    s.includes('mock') ||
-    s.includes('demo') ||
     s.includes('synthetic') ||
+    s.includes('seed') ||
+    s.includes('sample') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
     s.includes('katy') ||
-    s.includes('seed') ||
-    s.includes('sample') ||
     s.includes('priyanshu (citizen node 01)') ||
     s.includes('dev_priyanshu_phone') ||
     s.includes('dev_ramesh_kumar') ||
     s.includes('dev_katy_fuller') ||
-    s.includes('dev_anita_sharma') ||
-    s.includes('node_b_relay') ||
-    s.includes('node_c_dist') ||
-    s.includes('node_d_shelter') ||
-    s.includes('node_x_relay') ||
-    s.includes('node_l_2400m')
+    s.includes('dev_anita_sharma')
   );
 }
 
@@ -271,6 +269,8 @@ function decodePacket(base64: string): {
   }
 }
 
+export const KNOWN_PEERS_STORAGE_KEY = '@neernetra_known_peers';
+
 // ─── Core BLE Mesh Manager ───────────────────────────────────────────────────
 class NeerNetraBLEMesh {
   private manager: any = null;
@@ -280,6 +280,7 @@ class NeerNetraBLEMesh {
   private chatMessages: MeshChatMessage[] = [];
   private seenMsgIds: Map<string, number> = new Map();
   private pendingRelays: Map<string, { timer: any; packet: any }> = new Map();
+  private persistTimer: any = null;
 
   private isMessageSeen(msgId: string): boolean {
     const now = Date.now();
@@ -347,7 +348,93 @@ class NeerNetraBLEMesh {
   public onCallEnded?: (peerId: string) => void;
   public onVoiceBurstReceived?: (senderId: string, base64Audio: string) => void;
 
-  constructor() {}
+  public async persistPeers(): Promise<void> {
+    try {
+      if (Platform.OS === 'web') return;
+      const peersArray = Array.from(this.activePeers.values());
+      await AsyncStorage.setItem(KNOWN_PEERS_STORAGE_KEY, JSON.stringify(peersArray));
+    } catch (e: any) {
+      console.warn('[BLE Mesh] Failed to persist peers to AsyncStorage:', e?.message);
+    }
+  }
+
+  public schedulePersistPeers() {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistPeers().catch(() => {});
+    }, 800);
+  }
+
+  public async loadPersistedPeers(): Promise<void> {
+    try {
+      if (Platform.OS === 'web') return;
+      const raw = await AsyncStorage.getItem(KNOWN_PEERS_STORAGE_KEY);
+      const nowMs = Date.now();
+      if (raw) {
+        const storedPeers: MeshPeer[] = JSON.parse(raw);
+        if (Array.isArray(storedPeers)) {
+          for (const p of storedPeers) {
+            if (!p || !p.id) continue;
+            const lastSeenTime = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
+            const isIdle = (nowMs - lastSeenTime > 240000);
+            const peer: MeshPeer = {
+              ...p,
+              lastSeen: p.lastSeen ? new Date(p.lastSeen) : new Date(),
+              status: isIdle && p.status !== 'SOS' ? 'IDLE' : (p.status || 'SAFE'),
+            };
+            this.activePeers.set(peer.id, peer);
+            if (peer.nodeId) {
+              this.peerNodeIdToMac.set(peer.nodeId, peer.id);
+              this.macToNodeId.set(peer.id, peer.nodeId);
+            }
+          }
+          console.log(`[BLE Mesh] 💾 Loaded ${this.activePeers.size} persistent peers from AsyncStorage`);
+        }
+      }
+
+      // Query native known peers from NeerNetraNativeMeshManager routing table
+      const nativePeers = await getKnownPeers();
+      if (Array.isArray(nativePeers) && nativePeers.length > 0) {
+        for (const np of nativePeers) {
+          if (!np || !np.id || np.id === this.myDeviceId) continue;
+          const existing = this.activePeers.get(np.id);
+          const hops = np.hopCount || (existing?.hopCount || 1);
+          const isRelayed = hops > 1;
+          const dist = np.distanceMeters || (isRelayed ? hops * 200 : 45);
+          const lastSeenTime = np.lastSeen ? Number(np.lastSeen) : (existing?.lastSeen ? new Date(existing.lastSeen).getTime() : nowMs);
+          const isIdle = (nowMs - lastSeenTime > 240000);
+          const merged: MeshPeer = {
+            id: np.id,
+            nodeId: np.id,
+            name: np.name || (existing ? existing.name : `Citizen [${np.id.slice(-4)}]`),
+            signalStrength: np.rssi || (existing ? existing.signalStrength : -65),
+            relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
+            role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',
+            distanceMeters: dist,
+            status: isIdle && (np.status !== 'SOS' && existing?.status !== 'SOS') ? 'IDLE' : (np.status || existing?.status || 'SAFE'),
+            lastSeen: new Date(lastSeenTime),
+            hopCount: hops,
+            nextHop: np.nextHop || existing?.nextHop,
+            batteryLevel: np.battery || existing?.batteryLevel || 85,
+            lat: np.lat || existing?.lat,
+            lng: np.lng || existing?.lng,
+          };
+          this.activePeers.set(np.id, merged);
+          this.peerNodeIdToMac.set(np.id, np.id);
+          this.macToNodeId.set(np.id, np.id);
+        }
+        console.log(`[BLE Mesh] 🗺️ Ingested ${nativePeers.length} native known routes from GATT module`);
+      }
+
+      this.emitPeersUpdate();
+    } catch (e: any) {
+      console.warn('[BLE Mesh] Error loading persisted/native peers:', e?.message);
+    }
+  }
+
+  constructor() {
+    this.loadPersistedPeers().catch(() => {});
+  }
 
   /** Subscribe to peer updates (supports multiple concurrent UI listeners) */
   public subscribePeers(callback: (peers: MeshPeer[]) => void): () => void {
@@ -706,7 +793,7 @@ class NeerNetraBLEMesh {
 
           this.activePeers.set(device.id, peer);
 
-          // Stale peer cleanup: 240s window (4 min) — keep peers visible in the UI during quiet intervals
+          // Stale peer maintenance: In disaster offline mesh, keep known peers persistent (mark IDLE instead of deleting)
           const nowMs = Date.now();
           this.activePeers.forEach((p, id) => {
             const mac = this.peerNodeIdToMac.get(id) || id;
@@ -714,7 +801,9 @@ class NeerNetraBLEMesh {
                            this.peripheralClients.has(id) || this.peripheralClients.has(mac);
             if (!isConn) {
               if (p.lastSeen && (nowMs - new Date(p.lastSeen).getTime() > 240000)) {
-                this.activePeers.delete(id);
+                if (p.status !== 'SOS') {
+                  p.status = 'IDLE';
+                }
               }
             }
           });
@@ -1477,11 +1566,12 @@ class NeerNetraBLEMesh {
           data.targetId === this.myDeviceId ||
           data.targetNodeId === this.myDeviceId ||
           (this.myName && data.targetName && this.myName.trim().toLowerCase() === data.targetName.trim().toLowerCase()) ||
-          this.peripheralClients.has(senderId);
+          data.targetId === 'self' ||
+          data.targetId === 'me';
 
-        // Only ignore if we have multiple peers and targetId matches another distinct known peer
-        if (!isTargetedToMe && this.activePeers.size > 1 && this.activePeers.has(data.targetId)) {
-          console.log(`[BLE Mesh] 📞 Ignoring private call for another peer: ${data.targetId}`);
+        // Intermediate relay nodes should NOT ring or wake screen for third-party calls
+        if (!isTargetedToMe) {
+          console.log(`[BLE Mesh] 📞 Relaying private call for another peer: ${data.targetId} (suppressing local ring)`);
           return;
         }
       }
@@ -1768,11 +1858,12 @@ class NeerNetraBLEMesh {
       timestamp: Date.now(),
     });
 
+    const hops = peer?.hopCount || 1;
     const callInfo = {
       id: isGroup ? 'GROUP_CALL' : targetPeerId,
       name: resolvedName,
-      distance: peer?.distanceMeters || (peer?.signalStrength ? this.rssiToDistance(peer.signalStrength) : 50),
-      hopCount: 1,
+      distance: peer?.distanceMeters || (hops >= 2 ? hops * 200 : (peer?.signalStrength ? this.rssiToDistance(peer.signalStrength) : 50)),
+      hopCount: hops,
       isGroupCall: isGroup,
       status: 'CALLING',
     };
@@ -1801,11 +1892,12 @@ class NeerNetraBLEMesh {
     const isGroup = Boolean(targetPeerId === 'GROUP_CALL');
     const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
 
+    const wifiHops = peer?.hopCount || 1;
     const callInfo = {
       id: targetPeerId,
       name: resolvedName,
-      distance: peer?.distanceMeters || 100,
-      hopCount: 1,
+      distance: peer?.distanceMeters || (wifiHops >= 2 ? wifiHops * 200 : 100),
+      hopCount: wifiHops,
       isGroupCall: isGroup,
       transport: 'wifi_direct',
       status: 'CALLING',
@@ -1957,6 +2049,7 @@ class NeerNetraBLEMesh {
         cb(list);
       } catch {}
     });
+    this.schedulePersistPeers();
   }
 }
 

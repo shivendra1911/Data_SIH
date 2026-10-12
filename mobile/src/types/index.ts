@@ -9,7 +9,7 @@ export interface ZonePrediction {
   last_updated: string;
 }
 
-export type SOSStatus = 'SOS' | 'SAFE' | 'HELPING';
+export type SOSStatus = 'SOS' | 'SAFE' | 'HELPING' | 'IDLE' | 'PREVIOUSLY_SEEN';
 
 export type SOSType =
   | 'TRAPPED'

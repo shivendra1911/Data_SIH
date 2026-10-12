@@ -130,6 +130,64 @@ public class NeerNetraNativeMeshManager {
         return routingTable;
     }
 
+    public synchronized void persistRoutingTable() {
+        try {
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            JSONArray array = new JSONArray();
+            for (MeshRoute r : routingTable.values()) {
+                if (r == null || r.peerId == null) continue;
+                JSONObject obj = new JSONObject();
+                obj.put("peerId", r.peerId);
+                obj.put("name", r.name);
+                obj.put("hopCount", r.hopCount);
+                obj.put("nextHop", r.nextHop);
+                obj.put("lastSeen", r.lastSeen);
+                obj.put("lat", r.lat);
+                obj.put("lng", r.lng);
+                obj.put("battery", r.battery);
+                obj.put("status", r.status);
+                array.put(obj);
+            }
+            sp.edit().putString("persistent_routing_table", array.toString()).apply();
+        } catch (Exception e) {
+            Log.w(TAG, "persistRoutingTable error: " + e.getMessage());
+        }
+    }
+
+    private void loadRoutingTableFromStorage() {
+        try {
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String raw = sp.getString("persistent_routing_table", null);
+            if (raw == null || raw.trim().isEmpty()) return;
+            JSONArray array = new JSONArray(raw);
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.optJSONObject(i);
+                if (obj == null) continue;
+                String peerId = obj.optString("peerId", "");
+                if (peerId.isEmpty()) continue;
+                MeshRoute r = new MeshRoute();
+                r.peerId = peerId;
+                r.name = obj.optString("name", "Citizen [" + peerId + "]");
+                r.hopCount = obj.optInt("hopCount", 1);
+                r.nextHop = obj.optString("nextHop", peerId);
+                r.lastSeen = obj.optLong("lastSeen", now);
+                r.lat = obj.optDouble("lat", 0.0);
+                r.lng = obj.optDouble("lng", 0.0);
+                r.battery = obj.optInt("battery", 85);
+                String st = obj.optString("status", "SAFE");
+                if (now - r.lastSeen > 240000 && !"SOS".equals(st)) {
+                    st = "IDLE";
+                }
+                r.status = st;
+                routingTable.put(peerId, r);
+            }
+            Log.i(TAG, "Loaded " + routingTable.size() + " persistent peers/routes from SharedPreferences");
+        } catch (Exception e) {
+            Log.w(TAG, "loadRoutingTableFromStorage error: " + e.getMessage());
+        }
+    }
+
     private final android.os.Handler gossipHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable gossipRunnable = new Runnable() {
         @Override
@@ -158,7 +216,7 @@ public class NeerNetraNativeMeshManager {
             long now = System.currentTimeMillis();
             JSONArray neighborArray = new JSONArray();
             for (MeshRoute route : routingTable.values()) {
-                if (now - route.lastSeen < 240000 && !route.peerId.equalsIgnoreCase(myNodeId)) {
+                if (!route.peerId.equalsIgnoreCase(myNodeId)) {
                     JSONObject n = new JSONObject();
                     n.put("peer_id", route.peerId);
                     n.put("name", route.name);
@@ -168,7 +226,8 @@ public class NeerNetraNativeMeshManager {
                     n.put("lat", route.lat);
                     n.put("lng", route.lng);
                     n.put("battery", route.battery);
-                    n.put("status", route.status != null ? route.status : "SAFE");
+                    String st = (now - route.lastSeen > 240000 && !"SOS".equals(route.status)) ? "IDLE" : (route.status != null ? route.status : "SAFE");
+                    n.put("status", st);
                     neighborArray.put(n);
                 }
             }
@@ -203,6 +262,7 @@ public class NeerNetraNativeMeshManager {
         if (bluetoothManager != null) {
             this.bluetoothAdapter = bluetoothManager.getAdapter();
         }
+        loadRoutingTableFromStorage();
     }
 
     public static synchronized NeerNetraNativeMeshManager getInstance(Context context) {
@@ -537,12 +597,29 @@ public class NeerNetraNativeMeshManager {
                     Long lastSeen = nativePeerLastSeen.get(address);
                     nativePeerLastSeen.put(address, now);
 
+                    MeshRoute directRoute = routingTable.get(address);
+                    if (directRoute == null) directRoute = new MeshRoute();
+                    directRoute.peerId = address;
+                    if (directRoute.name == null || directRoute.name.startsWith("Citizen_") || !deviceName.isEmpty()) {
+                        directRoute.name = deviceName.isEmpty() ? "Citizen_" + address.replace(":", "").substring(Math.max(0, address.length() - 8)) : deviceName;
+                    }
+                    directRoute.hopCount = 1;
+                    directRoute.nextHop = address;
+                    directRoute.lastSeen = now;
+                    if (directRoute.status == null || "IDLE".equals(directRoute.status) || "PREVIOUSLY_SEEN".equals(directRoute.status)) {
+                        directRoute.status = "SAFE";
+                    }
+                    routingTable.put(address, directRoute);
+                    persistRoutingTable();
+
                     // Emit to React Native so JS layer can update its peer list
                     try {
                         WritableMap peerMap = Arguments.createMap();
                         peerMap.putString("id", address);
-                        peerMap.putString("name", deviceName.isEmpty() ? "Citizen_" + address.replace(":", "").substring(Math.max(0, address.length() - 8)) : deviceName);
+                        peerMap.putString("name", directRoute.name);
                         peerMap.putInt("rssi", rssi);
+                        peerMap.putInt("hopCount", 1);
+                        peerMap.putInt("distanceMeters", 45);
                         emitEventMapToReactNative("onNativePeerFound", peerMap);
                     } catch (Exception ignored) {}
 
@@ -1069,6 +1146,7 @@ public class NeerNetraNativeMeshManager {
                 directRoute.lastSeen = now;
                 directRoute.status = "SAFE";
                 routingTable.put(senderId, directRoute);
+                persistRoutingTable();
 
                 // Emit to React Native so the direct peer is immediately visible / refreshed in UI
                 try {
@@ -1124,6 +1202,7 @@ public class NeerNetraNativeMeshManager {
                         relayedRoute.battery = n.optInt("battery", 80);
                         relayedRoute.status = n.optString("status", "SAFE");
                         routingTable.put(nId, relayedRoute);
+                        persistRoutingTable();
                         String distStr = (nHop * 200 >= 1000) ? String.format(java.util.Locale.US, "%.1fkm", (nHop * 200.0) / 1000.0) : (nHop * 200) + "m";
                         Log.i(TAG, "🗺️ [GossipRouting] Node " + nId + " reachable via " + senderId + " (" + nHop + " hops, ~" + distStr + ")");
 

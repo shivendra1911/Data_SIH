@@ -82,6 +82,20 @@ export const setLocalNodeId = async (nodeId: string): Promise<boolean> => {
 };
 
 /**
+ * Get all known peers and background-discovered peers from the native routing table.
+ */
+export const getKnownPeers = async (): Promise<any[]> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.getKnownPeers) return [];
+  try {
+    const list = await NeerNetraGatt.getKnownPeers();
+    return Array.isArray(list) ? list : [];
+  } catch (err: any) {
+    console.warn('[GattBridge] getKnownPeers error:', err?.message);
+    return [];
+  }
+};
+
+/**
  * Send data to ALL phones currently connected to our GATT Server.
  * This is how we push updates/messages to phones that found us via BLE.
  */

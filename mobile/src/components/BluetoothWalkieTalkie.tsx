@@ -336,14 +336,20 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                     <View style={[
                       styles.peerHopBadge,
                       {
-                        backgroundColor: (!item.hopCount || item.hopCount <= 1) ? '#ecfdf5' : item.hopCount === 2 ? '#fefce8' : '#eff6ff',
-                        borderColor: (!item.hopCount || item.hopCount <= 1) ? '#10b981' : item.hopCount === 2 ? '#eab308' : '#3b82f6',
+                        backgroundColor: (item.status === 'IDLE' || item.status === 'PREVIOUSLY_SEEN')
+                          ? '#f1f5f9'
+                          : (!item.hopCount || item.hopCount <= 1) ? '#ecfdf5' : item.hopCount === 2 ? '#fefce8' : '#eff6ff',
+                        borderColor: (item.status === 'IDLE' || item.status === 'PREVIOUSLY_SEEN')
+                          ? '#94a3b8'
+                          : (!item.hopCount || item.hopCount <= 1) ? '#10b981' : item.hopCount === 2 ? '#eab308' : '#3b82f6',
                       }
                     ]}>
                       <Text style={[
                         styles.peerHopBadgeText,
                         {
-                          color: (!item.hopCount || item.hopCount <= 1) ? '#047857' : item.hopCount === 2 ? '#a16207' : '#1d4ed8',
+                          color: (item.status === 'IDLE' || item.status === 'PREVIOUSLY_SEEN')
+                            ? '#475569'
+                            : (!item.hopCount || item.hopCount <= 1) ? '#047857' : item.hopCount === 2 ? '#a16207' : '#1d4ed8',
                         }
                       ]}>
                         {(() => {
@@ -354,12 +360,16 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
                           const distLabel = rawDist >= 1000
                             ? `~${(rawDist / 1000).toFixed(1)} km`
                             : `~${Math.round(rawDist)}m`;
+                          const isIdle = item.status === 'IDLE' || item.status === 'PREVIOUSLY_SEEN';
+                          const statusSuffix = isIdle ? ' • Idle' : '';
                           if (hops <= 1) {
-                            return selectedRadio === 'wifi' ? `📶 Direct Wi-Fi • ${distLabel}` : `🟢 Direct BLE • ${distLabel}`;
+                            return selectedRadio === 'wifi'
+                              ? `${isIdle ? '⚪' : '📶'} Direct Wi-Fi • ${distLabel}${statusSuffix}`
+                              : `${isIdle ? '⚪' : '🟢'} Direct BLE • ${distLabel}${statusSuffix}`;
                           } else if (hops === 2) {
-                            return `🟡 Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}`;
+                            return `${isIdle ? '⚪' : '🟡'} Relayed • 2 hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}${statusSuffix}`;
                           } else {
-                            return `🔵 Relayed • ${hops} hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}`;
+                            return `${isIdle ? '⚪' : '🔵'} Relayed • ${hops} hops${item.nextHop ? ` via ${item.nextHop}` : ''} • ${distLabel}${statusSuffix}`;
                           }
                         })()}
                       </Text>
