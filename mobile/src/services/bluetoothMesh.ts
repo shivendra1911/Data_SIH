@@ -145,7 +145,6 @@ export function isMockOrFalsePeer(id?: string, name?: string): boolean {
     s.includes('macbook') ||
     s.includes('kushagra') ||
     s.includes('hp-i5') ||
-    s.includes('galaxy') ||
     s.includes('motoedge60fusion_ishl') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
@@ -882,8 +881,8 @@ class NeerNetraBLEMesh {
           const isNeerDevice = hasNeerName || hasNeerUuid || hasNeerMfr || hasNeerServiceData;
           if (!isNeerDevice) return; // Silently skip non-NeerNetra BLE devices
 
-          // Only filter mock/fake peers AFTER confirming this is a NeerNetra device
-          if (isMockOrFalsePeer(device.id, devName)) return;
+          // Only filter mock/fake peers by name AFTER confirming this is a NeerNetra device
+          if (isMockOrFalsePeer(undefined, devName)) return;
 
           const peerRssi = device.rssi || -68;
           const rawName = device.name || (device as any).localName;

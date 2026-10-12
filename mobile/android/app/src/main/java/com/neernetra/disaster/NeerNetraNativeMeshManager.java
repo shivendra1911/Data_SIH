@@ -131,23 +131,15 @@ public class NeerNetraNativeMeshManager {
     public static boolean isTestOrSimulatedPeer(String id, String name) {
         if ((id == null || id.trim().isEmpty()) && (name == null || name.trim().isEmpty())) return true;
 
-        // Reject raw MAC addresses (e.g. 7e:8d:28:d7:98:6a or ba:82:f2:56:ed:10)
-        if (id != null) {
-            String trimmedId = id.trim();
-            if (trimmedId.matches("^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$") || trimmedId.matches("^[0-9a-fA-F]{12}$")) {
-                return true;
-            }
-        }
-
         String s = ((id != null ? id : "") + " " + (name != null ? name : "")).toLowerCase();
 
-        // Generic mock / simulation tokens, non-phone PC hosts, and raw unverified Wi-Fi device names
+        // Generic mock / simulation tokens and non-phone PC hosts
         if (s.contains("mock") || s.contains("test_") || s.contains("test node") || s.contains("sim_") ||
             s.contains("dummy") || s.contains("synthetic") || s.contains("audit") || s.contains("fake") ||
             s.contains("sample") || s.contains("seed") || s.contains("cloud_device") ||
             s.contains("ramesh") || s.contains("anita") || s.contains("katy") ||
             s.contains("laptop") || s.contains("desktop") || s.contains("windows") || s.contains("macbook") ||
-            s.contains("kushagra") || s.contains("hp-i5") || s.contains("galaxy") || s.contains("motoedge60fusion_ishl") ||
+            s.contains("kushagra") || s.contains("hp-i5") ||
             s.contains("priyanshu (citizen node 01)") || s.contains("dev_priyanshu_phone") ||
             s.contains("dev_ramesh_kumar") || s.contains("dev_katy_fuller") || s.contains("dev_anita_sharma")) {
             return true;
@@ -336,10 +328,12 @@ public class NeerNetraNativeMeshManager {
             JSONObject payload = new JSONObject();
             payload.put("id", myNodeId);
             payload.put("name", myNodeName);
+            payload.put("hop_count", 1);
             payload.put("battery", 85);
             payload.put("lat", 27.6015);
             payload.put("lng", 77.5975);
             payload.put("isGossip", true);
+            payload.put("isAck", true);
 
             long now = System.currentTimeMillis();
             JSONArray neighborArray = new JSONArray();
@@ -372,7 +366,7 @@ public class NeerNetraNativeMeshManager {
             envelope.put("origin_id", myNodeId);
             envelope.put("d", "BROADCAST");
             envelope.put("dest_id", "BROADCAST");
-            envelope.put("ttl", 5);
+            envelope.put("ttl", 7);
             envelope.put("p", payload.toString());
             envelope.put("neighbors", neighborArray);
 
