@@ -130,6 +130,10 @@ export function isMockOrFalsePeer(id?: string, name?: string): boolean {
     s.includes('fake') ||
     s.includes('audit') ||
     s.includes('cloud_device') ||
+    s.includes('laptop') ||
+    s.includes('desktop') ||
+    s.includes('windows') ||
+    s.includes('macbook') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
     s.includes('katy') ||
@@ -413,9 +417,11 @@ class NeerNetraBLEMesh {
         if (Array.isArray(storedPeers)) {
           for (const p of storedPeers) {
             if (!p || !p.id) continue;
-            if (this.myDeviceId && (p.id === this.myDeviceId || (p.nodeId && p.nodeId === this.myDeviceId))) continue;
-            if (this.myName && p.name && p.name === this.myName) continue;
+            if (this.myDeviceId && (p.id === this.myDeviceId || p.id.includes(this.myDeviceId) || this.myDeviceId.includes(p.id) || (p.nodeId && (p.nodeId === this.myDeviceId || p.nodeId.includes(this.myDeviceId))))) continue;
+            if (this.myName && p.name && (p.name === this.myName || p.name.includes(this.myName))) continue;
             if (isMockOrFalsePeer(p.id, p.name)) continue;
+            if (p.hopCount && p.hopCount > 15) continue;
+            if (p.distanceMeters && p.distanceMeters > 3000) continue;
             const lastSeenTime = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
             if (nowMs - lastSeenTime > 120000) continue; // Purge stale peers older than 2 minutes
             const isIdle = (nowMs - lastSeenTime > 60000);
@@ -439,13 +445,17 @@ class NeerNetraBLEMesh {
       if (Array.isArray(nativePeers) && nativePeers.length > 0) {
         for (const np of nativePeers) {
           if (!np || !np.id) continue;
-          if (this.myDeviceId && (np.id === this.myDeviceId || (np.nodeId && np.nodeId === this.myDeviceId))) continue;
-          if (this.myName && np.name && np.name === this.myName) continue;
+          if (this.myDeviceId && (np.id === this.myDeviceId || np.id.includes(this.myDeviceId) || this.myDeviceId.includes(np.id) || (np.nodeId && (np.nodeId === this.myDeviceId || np.nodeId.includes(this.myDeviceId))))) continue;
+          if (this.myName && np.name && (np.name === this.myName || np.name.includes(this.myName))) continue;
           if (isMockOrFalsePeer(np.id, np.name)) continue;
+          if (np.hopCount && np.hopCount > 15) continue;
+          if (np.distanceMeters && np.distanceMeters > 3000) continue;
           const existing = this.activePeers.get(np.id);
           const hops = np.hopCount || (existing?.hopCount || 1);
+          if (hops > 15) continue;
           const isRelayed = hops > 1;
           const dist = np.distanceMeters || (isRelayed ? hops * 200 : 45);
+          if (dist > 3000) continue;
           const lastSeenTime = np.lastSeen ? Number(np.lastSeen) : (existing?.lastSeen ? new Date(existing.lastSeen).getTime() : nowMs);
           if (nowMs - lastSeenTime > 120000) continue; // Purge stale native peers older than 2 minutes
           const isIdle = (nowMs - lastSeenTime > 60000);
@@ -571,8 +581,19 @@ class NeerNetraBLEMesh {
     setLocalNodeId(this.myDeviceId).catch(() => {});
 
     // Ensure self identity is purged from activePeers and reload persisted routes
-    if (this.myDeviceId) {
-      this.activePeers.delete(this.myDeviceId);
+    for (const [id, peer] of this.activePeers.entries()) {
+      if (
+        id === this.myDeviceId ||
+        id === rawId ||
+        (deviceId && (id === deviceId || id.includes(deviceId) || deviceId.includes(id))) ||
+        id.includes(this.myDeviceId) ||
+        this.myDeviceId.includes(id) ||
+        (this.myName && peer.name && (peer.name === this.myName || peer.name.includes(this.myName)))
+      ) {
+        this.activePeers.delete(id);
+        this.peerNodeIdToMac.delete(id);
+        this.macToNodeId.delete(id);
+      }
     }
     await this.loadPersistedPeers();
 
@@ -682,12 +703,18 @@ class NeerNetraBLEMesh {
         },
         // Native scanner callback: Java found a NeerNetra peer via its own BLE scan or multi-hop routing table
         (nativeDeviceId, nativeDeviceName, rssi, nativeHopCount, nativeDistanceMeters) => {
+          if (!nativeDeviceId) return;
+          if (this.myDeviceId && (nativeDeviceId === this.myDeviceId || nativeDeviceId.includes(this.myDeviceId) || this.myDeviceId.includes(nativeDeviceId))) return;
+          if (this.myName && nativeDeviceName && (nativeDeviceName === this.myName || nativeDeviceName.includes(this.myName))) return;
           if (isMockOrFalsePeer(nativeDeviceId, nativeDeviceName)) return;
+          if (nativeHopCount && nativeHopCount > 15) return;
+          if (nativeDistanceMeters && nativeDistanceMeters > 3000) return;
           const existing = this.activePeers.get(nativeDeviceId);
           const resolvedName = (nativeDeviceName && !nativeDeviceName.startsWith('Citizen_'))
             ? nativeDeviceName
             : (existing?.name || `Citizen_${nativeDeviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`);
           const hopCount = nativeHopCount || (existing ? existing.hopCount || 1 : 1);
+          if (hopCount > 15) return;
           const isRelayed = hopCount > 1;
           const peer: MeshPeer = {
             id: nativeDeviceId,
