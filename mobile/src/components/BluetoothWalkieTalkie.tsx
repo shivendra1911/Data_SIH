@@ -32,6 +32,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   const [inputMsg, setInputMsg] = useState<string>('');
   const [isCalling, setIsCalling] = useState<boolean>(false);
   const [activePeerName, setActivePeerName] = useState<string | null>(null);
+  const [activePeerId, setActivePeerId] = useState<string | null>(null);
   const [selectedRadio, setSelectedRadio] = useState<'wifi' | 'ble'>('wifi');
   const [peers, setPeers] = useState<MeshPeer[]>(propPeers || meshEngine.getConnectedPeers());
   const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
@@ -44,6 +45,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       console.log('[WalkieTalkie] 📞 Outgoing call event received:', call);
       setIsCalling(true);
       setActivePeerName(call?.name || 'Citizen Node');
+      setActivePeerId(call?.id || call?.targetNodeId || null);
       if (call?.transport === 'wifi_direct') {
         setSelectedRadio('wifi');
       }
@@ -51,7 +53,9 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
 
     const subIncoming = DeviceEventEmitter.addListener('NEERNETRA_INCOMING_CALL', (call: any) => {
       console.log('[WalkieTalkie] 📞 Incoming call event received:', call);
+      setIsCalling(true);
       setActivePeerName(call?.callerName || 'Citizen Node');
+      setActivePeerId(call?.callerId || null);
     });
 
     const subAnswered = DeviceEventEmitter.addListener('NEERNETRA_CALL_ANSWERED', (data: any) => {
@@ -60,12 +64,22 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       if (data?.responderName) {
         setActivePeerName(data.responderName);
       }
+      if (data?.peerId) {
+        setActivePeerId(data.peerId);
+      }
+    });
+
+    const subVoice = DeviceEventEmitter.addListener('NEERNETRA_VOICE_BURST', (event: any) => {
+      console.log('[WalkieTalkie] 🔊 Voice burst event received:', event?.senderName);
+      setVoiceNotice(`🔊 Audio from ${event?.senderName || 'Peer'}`);
+      setTimeout(() => setVoiceNotice(null), 3500);
     });
 
     const subEnded = DeviceEventEmitter.addListener('NEERNETRA_CALL_ENDED', () => {
       console.log('[WalkieTalkie] 📞 Call ended event received');
       setIsCalling(false);
       setActivePeerName(null);
+      setActivePeerId(null);
       setVoiceNotice(null);
     });
 
@@ -73,6 +87,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       subOutgoing.remove();
       subIncoming.remove();
       subAnswered.remove();
+      subVoice.remove();
       subEnded.remove();
     };
   }, []);
@@ -120,7 +135,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
       if (audio && audio.length > 0) {
         setVoiceNotice(`📡 Sent ${(audio.length * 0.75 / 1024).toFixed(1)} KB`);
         playPttTone('roger').catch(() => {});
-        const targetId = activePeerName ? (displayPeers.find((p) => p.name === activePeerName)?.id || 'BROADCAST') : 'BROADCAST';
+        const targetId = activePeerId || (activePeerName ? (displayPeers.find((p) => p.name === activePeerName)?.id || 'BROADCAST') : 'BROADCAST');
         await meshEngine.sendVoiceBurst(targetId, audio, targetId === 'BROADCAST' || targetId === 'GROUP_CALL');
         setTimeout(() => setVoiceNotice(null), 2000);
       } else {
@@ -149,14 +164,16 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
   };
 
   const handleStartWalkieTalkie = (peer: MeshPeer) => {
-    if (isCalling && activePeerName === peer.name) {
+    if (isCalling && (activePeerName === peer.name || activePeerId === peer.id)) {
       setIsCalling(false);
       setActivePeerName(null);
+      setActivePeerId(null);
       setVoiceNotice(null);
       meshEngine.endCall(peer.id).catch(() => {});
     } else {
       setIsCalling(true);
       setActivePeerName(peer.name);
+      setActivePeerId(peer.id);
       setVoiceNotice(`📞 Calling ${peer.name}... Hold PTT to speak`);
       if (onCallPeer) {
         onCallPeer(peer);
@@ -233,6 +250,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
             onPress={() => {
               setIsCalling(false);
               setActivePeerName(null);
+              setActivePeerId(null);
               meshEngine.endCall('ALL').catch(() => {});
             }}
             activeOpacity={0.7}
@@ -256,6 +274,7 @@ export const BluetoothWalkieTalkie: React.FC<BluetoothWalkieTalkieProps> = ({
           setIsCalling(true);
           const groupName = selectedRadio === 'wifi' ? 'ALL NEARBY CITIZENS (WI-FI 250m)' : 'ALL NEARBY CITIZENS (BLE GROUP)';
           setActivePeerName(groupName);
+          setActivePeerId('GROUP_CALL');
           setVoiceNotice('🚨 Group Voice Channel Open • Hold PTT to broadcast to all nodes');
           if (selectedRadio === 'wifi') {
             if (onGroupEmergencyCall) {

@@ -6,7 +6,7 @@
  * and handles native hardware audio recording and speaker playback.
  */
 
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, DeviceEventEmitter } from 'react-native';
 
 const { NeerNetraGatt } = NativeModules;
 
@@ -63,6 +63,13 @@ export const startGattServer = async (
     // Native background scanner found a NeerNetra peer (fires even when JS BLE scanner is throttled)
     emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number; hopCount?: number; distanceMeters?: number }) => {
       if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi, peer.hopCount, peer.distanceMeters);
+    });
+
+    // Native audio burst received directly via high-speed UDP 8765 or BLE GATT
+    emitter.addListener('onNativeVoiceBurstReceived', (event: { senderId: string; senderName?: string; audio: string; isGroupCall?: boolean }) => {
+      try {
+        DeviceEventEmitter.emit('NEERNETRA_VOICE_BURST', event);
+      } catch {}
     });
 
     return true;
@@ -167,6 +174,23 @@ export const triggerWifiDirectMessage = async (targetNodeId: string, messageText
     return await NeerNetraGatt.triggerWifiDirectMessage(targetNodeId, messageText);
   } catch (err: any) {
     console.warn('[GattBridge] triggerWifiDirectMessage error:', err?.message);
+    return false;
+  }
+};
+
+/**
+ * Triggers an explicit long-range Wi-Fi Direct voice burst (up to 250m)
+ */
+export const triggerWifiDirectVoiceBurst = async (
+  targetNodeId: string,
+  base64Audio: string,
+  isGroupCall: boolean = false
+): Promise<boolean> => {
+  if (!NeerNetraGatt?.triggerWifiDirectVoiceBurst) return false;
+  try {
+    return await NeerNetraGatt.triggerWifiDirectVoiceBurst(targetNodeId, base64Audio, isGroupCall);
+  } catch (err: any) {
+    console.warn('[GattBridge] triggerWifiDirectVoiceBurst error:', err?.message);
     return false;
   }
 };

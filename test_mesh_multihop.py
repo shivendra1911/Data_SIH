@@ -95,6 +95,10 @@ def run_all_tests():
     log(f"Target: UDP Port 8765 (Native Wi-Fi Mesh on device {DEVICE_SERIAL})")
     log(f"Phone Node ID: {PHONE_NODE_ID}")
     
+    # Ensure the NeerNetra app is actively running on device
+    subprocess.run(["adb", "-s", DEVICE_SERIAL, "shell", "monkey -p com.neernetra.disaster -c android.intent.category.LAUNCHER 1"], capture_output=True)
+    time.sleep(2.0)
+
     monitor = LogcatMonitor(DEVICE_SERIAL)
     monitor.start()
     time.sleep(1.0)

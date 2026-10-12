@@ -418,4 +418,3 @@ export function calculateDynamicResponders(zone: HazardZone): EmergencyResponder
     },
   ];
 }
-

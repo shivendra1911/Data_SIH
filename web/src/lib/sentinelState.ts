@@ -60,7 +60,6 @@ declare global {
 }
 
 function initDefaultState(): SentinelGlobalState {
-  const now = new Date();
   return {
     sectors: {
       sector_wayanad_04: {

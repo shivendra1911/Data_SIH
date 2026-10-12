@@ -541,6 +541,15 @@ class MobileSirenListener {
 
   public silenceAlarm(markAsAcknowledged: boolean = true) {
     this.isAlarmActive = false;
+    if (this.lastProcessedTimestamp) {
+      this.silencedSirenTimestamps.add(this.lastProcessedTimestamp);
+      try {
+        AsyncStorage.setItem(
+          SILENCED_SIRENS_KEY,
+          JSON.stringify(Array.from(this.silencedSirenTimestamps))
+        ).catch(() => {});
+      } catch {}
+    }
     console.log('[MobileSirenListener] Siren silenced by citizen.');
 
     stopWebSiren();

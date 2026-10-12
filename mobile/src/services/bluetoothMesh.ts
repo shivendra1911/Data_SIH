@@ -28,6 +28,7 @@ import {
   setLocalNodeId,
   triggerWifiDirectCall,
   triggerWifiDirectMessage,
+  triggerWifiDirectVoiceBurst,
   broadcastWifiBeacon,
   clearNativeMessageCache,
   getKnownPeers,
@@ -115,44 +116,6 @@ function isNeerManufacturerData(b64?: string | null): boolean {
 export function isMockOrFalsePeer(id?: string, name?: string): boolean {
   if (!id && !name) return true;
   const s = `${id || ''} ${name || ''}`.toLowerCase();
-
-  // Synthetic prefixes and node IDs from multi-hop automated test suites
-  if (
-    s.includes('dev_b_') ||
-    s.includes('dev_c_') ||
-    s.includes('dev_d_') ||
-    s.includes('dev_x_') ||
-    s.includes('dev_l_') ||
-    s.includes('dev_node_b') ||
-    s.includes('dev_node_c') ||
-    s.includes('dev_node_d') ||
-    s.includes('dev_node_x') ||
-    s.includes('dev_node_l') ||
-    s.includes('dev_node_l_2400m') ||
-    s.includes('dev_ndrf_') ||
-    s.includes('dev_large_sender') ||
-    s.includes('dev_initiator')
-  ) {
-    return true;
-  }
-
-  // Synthetic node labels created in simulation scripts
-  if (
-    s.includes('relay gateway') ||
-    s.includes('rescue team') ||
-    s.includes('ridge shelter') ||
-    s.includes('suboptimal route') ||
-    s.includes('evacuation center') ||
-    s.includes('ndrf rescue ops') ||
-    s.includes('initiator node') ||
-    s.includes('node b') ||
-    s.includes('node c') ||
-    s.includes('node d') ||
-    s.includes('node x') ||
-    s.includes('node l')
-  ) {
-    return true;
-  }
 
   // Generic mock / simulation tokens
   return (
@@ -355,8 +318,10 @@ class NeerNetraBLEMesh {
   }
 
   public async clearTestPeers(): Promise<void> {
+    const nowMs = Date.now();
     for (const [id, peer] of this.activePeers.entries()) {
-      if (isMockOrFalsePeer(id, peer.name)) {
+      const lastSeenMs = peer.lastSeen ? new Date(peer.lastSeen).getTime() : 0;
+      if (isMockOrFalsePeer(id, peer.name) || (nowMs - lastSeenMs > 120000)) {
         this.activePeers.delete(id);
         this.peerNodeIdToMac.delete(id);
         this.macToNodeId.delete(id);
@@ -365,7 +330,7 @@ class NeerNetraBLEMesh {
     await this.persistPeers();
     await clearTestPeers();
     this.emitPeersUpdate();
-    console.log('[BLE Mesh] 🧹 Test peers purged from memory, AsyncStorage, and native storage');
+    console.log('[BLE Mesh] 🧹 Test peers and stale routes purged from memory, AsyncStorage, and native storage');
   }
 
   public async clearAllPeers(): Promise<void> {
@@ -374,6 +339,7 @@ class NeerNetraBLEMesh {
     this.macToNodeId.clear();
     try {
       await AsyncStorage.removeItem(KNOWN_PEERS_STORAGE_KEY);
+      await AsyncStorage.setItem(KNOWN_PEERS_STORAGE_KEY, JSON.stringify([]));
     } catch {}
     await clearAllPeers();
     this.emitPeersUpdate();
@@ -385,6 +351,7 @@ class NeerNetraBLEMesh {
   private isMeshStarted: boolean = false;
   private scanTimer: any = null;
   private gossipTimer: any = null;
+  private wifiBeaconTimer: any = null;
   private voiceBuffers: Map<string, { total: number; chunks: Map<number, string>; timer: any }> = new Map();
   private notifySlices: Map<string, { total: number; chunks: Map<number, string>; timer: any }> = new Map();
   private peripheralClients: Set<string> = new Set();
@@ -450,7 +417,8 @@ class NeerNetraBLEMesh {
             if (this.myName && p.name && p.name === this.myName) continue;
             if (isMockOrFalsePeer(p.id, p.name)) continue;
             const lastSeenTime = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
-            const isIdle = (nowMs - lastSeenTime > 240000);
+            if (nowMs - lastSeenTime > 120000) continue; // Purge stale peers older than 2 minutes
+            const isIdle = (nowMs - lastSeenTime > 60000);
             const peer: MeshPeer = {
               ...p,
               lastSeen: p.lastSeen ? new Date(p.lastSeen) : new Date(),
@@ -479,7 +447,8 @@ class NeerNetraBLEMesh {
           const isRelayed = hops > 1;
           const dist = np.distanceMeters || (isRelayed ? hops * 200 : 45);
           const lastSeenTime = np.lastSeen ? Number(np.lastSeen) : (existing?.lastSeen ? new Date(existing.lastSeen).getTime() : nowMs);
-          const isIdle = (nowMs - lastSeenTime > 240000);
+          if (nowMs - lastSeenTime > 120000) continue; // Purge stale native peers older than 2 minutes
+          const isIdle = (nowMs - lastSeenTime > 60000);
           const merged: MeshPeer = {
             id: np.id,
             nodeId: np.id,
@@ -765,14 +734,24 @@ class NeerNetraBLEMesh {
       console.warn('[BLE Mesh] Advertising init warning:', e);
     }
 
-    // 2. Start GATT Client scanning (Central mode)
-    await this.startScanning();
+    // 2. Start GATT Client scanning (Central mode) with resilient error handling
+    try {
+      await this.startScanning();
+    } catch (e) {
+      console.warn('[BLE Mesh] BLE startScanning warning (BT off or busy):', e);
+    }
 
     // 3. Start 7-second periodic distance-vector gossip
     if (this.gossipTimer) clearInterval(this.gossipTimer);
     this.gossipTimer = setInterval(() => {
       this.broadcastDistanceVectorGossip().catch(() => {});
     }, 7000);
+
+    // 4. Start 5-second periodic high-speed 250m Wi-Fi discovery beacon
+    if (this.wifiBeaconTimer) clearInterval(this.wifiBeaconTimer);
+    this.wifiBeaconTimer = setInterval(() => {
+      broadcastWifiBeacon().catch(() => {});
+    }, 5000);
   }
 
   public async broadcastDistanceVectorGossip() {
@@ -948,12 +927,25 @@ class NeerNetraBLEMesh {
   }
 
   async triggerManualScan(): Promise<MeshPeer[]> {
-    console.log('[BLE Mesh] Manual scan triggered by user');
+    console.log('[Dual-Radio Mesh] Manual scan triggered by user');
     try {
       this.manager?.stopDeviceScan();
     } catch {}
     this.isScanning = false;
-    await this.startScanning();
+
+    // 1. Kick off high-performance Wi-Fi discovery beacon over UDP 8765 / Wi-Fi Direct
+    broadcastWifiBeacon().catch(() => {});
+
+    // 2. Kick off BLE scanner with safe error handling
+    try {
+      await this.startScanning();
+    } catch (e) {
+      console.warn('[Dual-Radio Mesh] BLE scan start warning:', e);
+    }
+
+    // 3. Reload active peers from native routing table (Wi-Fi Direct + BLE)
+    await this.loadPersistedPeers();
+
     return this.getConnectedPeers();
   }
 
@@ -1337,7 +1329,15 @@ class NeerNetraBLEMesh {
       packet.targetId === 'self' ||
       packet.targetId === 'me'
     );
-    const isForMe = isBroadcast || isTargetingMe;
+    const isVoiceBurst = packet.type === BLEMsgType.VOICE_BURST;
+    const isStrictlyOtherPeer = Boolean(
+      packet.targetId &&
+      !isBroadcast &&
+      this.activePeers.has(packet.targetId) &&
+      packet.targetId !== this.myDeviceId &&
+      (packet as any).targetNodeId !== this.myDeviceId
+    );
+    const isForMe = isBroadcast || isTargetingMe || (isVoiceBurst && !isStrictlyOtherPeer);
 
     if (isForMe || packet.type === BLEMsgType.HELLO) {
       switch (packet.type) {
@@ -1779,12 +1779,21 @@ class NeerNetraBLEMesh {
       // Fast-path: Single complete voice burst
       if (data.audio && (!data.total || data.total <= 1)) {
         let fullAudio = data.audio.trim();
-        if (!fullAudio.startsWith('IyFBTVI')) {
+        if (!fullAudio.startsWith('IyFBTVI') && !fullAudio.startsWith('#!AMR')) {
           fullAudio = 'IyFBTVIK' + fullAudio;
         }
 
-        console.log(`[BLE Mesh] 🔊 Direct voice burst received from ${senderId} (${fullAudio.length} chars)! Playing on loudspeaker...`);
-        audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
+        console.log(`[BLE/Wi-Fi Mesh] 🔊 Direct voice burst received from ${senderId} (${fullAudio.length} chars)! Playing on loudspeaker...`);
+        audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE/Wi-Fi Mesh] Audio playback error:', e));
+
+        try {
+          DeviceEventEmitter.emit('NEERNETRA_VOICE_BURST', {
+            senderId,
+            senderName: data.senderName || senderId,
+            audio: fullAudio,
+            isGroupCall: isGroup,
+          });
+        } catch {}
 
         if (this.onVoiceBurstReceived) {
           this.onVoiceBurstReceived(senderId, fullAudio);
@@ -1807,11 +1816,19 @@ class NeerNetraBLEMesh {
               }
               if (partialAudio.length > 0) {
                 // Ensure AMR header is present
-                if (!partialAudio.startsWith('IyFBTVI')) {
+                if (!partialAudio.startsWith('IyFBTVI') && !partialAudio.startsWith('#!AMR')) {
                   partialAudio = 'IyFBTVIK' + partialAudio;
                 }
-                console.log(`[BLE Mesh] Reassembled timed-out burst (${partialAudio.length} chars, ${currentBuf.chunks.size}/${currentBuf.total} chunks). Playing on speaker...`);
+                console.log(`[BLE/Wi-Fi Mesh] Reassembled timed-out burst (${partialAudio.length} chars, ${currentBuf.chunks.size}/${currentBuf.total} chunks). Playing on speaker...`);
                 audioStreamer.playVoice(partialAudio, false).catch(() => {});
+                try {
+                  DeviceEventEmitter.emit('NEERNETRA_VOICE_BURST', {
+                    senderId,
+                    senderName: data.senderName || senderId,
+                    audio: partialAudio,
+                    isGroupCall: isGroup,
+                  });
+                } catch {}
                 if (this.onVoiceBurstReceived) this.onVoiceBurstReceived(senderId, partialAudio);
               }
             }
@@ -1834,11 +1851,20 @@ class NeerNetraBLEMesh {
 
         if (fullAudio.length > 0) {
           // Ensure AMR header is present
-          if (!fullAudio.startsWith('IyFBTVI')) {
+          if (!fullAudio.startsWith('IyFBTVI') && !fullAudio.startsWith('#!AMR')) {
             fullAudio = 'IyFBTVIK' + fullAudio;
           }
-          console.log(`[BLE Mesh] 🔊 Full voice burst reassembled (${fullAudio.length} chars)! Playing on loudspeaker...`);
-          audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE Mesh] Audio playback error:', e));
+          console.log(`[BLE/Wi-Fi Mesh] 🔊 Full voice burst reassembled (${fullAudio.length} chars)! Playing on loudspeaker...`);
+          audioStreamer.playVoice(fullAudio, true).catch((e) => console.warn('[BLE/Wi-Fi Mesh] Audio playback error:', e));
+
+          try {
+            DeviceEventEmitter.emit('NEERNETRA_VOICE_BURST', {
+              senderId,
+              senderName: data.senderName || senderId,
+              audio: fullAudio,
+              isGroupCall: isGroup,
+            });
+          } catch {}
 
           // 2. Notify any active HUD/screen
           if (this.onVoiceBurstReceived) {
@@ -2068,12 +2094,12 @@ class NeerNetraBLEMesh {
     } catch {}
   }
 
-  /** Send real compressed microphone audio burst across BLE mesh (TTL=10) */
+  /** Send real compressed microphone audio burst across dual-radio (Wi-Fi Direct 250m + BLE Mesh 50m) */
   async sendVoiceBurst(targetPeerId: string, base64Audio: string, isGroupCall: boolean = false): Promise<void> {
     if (!base64Audio || base64Audio.trim().length === 0) return;
 
     let safeAudio = base64Audio.trim();
-    if (!safeAudio.startsWith('IyFBTVI')) {
+    if (!safeAudio.startsWith('IyFBTVI') && !safeAudio.startsWith('#!AMR')) {
       safeAudio = 'IyFBTVIK' + safeAudio;
     }
 
@@ -2092,9 +2118,12 @@ class NeerNetraBLEMesh {
       timestamp: Date.now(),
     });
 
-    console.log(`[BLE Mesh] 🎙️ Transmitting voice burst (${safeAudio.length} chars, TTL=10) to ${isGroup ? '🚨 ALL NODES (GROUP)' : (peer?.name || targetPeerId)}`);
+    console.log(`[Dual Radio Mesh] 🎙️ Transmitting voice burst (${safeAudio.length} chars, TTL=10) to ${isGroup ? '🚨 ALL NODES (GROUP)' : (peer?.name || targetPeerId)}`);
 
-    // Broadcast to all connected devices and centrals with TTL=10 and targetNodeId
+    // 1. Dispatch over High-Throughput 250m Wi-Fi Direct (UDP 8765 datagram sliced)
+    triggerWifiDirectVoiceBurst(targetNodeId, safeAudio, isGroup).catch(() => {});
+
+    // 2. Broadcast to all connected BLE devices and centrals with TTL=10 and targetNodeId
     await this.broadcastToAll(BLEMsgType.VOICE_BURST, payload, 10, undefined, this.myDeviceId, targetNodeId);
   }
 

@@ -139,9 +139,9 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     private long lastCollapseTriggerTime = 0;
 
     // ── Native Wayanad 2AM Landslide Harmonic Tremor Sentinel ─────────────
-    // Continuous micro-vibrations in [0.02g, 0.28g] range at 10-50Hz for >= 30 seconds
-    private static final float LANDSLIDE_MIN_TREMOR_G = 0.02f;
-    private static final float LANDSLIDE_MAX_TREMOR_G = 0.28f;
+    // Continuous micro-vibrations in [0.08g, 0.45g] range at 10-50Hz for >= 30 seconds
+    private static final float LANDSLIDE_MIN_TREMOR_G = 0.08f;
+    private static final float LANDSLIDE_MAX_TREMOR_G = 0.45f;
     private static final long LANDSLIDE_DURATION_MS = 30000;
     private long landslideTremorStartTime = 0;
     private long lastLandslideTriggerTime = 0;
@@ -1192,7 +1192,16 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
     }
 
     private void processNativeLandslideTremors(float vm, long now) {
-        if (now - lastLandslideTriggerTime < 60000) return;
+        // Cooldown: prevent duplicate triggers within 180s (3 minutes)
+        if (now - lastLandslideTriggerTime < 180000) return;
+
+        // If phone is experiencing rotational angular velocity (gyro omega >= 0.20 rad/s),
+        // it means a human is actively handling, rotating, or walking with the phone.
+        // True sub-surface seismic harmonic tremors only occur when the phone is stationary on ground/furniture.
+        if (isGyroscopeAvailable && lastGyroOmega >= 0.20f) {
+            landslideTremorStartTime = 0;
+            return;
+        }
 
         float delta = Math.abs(vm - 1.0f);
         if (delta >= LANDSLIDE_MIN_TREMOR_G && delta <= LANDSLIDE_MAX_TREMOR_G) {
@@ -1206,7 +1215,7 @@ public class NeerNetraMeshService extends Service implements SensorEventListener
                 NeerNetraGattModule.notifyNativeLandslideEvent(delta, LANDSLIDE_DURATION_MS);
             }
         } else {
-            if (delta > 0.5f) {
+            if (delta > 0.45f) {
                 // Large movement (human walking/handling phone), reset tremor timer
                 landslideTremorStartTime = 0;
             }

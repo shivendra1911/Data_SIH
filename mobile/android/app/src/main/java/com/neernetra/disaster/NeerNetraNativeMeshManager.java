@@ -130,21 +130,6 @@ public class NeerNetraNativeMeshManager {
         if ((id == null || id.trim().isEmpty()) && (name == null || name.trim().isEmpty())) return true;
         String s = ((id != null ? id : "") + " " + (name != null ? name : "")).toLowerCase();
 
-        // Synthetic prefixes and node IDs from multi-hop automated test suites
-        if (s.contains("dev_b_") || s.contains("dev_c_") || s.contains("dev_d_") || s.contains("dev_x_") || s.contains("dev_l_") ||
-            s.contains("dev_node_b") || s.contains("dev_node_c") || s.contains("dev_node_d") || s.contains("dev_node_x") || s.contains("dev_node_l") ||
-            s.contains("dev_node_l_2400m") || s.contains("dev_ndrf_") || s.contains("dev_large_sender") || s.contains("dev_initiator")) {
-            return true;
-        }
-
-        // Synthetic node labels created in simulation scripts
-        if (s.contains("relay gateway") || s.contains("rescue team") || s.contains("ridge shelter") ||
-            s.contains("suboptimal route") || s.contains("evacuation center") || s.contains("ndrf rescue ops") ||
-            s.contains("initiator node") ||
-            s.contains("node b") || s.contains("node c") || s.contains("node d") || s.contains("node x") || s.contains("node l")) {
-            return true;
-        }
-
         // Generic mock / simulation tokens
         if (s.contains("mock") || s.contains("test_") || s.contains("test node") || s.contains("sim_") ||
             s.contains("dummy") || s.contains("synthetic") || s.contains("audit") || s.contains("fake") ||
@@ -169,24 +154,52 @@ public class NeerNetraNativeMeshManager {
         return clean;
     }
 
+    public synchronized void registerDiscoveredPeer(String peerId, String name, int rssi, int hopCount, int distanceMeters, String transport) {
+        if (peerId == null || peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) return;
+        long now = System.currentTimeMillis();
+        MeshRoute route = routingTable.get(peerId);
+        if (route == null) route = new MeshRoute();
+        route.peerId = peerId;
+        route.name = name != null && !name.isEmpty() ? name : (route.name != null ? route.name : "Citizen Node");
+        route.hopCount = hopCount;
+        route.nextHop = peerId;
+        route.lastSeen = now;
+        route.status = "SAFE";
+        routingTable.put(peerId, route);
+        persistRoutingTable();
+
+        try {
+            WritableMap peerMap = Arguments.createMap();
+            peerMap.putString("id", peerId);
+            peerMap.putString("name", route.name);
+            peerMap.putInt("rssi", rssi);
+            peerMap.putInt("hopCount", hopCount);
+            peerMap.putInt("distanceMeters", distanceMeters);
+            peerMap.putString("transport", transport != null ? transport : "wifi_direct");
+            emitEventMapToReactNative("onNativePeerFound", peerMap);
+        } catch (Exception ignored) {}
+    }
+
     public synchronized void clearTestPeers() {
+        long now = System.currentTimeMillis();
         java.util.Iterator<Map.Entry<String, MeshRoute>> it = routingTable.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, MeshRoute> entry = it.next();
             MeshRoute r = entry.getValue();
-            if (r == null || isTestOrSimulatedPeer(entry.getKey(), r.name)) {
+            if (r == null || isTestOrSimulatedPeer(entry.getKey(), r.name) || (now - r.lastSeen > 120000)) {
                 it.remove();
             }
         }
         persistRoutingTable();
-        Log.i(TAG, "Cleared test peers. Remaining active genuine routes: " + routingTable.size());
+        Log.i(TAG, "Cleared test peers and stale routes. Remaining active genuine routes: " + routingTable.size());
     }
 
     public synchronized void clearAllPeers() {
         routingTable.clear();
+        nativePeerLastSeen.clear();
         try {
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
-            sp.edit().putString("persistent_routing_table", "[]").apply();
+            sp.edit().remove("persistent_routing_table").putString("persistent_routing_table", "[]").commit();
         } catch (Exception ignored) {}
         Log.i(TAG, "Cleared all peers from routing table and storage");
     }
@@ -194,10 +207,12 @@ public class NeerNetraNativeMeshManager {
     public synchronized void persistRoutingTable() {
         try {
             android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            long now = System.currentTimeMillis();
             JSONArray array = new JSONArray();
             for (MeshRoute r : routingTable.values()) {
                 if (r == null || r.peerId == null) continue;
                 if (isTestOrSimulatedPeer(r.peerId, r.name)) continue;
+                if (now - r.lastSeen > 120000) continue; // Evict stale routes older than 2 minutes from storage
                 JSONObject obj = new JSONObject();
                 obj.put("peerId", r.peerId);
                 obj.put("name", r.name);
@@ -210,7 +225,7 @@ public class NeerNetraNativeMeshManager {
                 obj.put("status", r.status);
                 array.put(obj);
             }
-            sp.edit().putString("persistent_routing_table", array.toString()).apply();
+            sp.edit().putString("persistent_routing_table", array.toString()).commit();
         } catch (Exception e) {
             Log.w(TAG, "persistRoutingTable error: " + e.getMessage());
         }
@@ -229,17 +244,19 @@ public class NeerNetraNativeMeshManager {
                 String peerId = obj.optString("peerId", "");
                 String name = obj.optString("name", "Citizen [" + peerId + "]");
                 if (peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) continue;
+                long lastSeen = obj.optLong("lastSeen", now);
+                if (now - lastSeen > 120000) continue; // Evict stale routes older than 2 minutes on boot
                 MeshRoute r = new MeshRoute();
                 r.peerId = peerId;
                 r.name = name;
                 r.hopCount = obj.optInt("hopCount", 1);
                 r.nextHop = obj.optString("nextHop", peerId);
-                r.lastSeen = obj.optLong("lastSeen", now);
+                r.lastSeen = lastSeen;
                 r.lat = obj.optDouble("lat", 0.0);
                 r.lng = obj.optDouble("lng", 0.0);
                 r.battery = obj.optInt("battery", 85);
                 String st = obj.optString("status", "SAFE");
-                if (now - r.lastSeen > 240000 && !"SOS".equals(st)) {
+                if (now - r.lastSeen > 60000 && !"SOS".equals(st)) {
                     st = "IDLE";
                 }
                 r.status = st;
@@ -336,6 +353,20 @@ public class NeerNetraNativeMeshManager {
     }
 
     public synchronized boolean startMeshEngine(String deviceName) {
+        // Register BT state listener early so headphone/toggle events are tracked
+        if (!btReceiverRegistered) {
+            try {
+                android.content.IntentFilter btFilter = new android.content.IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+                appContext.registerReceiver(btStateReceiver, btFilter);
+                btReceiverRegistered = true;
+            } catch (Exception ignored) {}
+        }
+
+        // Always ensure Wi-Fi Mesh Subsystem is actively running (Wi-Fi Direct P2P + UDP 8765)
+        try {
+            NeerNetraWifiMeshManager.getInstance(appContext).startWifiMesh();
+        } catch (Exception ignored) {}
+
         if (isRunning && gattServer != null) {
             if (!isScanningNative) {
                 startNativeScanning();
@@ -346,8 +377,11 @@ public class NeerNetraNativeMeshManager {
 
         try {
             if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-                Log.w(TAG, "Bluetooth not enabled, cannot start mesh engine");
-                return false;
+                Log.i(TAG, "Bluetooth not enabled — running in High-Performance Wi-Fi Direct Mesh mode (up to 250m)");
+                isRunning = true;
+                gossipHandler.removeCallbacks(gossipRunnable);
+                gossipHandler.postDelayed(gossipRunnable, 3000);
+                return true;
             }
 
             // ── Runtime permission check (Android 12+ requires BLUETOOTH_CONNECT at runtime) ──
@@ -355,11 +389,14 @@ public class NeerNetraNativeMeshManager {
                 boolean hasConnect = appContext.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
                         == android.content.pm.PackageManager.PERMISSION_GRANTED;
                 if (!hasConnect) {
-                    Log.w(TAG, "BLUETOOTH_CONNECT not yet granted — will retry when permission is given by user.");
+                    Log.w(TAG, "BLUETOOTH_CONNECT not yet granted — running in Wi-Fi Direct mode in interim.");
+                    isRunning = true;
+                    gossipHandler.removeCallbacks(gossipRunnable);
+                    gossipHandler.postDelayed(gossipRunnable, 3000);
                     new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                         startMeshEngine(deviceName != null ? deviceName : "NeerNetra-Node");
                     }, 4000);
-                    return false;
+                    return true;
                 }
             }
 
@@ -1489,6 +1526,67 @@ public class NeerNetraNativeMeshManager {
                     "SOS_ALERT",
                     b
                 );
+            }
+            // ── Incoming Voice Burst (t: 11 = VOICE_BURST) ──
+            else if (decodedJson.contains("\"t\":11") || decodedJson.contains("\"t\": 11") ||
+                     decodedJson.contains("\"t\":\"11\"") || decodedJson.contains("\"t\": \"11\"") ||
+                     decodedJson.contains("VOICE_BURST") || decodedJson.contains("VOICE")) {
+                String senderId = "";
+                String senderName = "Citizen";
+                String targetId = "";
+                String audioData = "";
+                boolean isGroup = false;
+
+                try {
+                    JSONObject jo = new JSONObject(decodedJson);
+                    senderId = jo.optString("s", jo.optString("origin_id", ""));
+                    senderName = jo.optString("name", "Citizen");
+                    targetId = jo.optString("d", jo.optString("dest_id", "BROADCAST"));
+                    isGroup = "BROADCAST".equals(targetId) || "GROUP_CALL".equals(targetId) || jo.optBoolean("isGroupCall", false);
+
+                    if (jo.has("audio")) {
+                        audioData = jo.optString("audio", "");
+                    }
+
+                    if (jo.has("p")) {
+                        String pStr = jo.getString("p");
+                        if (pStr.startsWith("{")) {
+                            JSONObject p = new JSONObject(pStr);
+                            if (p.has("audio")) audioData = p.optString("audio", "");
+                            if (p.has("senderName")) senderName = p.optString("senderName", senderName);
+                            if (p.has("senderId")) senderId = p.optString("senderId", senderId);
+                            if (p.has("targetId")) targetId = p.optString("targetId", targetId);
+                            if (p.optBoolean("isGroupCall", false)) isGroup = true;
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                // Echo cancellation: skip our own transmitted voice bursts
+                if (!myNodeId.isEmpty() && senderId.equalsIgnoreCase(myNodeId)) {
+                    return;
+                }
+
+                // Addressing check
+                boolean isForMe = isGroup || targetId.isEmpty() || "BROADCAST".equals(targetId) || "GROUP_CALL".equals(targetId)
+                        || (!myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId)))
+                        || (!myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName)))
+                        || targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me")
+                        || !routingTable.containsKey(targetId);
+
+                if (isForMe && !audioData.isEmpty()) {
+                    Log.i(TAG, "🔊 [NativeVoice] Ingested voice burst from " + senderName + " (" + audioData.length() + " chars) — playing on loudspeaker!");
+                    NeerNetraGattModule.playVoiceAudioStatic(appContext, audioData);
+
+                    // Notify React Native
+                    try {
+                        WritableMap map = Arguments.createMap();
+                        map.putString("senderId", senderId);
+                        map.putString("senderName", senderName);
+                        map.putString("audio", audioData);
+                        map.putBoolean("isGroupCall", isGroup);
+                        emitEventMapToReactNative("onNativeVoiceBurstReceived", map);
+                    } catch (Exception ignored) {}
+                }
             }
         } catch (Exception e) {
             Log.w(TAG, "checkAndTriggerWhatsAppCallOrAlert error: " + e.getMessage());
