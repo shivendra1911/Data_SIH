@@ -178,7 +178,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
                   onClick={() => advanceScroll(0.45)}
                   className="btn-solid-primary"
                 >
-                  <span>Scroll to Scrub Video & Radar</span>
+                  <span>Scroll to Radar</span>
                   <ArrowDown className="w-3.5 h-3.5" aria-hidden />
                 </button>
 
@@ -269,7 +269,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             <div className="space-y-4 max-w-4xl mx-auto">
               <div className="corwdy-subtitle text-rose-400/90">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-                <span>/ZERO-MINUTE EMERGENCY RELAY • ANDROID APK INTEGRATION</span>
+                <span>ZERO-MINUTE EMERGENCY RELAY • ANDROID APK INTEGRATION</span>
               </div>
 
               <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
