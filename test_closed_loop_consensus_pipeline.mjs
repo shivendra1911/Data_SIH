@@ -1,5 +1,4 @@
-// End-to-end Verification of the Closed-Loop Disaster Consensus Pipeline
-const TARGET_URL = process.env.TARGET_URL || "http://192.168.0.185:3000";
+const TARGET_URL = process.env.TARGET_URL || "http://localhost:3000";
 
 async function runConsensusPipelineTest() {
   console.log("=======================================================================");

@@ -1,5 +1,5 @@
 // Comprehensive 2-Way Mobile <-> Web Integration Test
-const LOCAL_URL = "http://192.168.0.185:3000";
+const LOCAL_URL = process.env.LOCAL_URL || "http://localhost:3000";
 
 async function runTwoWayIntegrationTest() {
   console.log("=============================================================");

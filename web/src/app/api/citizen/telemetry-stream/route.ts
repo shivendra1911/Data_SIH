@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { CitizenLocation } from "@/lib/types";
+import { isGenuineDevice } from "@/lib/deviceFilter";
 
 export interface TelemetryBreadcrumb {
   id: string;
@@ -65,12 +66,9 @@ export async function GET(req: NextRequest) {
 
     if (cloudAlerts && Array.isArray(cloudAlerts)) {
       for (const alert of cloudAlerts) {
-        const devId = (alert.device_id || "").toLowerCase();
-        const noteStr = (alert.notes || "").toLowerCase();
-        const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
         if (
           !alert.device_id ||
-          mockKeywords.some((kw) => devId.includes(kw) || noteStr.includes(kw))
+          !isGenuineDevice(alert.device_id, alert.notes)
         ) {
           continue;
         }
@@ -116,12 +114,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Filter out any lingering dummy entries from memory stream as well
-  const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
   stream = stream.filter((b) => {
     if (!b.device_uuid) return false;
-    const dev = b.device_uuid.toLowerCase();
-    const model = (b.phone_model || "").toLowerCase();
-    return !mockKeywords.some((kw) => dev.includes(kw) || model.includes(kw));
+    return isGenuineDevice(b.device_uuid, b.phone_model);
   });
 
   // Sort descending by timestamp
@@ -170,10 +165,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing device_uuid or coordinates" }, { status: 400, headers: corsHeaders });
     }
 
-    const lowerDev = device_uuid.toLowerCase();
-    const lowerModel = (phone_model || "").toLowerCase();
-    const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
-    if (mockKeywords.some((kw) => lowerDev.includes(kw) || lowerModel.includes(kw))) {
+    if (!isGenuineDevice(device_uuid, phone_model)) {
       return NextResponse.json({ status: "ignored_mock_device" }, { headers: corsHeaders });
     }
 

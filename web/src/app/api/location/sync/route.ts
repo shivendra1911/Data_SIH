@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CitizenLocation } from "@/lib/types";
+import { isGenuineDevice } from "@/lib/deviceFilter";
 
 declare global {
   var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
@@ -20,12 +21,9 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
-  const citizens = (global.__NEERNETRA_CITIZENS__ || []).filter((c) => {
-    const d = (c.device_uuid || "").toLowerCase();
-    const n = (c.name || "").toLowerCase();
-    return !mockKeywords.some((kw) => d.includes(kw) || n.includes(kw));
-  });
+  const citizens = (global.__NEERNETRA_CITIZENS__ || []).filter((c) =>
+    isGenuineDevice(c.device_uuid, c.name)
+  );
   return NextResponse.json(
     {
       status: "success",
@@ -54,10 +52,7 @@ export async function POST(req: NextRequest) {
       parsedName = `Citizen [${device_uuid.slice(0, 8)}]`;
     }
 
-    const mockKeywords = ["test", "dummy", "mock", "demo", "synthetic", "audit", "fake", "col_phone", "ramesh", "anita", "katy", "seed", "cloud_device"];
-    const lowerDev = device_uuid.toLowerCase();
-    const lowerName = parsedName.toLowerCase();
-    if (mockKeywords.some((kw) => lowerDev.includes(kw) || lowerName.includes(kw))) {
+    if (!isGenuineDevice(device_uuid, parsedName)) {
       return NextResponse.json({ status: "ignored_mock_device" }, { headers: corsHeaders });
     }
 

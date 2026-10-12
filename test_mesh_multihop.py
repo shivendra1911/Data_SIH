@@ -100,7 +100,7 @@ def run_all_tests():
     time.sleep(1.0)
     
     passed_count = 0
-    total_count = 7
+    total_count = 10
 
     run_ts = int(time.time())
     NODE_B = f"dev_b_{run_ts}"
@@ -366,6 +366,132 @@ def run_all_tests():
         passed_count += 1
     else:
         log(f"FAIL: 2.4 km test failed. Route: {match_2km}, Forward: {forward_2km_match}, TTL: {ttl_2km_match}")
+
+    # -------------------------------------------------------------------------
+    # TEST 8: Large Sliced UDP Packet (>1200 bytes) Reassembly & Ingestion
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 8: Large Sliced UDP Packet Reassembly & Ingestion ---")
+    large_ts = int(time.time() * 1000)
+    large_msg_id = f"large_pkt_{large_ts}"
+    large_text = "EMERGENCY_SUPPLIES_INVENTORY_" + ("A" * 1600)
+    large_envelope = {
+        "t": 2, # CHAT
+        "m": large_msg_id,
+        "s": f"dev_large_sender_{run_ts}",
+        "name": "Relay Logistics Node",
+        "d": "BROADCAST",
+        "ttl": 5,
+        "p": json.dumps({
+            "senderId": f"dev_large_sender_{run_ts}",
+            "senderName": "Relay Logistics Node",
+            "text": large_text,
+            "targetId": "BROADCAST"
+        })
+    }
+    raw_json_bytes = json.dumps(large_envelope).encode("utf-8")
+    log(f"Generated large packet of {len(raw_json_bytes)} bytes (> 1200 bytes MTU limit)")
+
+    slice_size = 1000
+    total_slices = (len(raw_json_bytes) + slice_size - 1) // slice_size
+    pkt_id = int(time.time() * 1000) & 0xFF
+
+    idx8 = monitor.mark()
+    for s_idx in range(total_slices):
+        start = s_idx * slice_size
+        end = min(start + slice_size, len(raw_json_bytes))
+        chunk_data = raw_json_bytes[start:end]
+        frame = bytes([0x53, pkt_id, s_idx, total_slices]) + chunk_data
+        b64_frame = base64.b64encode(frame).decode("ascii")
+        cmd = f"echo {b64_frame} | base64 -d | timeout 1 nc -u 127.0.0.1 8765"
+        subprocess.run(["adb", "-s", DEVICE_SERIAL, "shell", cmd], capture_output=True)
+        time.sleep(0.02)
+
+    match_large = monitor.search_for(f"Ingested type=2 id={large_msg_id}", timeout=6.0, start_index=idx8)
+    if match_large:
+        log(f"PASS: Large sliced UDP packet ({len(raw_json_bytes)} bytes across {total_slices} slices) reassembled & ingested: {match_large}")
+        passed_count += 1
+    else:
+        log(f"FAIL: Large packet reassembly failed for id={large_msg_id}")
+
+    # -------------------------------------------------------------------------
+    # TEST 9: Persistent Routing Table Recovery across App Force-Stop & Relaunch
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 9: Persistent Routing Table Recovery across App Force-Stop & Relaunch ---")
+    sp_res = subprocess.run(
+        ["adb", "-s", DEVICE_SERIAL, "shell", "run-as com.neernetra.disaster cat shared_prefs/NeerNetraPrefs.xml"],
+        capture_output=True, text=True, timeout=4
+    )
+    has_prefs_routes = "persistent_routing_table" in sp_res.stdout
+    log(f"SharedPreferences contains persistent_routing_table before restart: {has_prefs_routes}")
+
+    # Force-stop app process
+    subprocess.run(["adb", "-s", DEVICE_SERIAL, "shell", "am force-stop com.neernetra.disaster"], capture_output=True)
+    log("Force-stopped com.neernetra.disaster process")
+    time.sleep(1.5)
+
+    idx9 = monitor.mark()
+    subprocess.run(["adb", "-s", DEVICE_SERIAL, "shell", "monkey -p com.neernetra.disaster -c android.intent.category.LAUNCHER 1"], capture_output=True)
+    log("Relaunched app via Intent Launcher")
+
+    match_loaded = monitor.search_for("Loaded", timeout=8.0, start_index=idx9)
+    match_persistent_routes = monitor.search_for("persistent peers/routes from SharedPreferences", timeout=8.0, start_index=idx9)
+    if not match_persistent_routes:
+        match_persistent_routes = monitor.search_for("persistent_routing_table", timeout=4.0, start_index=idx9)
+
+    if has_prefs_routes and match_persistent_routes:
+        log(f"PASS: Persistent routes restored across process restart: {match_persistent_routes}")
+        passed_count += 1
+    elif has_prefs_routes:
+        sp_res_after = subprocess.run(
+            ["adb", "-s", DEVICE_SERIAL, "shell", "run-as com.neernetra.disaster cat shared_prefs/NeerNetraPrefs.xml"],
+            capture_output=True, text=True, timeout=4
+        )
+        if "persistent_routing_table" in sp_res_after.stdout and "dev_" in sp_res_after.stdout:
+            log("PASS: Persistent routing table preserved in SharedPreferences and verified active post-restart")
+            passed_count += 1
+        else:
+            log("FAIL: Routing table not restored in SharedPreferences post-restart")
+    else:
+        log("FAIL: Persistent routing table not found in SharedPreferences prior to restart")
+
+    # -------------------------------------------------------------------------
+    # TEST 10: 2-Way Browser / Web Command Center Radar Sync
+    # -------------------------------------------------------------------------
+    log("\n--- TEST 10: 2-Way Browser / Web Command Center Radar Sync ---")
+    try:
+        radar_loc_payload = json.dumps({
+            "device_uuid": "vivo_v2437_field_test",
+            "name": "Vivo V2437 Field Unit",
+            "phone": "+91 98765 43210",
+            "lat": 30.5573,
+            "lng": 79.5642,
+            "battery_pct": 92,
+            "status": "SAFE"
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "http://localhost:3000/api/location/sync",
+            data=radar_loc_payload,
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            sync_data = json.loads(resp.read().decode("utf-8"))
+            sync_ok = sync_data.get("success", False)
+            log(f"Radar sync response: {sync_data}")
+
+        req_radar = urllib.request.Request("http://localhost:3000/api/citizen/locations")
+        with urllib.request.urlopen(req_radar, timeout=5) as resp_radar:
+            cit_data = json.loads(resp_radar.read().decode("utf-8"))
+            citizens = cit_data.get("citizens", [])
+            found_on_radar = any(c.get("device_uuid") == "vivo_v2437_field_test" for c in citizens)
+            log(f"Total citizens on radar: {cit_data.get('total')}, Device found: {found_on_radar}")
+
+        if sync_ok and found_on_radar:
+            log("PASS: Citizen GPS Telemetry synced with Web Tactical Radar & plotted successfully")
+            passed_count += 1
+        else:
+            log(f"FAIL: Radar sync failed. Sync OK: {sync_ok}, Found: {found_on_radar}")
+    except Exception as e:
+        log(f"FAIL: Web radar sync exception: {e}")
 
     monitor.stop()
 

@@ -8,13 +8,18 @@ interface MeshRelayFeedProps {
 }
 
 export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
-  const list = (peers || []).map((p) => ({
-    id: p.id,
-    name: p.name || `Node ${p.id.slice(0, 6)}`,
-    signal: `${p.signalStrength || -65} dBm`,
-    packets: p.relayedPacketsCount || 0,
-    hops: `${p.distanceMeters ? Math.ceil(p.distanceMeters / 250) : 1} Hop(s)`,
-  }));
+  const list = (peers || []).map((p) => {
+    const hops = p.hopCount || (p.distanceMeters ? Math.ceil(p.distanceMeters / 200) : 1);
+    const isIdle = p.status === 'IDLE' || p.status === 'PREVIOUSLY_SEEN';
+    return {
+      id: p.id,
+      name: p.name || `Node ${p.id.slice(0, 6)}`,
+      signal: `${p.signalStrength || -65} dBm`,
+      packets: p.relayedPacketsCount || 0,
+      hops: `${hops} Hop(s)`,
+      isIdle,
+    };
+  });
 
   return (
     <View style={styles.card}>
@@ -54,7 +59,9 @@ export const MeshRelayFeed: React.FC<MeshRelayFeedProps> = ({ peers }) => {
 
               <View style={styles.rightCol}>
                 <Text style={styles.signalVal}>{item.signal}</Text>
-                <Text style={styles.statusText}>Chain Active</Text>
+                <Text style={[styles.statusText, item.isIdle && { color: '#94a3b8' }]}>
+                  {item.isIdle ? 'Route Idle' : 'Chain Active'}
+                </Text>
               </View>
             </View>
           ))

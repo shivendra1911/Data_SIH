@@ -22,55 +22,8 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-export function isGenuineDevice(device_uuid?: string, name?: string): boolean {
-  if (!device_uuid && !name) return false;
-  const d = (device_uuid || "").toLowerCase();
-  const n = (name || "").toLowerCase();
-
-  const mockKeywords = [
-    "mock",
-    "demo",
-    "dummy",
-    "test",
-    "synthetic",
-    "audit",
-    "fake",
-    "col_phone",
-    "citizen-apk",
-    "cloud_device",
-    "ramesh",
-    "anita",
-    "katy",
-    "seed",
-    "sample",
-    "priyanshu (citizen node 01)",
-    "dev_priyanshu_phone",
-    "dev_ramesh_kumar",
-    "dev_katy_fuller",
-    "dev_anita_sharma",
-    "dev_node_b_relay",
-    "dev_node_c_dist",
-    "dev_node_d_shelter",
-    "dev_node_x_relay",
-    "dev_node_l_2400m",
-    "dev_initiator_node",
-    "ndrf rescue ops",
-    "cell broadcast",
-    "emergency cell siren",
-    "cell-broadcast",
-    "admin_siren_dispatch",
-    "govt_directive",
-    "command_directive",
-    "broadcast_all",
-  ];
-
-  for (const kw of mockKeywords) {
-    if (d.includes(kw) || n.includes(kw)) {
-      return false;
-    }
-  }
-  return true;
-}
+export { isGenuineDevice } from "@/lib/deviceFilter";
+import { isGenuineDevice } from "@/lib/deviceFilter";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -154,18 +107,7 @@ export async function GET(req: NextRequest) {
         }
 
         const devId = alert.device_id || `mobile-${alert.id ? String(alert.id).slice(0, 6) : "node"}`;
-        // Normalize core hardware token (e.g. dev_g9ubwd6o_ or vivo_v2437) to prevent duplicate stream markers
-        const coreDeviceKey = devId.toLowerCase().includes("v2437")
-          ? "vivo_v2437"
-          : (devId.startsWith("dev_") ? devId.slice(0, 14) : devId);
-        if (processedCloudDevIds.has(coreDeviceKey)) {
-          continue;
-        }
-        processedCloudDevIds.add(coreDeviceKey);
-
-        const existingIdx = result.findIndex(
-          (c) => c.device_uuid === devId || c.device_uuid.toLowerCase().includes(coreDeviceKey)
-        );
+        const existingIdx = result.findIndex((c) => c.device_uuid === devId);
 
         let parsedMedical = "NONE";
         if (alert.sos_type === "HIGH_WATER_EVACUATION" || alert.notes?.includes("WATER_RISING")) {
@@ -254,8 +196,12 @@ export async function GET(req: NextRequest) {
         };
 
         if (existingIdx >= 0) {
-          // IMPORTANT: Fresh Supabase data overrides older cached data
-          result[existingIdx] = { ...result[existingIdx], ...parsedCitizen };
+          const existing = result[existingIdx];
+          if (existing.is_live && (existing.last_seen_minutes_ago ?? 0) <= lastSeenMins) {
+            result[existingIdx] = { ...parsedCitizen, ...existing };
+          } else {
+            result[existingIdx] = { ...existing, ...parsedCitizen };
+          }
         } else {
           result.push(parsedCitizen);
         }
@@ -270,14 +216,11 @@ export async function GET(req: NextRequest) {
     (c) => isGenuineDevice(c.device_uuid, c.name) && (c.last_seen_minutes_ago ?? 0) < 30
   );
 
-  // Deduplicate multiple telemetry streams from the same physical smartphone
+  // Deduplicate multiple telemetry streams by device_uuid
   const uniqueCitizens: CitizenLocation[] = [];
   const seenIdentities = new Set<string>();
   for (const c of result) {
-    const isVivo = (c.name?.toLowerCase().includes("v2437") || c.device_uuid.toLowerCase().includes("v2437"));
-    const identityKey = isVivo
-      ? "vivo_v2437_physical_device"
-      : (c.device_uuid.startsWith("dev_") ? c.device_uuid.slice(0, 14) : c.device_uuid);
+    const identityKey = (c.device_uuid || "").toLowerCase();
     if (!seenIdentities.has(identityKey)) {
       seenIdentities.add(identityKey);
       uniqueCitizens.push(c);

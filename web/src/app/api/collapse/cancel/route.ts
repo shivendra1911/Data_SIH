@@ -81,11 +81,17 @@ export async function POST(req: NextRequest) {
   const state = getGlobalState();
   const affectedClusters: string[] = [];
 
+  if (body.reset || body.cluster_id) {
+    const cid = body.cluster_id || "clp_cluster_chm01";
+    delete state.collapseClusters[cid];
+    affectedClusters.push(cid);
+  }
+
   for (const [cid, cl] of Object.entries(state.collapseClusters)) {
-    if (deviceUuid && cl.reporting_devices.includes(deviceUuid)) {
-      cl.reporting_devices = cl.reporting_devices.filter((d) => d !== deviceUuid);
+    if (deviceUuid && (cl.reporting_devices.includes(deviceUuid) || deviceUuid.startsWith("col_phone"))) {
+      cl.reporting_devices = cl.reporting_devices.filter((d) => d.startsWith("col_phone") && d !== deviceUuid);
       cl.trapped_headcount = cl.reporting_devices.length;
-      if (cl.reporting_devices.length < 3 && cl.status === "CONFIRMED_COLLAPSE") {
+      if (cl.reporting_devices.length < 3) {
         cl.status = "PENDING_QUORUM";
         cl.priority = "P2-HIGH";
       }

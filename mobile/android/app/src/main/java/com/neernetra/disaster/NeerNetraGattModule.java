@@ -264,11 +264,18 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     public void getKnownPeers(Promise promise) {
         try {
             WritableArray array = Arguments.createArray();
+            android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
+
             java.util.Map<String, NeerNetraNativeMeshManager.MeshRoute> routes =
                 NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).getRoutingTable();
             long now = System.currentTimeMillis();
             for (NeerNetraNativeMeshManager.MeshRoute r : routes.values()) {
                 if (r == null || r.peerId == null) continue;
+                if (!myNodeId.isEmpty() && r.peerId.equalsIgnoreCase(myNodeId)) continue;
+                if (!myNodeName.isEmpty() && r.peerId.equalsIgnoreCase(myNodeName)) continue;
+
                 WritableMap map = Arguments.createMap();
                 map.putString("id", r.peerId);
                 map.putString("name", r.name != null ? r.name : ("Citizen [" + r.peerId + "]"));

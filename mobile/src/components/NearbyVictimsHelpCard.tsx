@@ -30,25 +30,38 @@ const statusLabel = (peer: MeshPeer) => {
 
 const getHopBadgeInfo = (peer: MeshPeer) => {
   const hops = peer.hopCount || 1;
-  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 60);
+  const dist = peer.distanceMeters ?? (hops === 1 ? 45 : hops * 200);
   const viaNode = peer.nextHop ? ` via ${peer.nextHop}` : '';
+  const distLabel = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${dist}m`;
+  const isIdle = peer.status === 'IDLE' || peer.status === 'PREVIOUSLY_SEEN';
+  const statusSuffix = isIdle ? ' • Idle' : '';
+
+  if (isIdle) {
+    return {
+      label: `⚪ ${hops <= 1 ? 'Direct' : `${hops} hops`}${viaNode} • ~${distLabel}${statusSuffix}`,
+      bg: '#f1f5f9',
+      border: '#94a3b8',
+      text: '#475569',
+    };
+  }
+
   if (hops <= 1) {
     return {
-      label: `🟢 Direct • ~${dist}m`,
+      label: `🟢 Direct • ~${distLabel}`,
       bg: '#ecfdf5',
       border: '#10b981',
       text: '#047857',
     };
   } else if (hops === 2) {
     return {
-      label: `🟡 Relayed • 2 hops${viaNode} • ~${dist}m`,
+      label: `🟡 Relayed • 2 hops${viaNode} • ~${distLabel}`,
       bg: '#fefce8',
       border: '#eab308',
       text: '#a16207',
     };
   } else {
     return {
-      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${dist}m`,
+      label: `🔵 Relayed • ${hops} hops${viaNode} • ~${distLabel}`,
       bg: '#eff6ff',
       border: '#3b82f6',
       text: '#1d4ed8',

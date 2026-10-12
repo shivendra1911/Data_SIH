@@ -1290,6 +1290,10 @@ public class NeerNetraNativeMeshManager {
 
             if (decodedJson == null || !decodedJson.startsWith("{")) return;
 
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            String myNodeName = sp.getString("local_node_name", "");
+
             // ── Call End / Decline → dismiss IncomingCallActivity immediately ──
             boolean isCallEnd = decodedJson.contains("\"t\":10") || decodedJson.contains("\"t\": 10") ||
                                 decodedJson.contains("\"t\":9")  || decodedJson.contains("\"t\": 9") ||
@@ -1342,9 +1346,6 @@ public class NeerNetraNativeMeshManager {
 
                 // Deterministic 1-to-1 Addressing Filter
                 if (!isGroup && targetId != null && !targetId.isEmpty() && !"BROADCAST".equals(targetId)) {
-                    android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
-                    String myNodeId = sp.getString("local_node_id", "");
-                    String myNodeName = sp.getString("local_node_name", "");
                     boolean matchesId = !myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId));
                     boolean matchesName = !myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName) || myNodeName.contains(targetId));
                     boolean matchesSelf = targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me");
@@ -1373,8 +1374,10 @@ public class NeerNetraNativeMeshManager {
                      decodedJson.contains("\"t\":\"2\"") || decodedJson.contains("\"t\": \"2\"")) {
                 String senderName = "Nearby Citizen";
                 String chatText = "New mesh message";
+                String targetId = "";
                 try {
                     JSONObject jo = new JSONObject(decodedJson);
+                    targetId = jo.optString("d", jo.optString("dest_id", ""));
                     JSONObject p = null;
                     if (jo.optJSONObject("p") != null) {
                         p = jo.optJSONObject("p");
@@ -1390,8 +1393,22 @@ public class NeerNetraNativeMeshManager {
                         if (p.has("text") && !p.getString("text").isEmpty()) {
                             chatText = p.getString("text");
                         }
+                        if (targetId.isEmpty() && p.has("targetId")) {
+                            targetId = p.optString("targetId", "");
+                        }
                     }
                 } catch (Exception ignored) {}
+
+                // Intermediate relay nodes should NOT show private chat notifications intended for another node
+                boolean isBroadcastChat = targetId.isEmpty() || "BROADCAST".equals(targetId) || "GROUP_CALL".equals(targetId);
+                boolean matchesSelf = !myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId));
+                matchesSelf = matchesSelf || (!myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName)));
+                matchesSelf = matchesSelf || "self".equalsIgnoreCase(targetId) || "me".equalsIgnoreCase(targetId);
+
+                if (!isBroadcastChat && !matchesSelf) {
+                    Log.i(TAG, "💬 Relaying private chat addressed to " + targetId + " (suppressing notification on relay node)");
+                    return;
+                }
 
                 Log.i(TAG, "💬 Offline Chat Message detected from " + senderName + ": " + chatText);
                 NeerNetraMeshService.showChatNotification(appContext, senderName, chatText);

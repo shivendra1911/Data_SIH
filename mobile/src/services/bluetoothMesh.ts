@@ -375,6 +375,8 @@ class NeerNetraBLEMesh {
         if (Array.isArray(storedPeers)) {
           for (const p of storedPeers) {
             if (!p || !p.id) continue;
+            if (this.myDeviceId && (p.id === this.myDeviceId || (p.nodeId && p.nodeId === this.myDeviceId))) continue;
+            if (this.myName && p.name && p.name === this.myName) continue;
             const lastSeenTime = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
             const isIdle = (nowMs - lastSeenTime > 240000);
             const peer: MeshPeer = {
@@ -396,7 +398,9 @@ class NeerNetraBLEMesh {
       const nativePeers = await getKnownPeers();
       if (Array.isArray(nativePeers) && nativePeers.length > 0) {
         for (const np of nativePeers) {
-          if (!np || !np.id || np.id === this.myDeviceId) continue;
+          if (!np || !np.id) continue;
+          if (this.myDeviceId && (np.id === this.myDeviceId || (np.nodeId && np.nodeId === this.myDeviceId))) continue;
+          if (this.myName && np.name && np.name === this.myName) continue;
           const existing = this.activePeers.get(np.id);
           const hops = np.hopCount || (existing?.hopCount || 1);
           const isRelayed = hops > 1;
@@ -426,6 +430,9 @@ class NeerNetraBLEMesh {
         console.log(`[BLE Mesh] 🗺️ Ingested ${nativePeers.length} native known routes from GATT module`);
       }
 
+      if (this.myDeviceId) {
+        this.activePeers.delete(this.myDeviceId);
+      }
       this.emitPeersUpdate();
     } catch (e: any) {
       console.warn('[BLE Mesh] Error loading persisted/native peers:', e?.message);
@@ -511,6 +518,12 @@ class NeerNetraBLEMesh {
     this.myName = userName || 'NeerNetra Node';
 
     setLocalNodeId(this.myDeviceId).catch(() => {});
+
+    // Ensure self identity is purged from activePeers and reload persisted routes
+    if (this.myDeviceId) {
+      this.activePeers.delete(this.myDeviceId);
+    }
+    await this.loadPersistedPeers();
 
     try {
       await this.requestAndroidPermissions();
@@ -1226,22 +1239,23 @@ class NeerNetraBLEMesh {
     console.log(`[BLE Mesh] 📥 Packet type=${packet.type} from=${packet.senderId} id=${packet.msgId} target=${packet.targetId} ttl=${packet.ttl}`);
 
     // Deterministic 1-to-1 Node Addressing Filter
-    // Senders often target the receiver's Bluetooth MAC address rather than its logical nodeId (dev_xxxx).
-    // Accept the packet UNLESS it is explicitly addressed to a DIFFERENT known peer in our activePeers.
     const isBroadcast = !packet.targetId || packet.targetId === 'BROADCAST' || packet.targetId === 'GROUP_CALL';
-    const isStrictlyOtherPeer = Boolean(
-      packet.targetId &&
-      !isBroadcast &&
-      this.activePeers.has(packet.targetId) &&
-      packet.targetId !== this.myDeviceId
+    const targetMac = packet.targetId ? this.peerNodeIdToMac.get(packet.targetId) : undefined;
+    const targetNode = packet.targetId ? this.macToNodeId.get(packet.targetId) : undefined;
+    const isTargetingMe = Boolean(
+      (this.myDeviceId && (
+        packet.targetId === this.myDeviceId ||
+        packet.targetNodeId === this.myDeviceId ||
+        targetMac === this.myDeviceId ||
+        targetNode === this.myDeviceId
+      )) ||
+      (Boolean(this.myName) && Boolean(packet.targetId) &&
+       (packet.targetId.toLowerCase().includes(this.myName.toLowerCase()) ||
+        (packet.targetName && packet.targetName.toLowerCase().includes(this.myName.toLowerCase())))) ||
+      packet.targetId === 'self' ||
+      packet.targetId === 'me'
     );
-    const isForMe = isBroadcast ||
-                    packet.targetId === this.myDeviceId ||
-                    packet.targetId === 'self' ||
-                    packet.targetId === 'me' ||
-                    (Boolean(this.myName) && Boolean(packet.targetId) &&
-                     packet.targetId.toLowerCase().includes(this.myName.toLowerCase())) ||
-                    !isStrictlyOtherPeer;
+    const isForMe = isBroadcast || isTargetingMe;
 
     if (isForMe || packet.type === BLEMsgType.HELLO) {
       switch (packet.type) {
