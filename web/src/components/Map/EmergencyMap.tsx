@@ -21,6 +21,7 @@ import {
   SurgeCheckpoint,
   SafeEvacuationRoute,
   EmergencyResponder,
+  CollapseCluster,
 } from "@/lib/types";
 import {
   getSafeRoutesForZone,
@@ -66,17 +67,33 @@ interface EmergencyMapProps {
   selectedEventId?: string;
   onSelectEvent?: (event: SOSEvent) => void;
   onDispatchCluster?: (clusterId: number) => void;
+  collapseClusters?: CollapseCluster[];
 }
 
-// Controller component to smoothly fly camera to center coordinates
-function MapViewController({ center, zoom }: { center: [number, number]; zoom: number }) {
+// Controller component to smoothly fly camera to center coordinates or focus target
+function MapViewController({
+  center,
+  zoom,
+  focusTarget,
+}: {
+  center: [number, number];
+  zoom: number;
+  focusTarget?: [number, number] | null;
+}) {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(center, zoom, {
-      duration: 1.4,
-      easeLinearity: 0.25,
-    });
-  }, [center, zoom, map]);
+    if (focusTarget) {
+      map.flyTo(focusTarget, 16, {
+        duration: 1.4,
+        easeLinearity: 0.25,
+      });
+    } else {
+      map.flyTo(center, zoom, {
+        duration: 1.4,
+        easeLinearity: 0.25,
+      });
+    }
+  }, [center, zoom, focusTarget, map]);
   return null;
 }
 
@@ -435,6 +452,156 @@ const createResponderIcon = (type: string, eta: number) => {
   });
 };
 
+const createCollapseClusterIcon = (cluster: CollapseCluster) => {
+  const isConfirmed = cluster.status === "CONFIRMED_COLLAPSE";
+  const count = cluster.trapped_headcount || cluster.reporting_devices?.length || 1;
+  const badgeBg = isConfirmed ? "#dc2626" : "#d97706";
+  const ringColor = isConfirmed ? "rgba(220, 38, 38, 0.5)" : "rgba(217, 119, 6, 0.4)";
+  const label = isConfirmed ? "QUORUM USAR" : "1 PHONE SHOCK";
+
+  return L.divIcon({
+    className: "custom-collapse-icon",
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 54px;
+          height: 54px;
+          border-radius: 9999px;
+          background: ${ringColor};
+          animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+        "></div>
+        <div style="
+          background: ${badgeBg};
+          color: #ffffff;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          font-size: 9px;
+          font-weight: 800;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+          border: 1.5px solid #ffffff;
+          white-space: nowrap;
+          z-index: 2;
+          margin-bottom: 2px;
+          display: flex;
+          align-items: center;
+          gap: 3px;
+        ">
+          <span>${isConfirmed ? "🚨" : "⚠️"}</span>
+          <span>${label}</span>
+          <span style="background: rgba(0,0,0,0.3); padding: 0 4px; border-radius: 3px; font-family: monospace;">${count}📱</span>
+        </div>
+        <div style="
+          width: 34px;
+          height: 34px;
+          background: #111827;
+          border: 2px solid #ffffff;
+          border-radius: 9999px;
+          box-shadow: 0 0 14px ${badgeBg};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 15px;
+          z-index: 2;
+        ">
+          ${isConfirmed ? "🏢" : "⚡"}
+        </div>
+      </div>
+    `,
+    iconSize: [120, 60],
+    iconAnchor: [60, 42],
+    popupAnchor: [0, -40],
+  });
+};
+
+export interface MapLandslideSector {
+  sector_id: string;
+  sector_name: string;
+  lat: number;
+  lng: number;
+  total_active_phones: number;
+  quorum_threshold: number;
+  status: "MONITORING" | "PENDING_QUORUM" | "CONFIRMED_LANDSLIDE" | "RESOLVED_SAFE";
+  reporting_devices: string[];
+  first_detected_at?: string;
+  last_report_at?: string;
+  latest_tremor_g: number;
+  latest_frequency_hz: number;
+  reporting_count: number;
+  consensus_ratio_percent: number;
+  has_active_directive?: boolean;
+}
+
+const createLandslideSectorIcon = (sector: MapLandslideSector) => {
+  const isConfirmed = sector.status === "CONFIRMED_LANDSLIDE";
+  const isPending = sector.status === "PENDING_QUORUM";
+  const ringColor = isConfirmed ? "rgba(239, 68, 68, 0.45)" : isPending ? "rgba(245, 158, 11, 0.35)" : "rgba(100, 116, 139, 0.2)";
+  const badgeBg = isConfirmed ? "#ef4444" : isPending ? "#f59e0b" : "#475569";
+  const count = sector.reporting_count || sector.reporting_devices?.length || 0;
+  const thresh = sector.quorum_threshold || 3;
+  const label = isConfirmed ? "LANDSLIDE QUORUM" : isPending ? "TREMOR DETECTED" : "SECTOR SENSOR";
+
+  return L.divIcon({
+    className: "landslide-sector-div-icon",
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;">
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 58px;
+          height: 58px;
+          border-radius: 9999px;
+          background: ${ringColor};
+          animation: ping 2.0s cubic-bezier(0, 0, 0.2, 1) infinite;
+        "></div>
+        <div style="
+          background: ${badgeBg};
+          color: #ffffff;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          font-size: 9px;
+          font-weight: 800;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+          border: 1.5px solid #ffffff;
+          white-space: nowrap;
+          z-index: 2;
+          margin-bottom: 2px;
+          display: flex;
+          align-items: center;
+          gap: 3px;
+        ">
+          <span>⛰️</span>
+          <span>${label}</span>
+          <span style="background: rgba(0,0,0,0.35); padding: 0 4px; border-radius: 3px; font-family: monospace;">${count}/${thresh}📱</span>
+        </div>
+        <div style="
+          width: 36px;
+          height: 36px;
+          background: #111827;
+          border: 2px solid #ffffff;
+          border-radius: 9999px;
+          box-shadow: 0 0 14px ${badgeBg};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          z-index: 2;
+        ">
+          ${isConfirmed ? "🚨" : "⛰️"}
+        </div>
+      </div>
+    `,
+    iconSize: [124, 62],
+    iconAnchor: [62, 44],
+    popupAnchor: [0, -42],
+  });
+};
+
 export default function EmergencyMap({
   center,
   zoom,
@@ -447,17 +614,71 @@ export default function EmergencyMap({
   selectedEventId,
   onSelectEvent,
   onDispatchCluster,
+  collapseClusters: propCollapseClusters,
 }: EmergencyMapProps) {
   const [showInfrastructure, setShowInfrastructure] = useState<boolean>(true);
   const [showEpicenter, setShowEpicenter] = useState<boolean>(true);
   const [showLiveCitizens, setShowLiveCitizens] = useState<boolean>(true);
   const [showLastKnownCitizens, setShowLastKnownCitizens] = useState<boolean>(true);
   const [showSafeRoutes, setShowSafeRoutes] = useState<boolean>(true);
+  const [showCollapseClusters, setShowCollapseClusters] = useState<boolean>(true);
+  const [liveCollapseClusters, setLiveCollapseClusters] = useState<CollapseCluster[]>(propCollapseClusters || []);
+  const [showLandslideSectors, setShowLandslideSectors] = useState<boolean>(true);
+  const [landslideSectors, setLandslideSectors] = useState<MapLandslideSector[]>([]);
+  const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
   const [showTurnGuidance, setShowTurnGuidance] = useState<boolean>(false);
   const [showResponders, setShowResponders] = useState<boolean>(true);
   const [basemap, setBasemap] = useState<"hybrid" | "satellite" | "terrain" | "street">("hybrid");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (propCollapseClusters && propCollapseClusters.length > 0) {
+      setLiveCollapseClusters(propCollapseClusters);
+    }
+  }, [propCollapseClusters]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCollapse = async () => {
+      try {
+        const res = await fetch("/api/collapse/active-clusters");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data?.clusters && Array.isArray(data.clusters)) {
+            setLiveCollapseClusters(data.clusters);
+          }
+        }
+      } catch {}
+    };
+    fetchCollapse();
+    const pollInterval = setInterval(fetchCollapse, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLandslides = async () => {
+      try {
+        const res = await fetch("/api/landslide/active-sectors");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data?.sectors && Array.isArray(data.sectors)) {
+            setLandslideSectors(data.sectors);
+          }
+        }
+      } catch {}
+    };
+    fetchLandslides();
+    const pollInterval = setInterval(fetchLandslides, 3500);
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, []);
 
   const mockNamesOrIds = [
     "test",
@@ -553,10 +774,26 @@ export default function EmergencyMap({
 
   return (
     <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-white/10 bg-[#161a20] shadow-sm">
-      {/* Live Google Maps Status Indicator */}
-      <div className="absolute top-3 left-3 z-[1000] bg-[#161a20]/90 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow-xl flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-        <span>Google Maps Engine • Live PostGIS Telemetry</span>
+      {/* Live Google Maps Status Indicator & Active Collapse Focus */}
+      <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-2">
+        <div className="bg-[#161a20]/90 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white shadow-xl flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>Google Maps Engine • Live PostGIS Telemetry</span>
+        </div>
+
+        {liveCollapseClusters.length > 0 && (
+          <button
+            onClick={() => {
+              const first = liveCollapseClusters[0];
+              setFocusTarget([first.centroid_lat, first.centroid_lng]);
+            }}
+            className="bg-red-600 hover:bg-red-500 backdrop-blur-md border border-red-400/50 px-3 py-1.5 rounded-xl text-[11px] font-extrabold text-white shadow-xl flex items-center gap-1.5 transition cursor-pointer"
+            title="Focus camera on detected collapse sector"
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>{liveCollapseClusters.length} Collapse Cluster(s) Active • Focus Sector</span>
+          </button>
+        )}
       </div>
 
       <MapContainer
@@ -565,7 +802,7 @@ export default function EmergencyMap({
         scrollWheelZoom={true}
         className="w-full h-full"
       >
-        <MapViewController center={center} zoom={zoom} />
+        <MapViewController center={center} zoom={zoom} focusTarget={focusTarget} />
 
         {/* Official Google Maps Live Tiles */}
         <TileLayer
@@ -1018,6 +1255,184 @@ export default function EmergencyMap({
               </Popup>
             </Marker>
           ))}
+
+        {/* Active Building Collapse Clusters (100m Perimeter Circle + Centroid Pin) */}
+        {showCollapseClusters &&
+          liveCollapseClusters.map((cCluster) => {
+            const isConfirmed = cCluster.status === "CONFIRMED_COLLAPSE";
+            const deviceCount = cCluster.trapped_headcount || cCluster.reporting_devices?.length || 1;
+            return (
+              <React.Fragment key={`collapse-cluster-${cCluster.cluster_id}`}>
+                {/* 100m Sector Danger Perimeter Circle */}
+                <Circle
+                  center={[cCluster.centroid_lat, cCluster.centroid_lng]}
+                  radius={cCluster.radius_meters || 100}
+                  pathOptions={{
+                    color: isConfirmed ? "#ef4444" : "#f59e0b",
+                    fillColor: isConfirmed ? "#ef4444" : "#fbbf24",
+                    fillOpacity: isConfirmed ? 0.28 : 0.16,
+                    weight: 2,
+                    dashArray: isConfirmed ? "4, 6" : "6, 8",
+                  }}
+                />
+
+                {/* Centroid Shockwave Pin */}
+                <Marker
+                  position={[cCluster.centroid_lat, cCluster.centroid_lng]}
+                  icon={createCollapseClusterIcon(cCluster)}
+                >
+                  <Popup>
+                    <div className="p-2 space-y-2 text-white min-w-[240px] bg-[#1b2027]">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                        <span className="text-xs font-mono font-bold text-white flex items-center gap-1.5">
+                          {isConfirmed ? "🚨 STRUCTURAL COLLAPSE" : "⚠️ PHONE FALL SHOCK"}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                            isConfirmed ? "bg-red-500 text-white" : "bg-amber-500 text-slate-950"
+                          }`}
+                        >
+                          {cCluster.priority || (isConfirmed ? "CRITICAL" : "ELEVATED")}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-bold text-white">
+                        Cluster #{cCluster.cluster_id} • 100m Consensus Perimeter
+                      </div>
+
+                      <div className="text-xs text-white/80 space-y-1 bg-[#161a20] p-2 rounded border border-white/10 font-mono text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Fallen Devices:</span>
+                          <strong className="text-white">{deviceCount} Phone(s)</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Peak Shock:</span>
+                          <strong className="text-amber-400">{cCluster.max_peak_g ? `${cCluster.max_peak_g.toFixed(1)}G` : "3.4G"}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Status:</span>
+                          <span className={isConfirmed ? "text-red-400 font-bold" : "text-amber-400 font-bold"}>
+                            {cCluster.status}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">GPS Centroid:</span>
+                          <span className="text-white/80 text-[10px]">
+                            {cCluster.centroid_lat.toFixed(5)}, {cCluster.centroid_lng.toFixed(5)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isConfirmed ? (
+                        <div className="text-[10px] font-bold text-red-300 bg-red-950/60 p-2 rounded border border-red-500/40 flex items-center gap-1.5">
+                          <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+                          <span>Quorum Consensus Met (≥3 Phones) • Civil Defense Siren Active &amp; USAR Readiness Dispatched</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-medium text-amber-300 bg-amber-950/40 p-1.5 rounded border border-amber-500/30">
+                          1 Phone Fall Shockwave Reported. Monitoring 100m sector for consensus quorum.
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              </React.Fragment>
+            );
+          })}
+
+        {/* Active Landslide Sectors (Dynamic 1/3rd Quorum Boundary Circle + Sector Marker) */}
+        {showLandslideSectors &&
+          landslideSectors.map((sector) => {
+            const isConfirmed = sector.status === "CONFIRMED_LANDSLIDE";
+            const isPending = sector.status === "PENDING_QUORUM";
+            const deviceCount = sector.reporting_count || sector.reporting_devices?.length || 0;
+            const threshold = sector.quorum_threshold || 3;
+            const strokeColor = isConfirmed ? "#ef4444" : isPending ? "#f59e0b" : "#64748b";
+
+            return (
+              <React.Fragment key={`map-landslide-sector-${sector.sector_id}`}>
+                {/* 350m Sector Quorum Surveillance Perimeter */}
+                <Circle
+                  center={[sector.lat, sector.lng]}
+                  radius={350}
+                  pathOptions={{
+                    color: strokeColor,
+                    fillColor: strokeColor,
+                    fillOpacity: isConfirmed ? 0.25 : isPending ? 0.15 : 0.05,
+                    weight: isConfirmed ? 2.5 : 1.5,
+                    dashArray: isConfirmed ? "4, 6" : "6, 8",
+                  }}
+                />
+
+                {/* Sector Mountain Marker */}
+                <Marker
+                  position={[sector.lat, sector.lng]}
+                  icon={createLandslideSectorIcon(sector)}
+                >
+                  <Popup>
+                    <div className="p-2 space-y-2 text-white min-w-[240px] bg-[#1b2027]">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                        <span className="text-xs font-mono font-bold text-white flex items-center gap-1.5">
+                          {isConfirmed ? "🚨 LANDSLIDE QUORUM" : isPending ? "⚠️ SECTOR TREMORS" : "⛰️ MONITORED SECTOR"}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                            isConfirmed ? "bg-red-500 text-white" : isPending ? "bg-amber-500 text-slate-950" : "bg-slate-700 text-slate-300"
+                          }`}
+                        >
+                          {sector.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-bold text-white">
+                        {sector.sector_name}
+                      </div>
+
+                      <div className="text-xs text-white/80 space-y-1 bg-[#161a20] p-2 rounded border border-white/10 font-mono text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Consensus Ratio:</span>
+                          <strong className={isConfirmed ? "text-red-400 font-bold" : "text-white"}>
+                            {deviceCount} / {threshold} Phones (1/3rd Quorum)
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Seismic Frequency:</span>
+                          <strong className="text-amber-400">
+                            {sector.latest_frequency_hz ? `${sector.latest_frequency_hz.toFixed(1)} Hz` : "18.5 Hz"}
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Peak Tremor G:</span>
+                          <strong className="text-amber-400">
+                            {sector.latest_tremor_g ? `${sector.latest_tremor_g.toFixed(2)} G` : "0.22 G"}
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-white/50">Sector Centroid:</span>
+                          <span className="text-white/80 text-[10px]">
+                            {sector.lat.toFixed(5)}, {sector.lng.toFixed(5)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isConfirmed ? (
+                        <div className="text-[10px] font-bold text-red-300 bg-red-950/60 p-2 rounded border border-red-500/40 flex items-center gap-1.5">
+                          <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+                          <span>1/3rd Quorum Consensus Met • Evacuation Siren Dispatched to Sector Phones</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-medium text-amber-300 bg-amber-950/40 p-1.5 rounded border border-amber-500/30">
+                          {deviceCount > 0
+                            ? `Harmonic tremors registered from ${deviceCount} phone(s). Need ${threshold} for 1/3rd quorum consensus.`
+                            : "Baseline harmonic sensors monitoring (10-50Hz)."}
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              </React.Fragment>
+            );
+          })}
       </MapContainer>
 
       {/* Tactical Layers Docked Sidebar (Right Side of Map, Not Screen) */}
@@ -1041,6 +1456,90 @@ export default function EmergencyMap({
 
             {/* Layer toggles */}
             <div className="flex flex-col gap-1.5">
+              {/* Collapse Quorum Clusters Toggle & Jump List */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => setShowCollapseClusters((prev) => !prev)}
+                  className={`w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between transition text-left min-h-[36px] cursor-pointer ${
+                    showCollapseClusters
+                      ? "bg-red-600 text-white font-bold shadow-sm"
+                      : "bg-[#161a20] text-white/70 border border-white/10 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <span>🏢 Collapse Alerts ({liveCollapseClusters.length})</span>
+                  {liveCollapseClusters.length > 0 && (
+                    <span className="bg-white/20 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">LIVE</span>
+                  )}
+                </button>
+
+                {showCollapseClusters && liveCollapseClusters.length > 0 && (
+                  <div className="space-y-1 pt-0.5">
+                    {liveCollapseClusters.map((c) => (
+                      <button
+                        key={c.cluster_id}
+                        onClick={() => setFocusTarget([c.centroid_lat, c.centroid_lng])}
+                        className="w-full text-left p-1.5 rounded-lg bg-red-950/60 border border-red-500/40 text-white text-[10px] hover:bg-red-900/70 transition flex items-center justify-between cursor-pointer"
+                        title="Focus this collapse cluster on map"
+                      >
+                        <span className="truncate font-semibold">
+                          📍 {c.cluster_id.replace("clp_cluster_", "#")} ({c.status === "CONFIRMED_COLLAPSE" ? "QUORUM" : "1 PHONE"})
+                        </span>
+                        <span className="font-mono text-red-300 font-bold shrink-0 text-[10px]">
+                          {c.trapped_headcount || c.reporting_devices.length}📱
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Landslide 1/3rd Quorum Sectors Toggle & Jump List */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => setShowLandslideSectors((prev) => !prev)}
+                  className={`w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between transition text-left min-h-[36px] cursor-pointer ${
+                    showLandslideSectors
+                      ? "bg-amber-600 text-white font-bold shadow-sm"
+                      : "bg-[#161a20] text-white/70 border border-white/10 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <span>⛰️ Landslide Sectors ({landslideSectors.length})</span>
+                  {landslideSectors.filter((s) => s.status === "CONFIRMED_LANDSLIDE").length > 0 && (
+                    <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">SIREN</span>
+                  )}
+                </button>
+
+                {showLandslideSectors && landslideSectors.length > 0 && (
+                  <div className="space-y-1 pt-0.5">
+                    {landslideSectors.map((s) => {
+                      const isConf = s.status === "CONFIRMED_LANDSLIDE";
+                      const isPend = s.status === "PENDING_QUORUM";
+                      return (
+                        <button
+                          key={s.sector_id}
+                          onClick={() => setFocusTarget([s.lat, s.lng])}
+                          className={`w-full text-left p-1.5 rounded-lg border text-white text-[10px] transition flex items-center justify-between cursor-pointer ${
+                            isConf
+                              ? "bg-red-950/70 border-red-500/50 hover:bg-red-900"
+                              : isPend
+                              ? "bg-amber-950/60 border-amber-500/40 hover:bg-amber-900/70"
+                              : "bg-[#1a202c] border-white/10 hover:bg-white/10"
+                          }`}
+                          title={`Focus ${s.sector_name} on map`}
+                        >
+                          <span className="truncate font-semibold">
+                            ⛰️ {s.sector_name.split(":")[0]} ({s.status === "CONFIRMED_LANDSLIDE" ? "QUORUM" : s.status === "PENDING_QUORUM" ? "TREMOR" : "STABLE"})
+                          </span>
+                          <span className="font-mono text-amber-300 font-bold shrink-0 text-[10px]">
+                            {s.reporting_count || 0}/{s.quorum_threshold || 3}📱
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Epicenter & Flood Wave Toggle */}
               <button
                 onClick={() => setShowEpicenter((prev) => !prev)}

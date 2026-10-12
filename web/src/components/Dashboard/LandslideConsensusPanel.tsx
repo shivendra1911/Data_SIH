@@ -109,6 +109,54 @@ export default function LandslideConsensusPanel({
     setLoadingAction(null);
   };
 
+  const handleSimulateLiveTremor = async () => {
+    setLoadingAction("sim_live_gps");
+    let lat = 27.6015;
+    let lng = 77.5975;
+    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {}
+    }
+
+    const secLat = lat.toFixed(2).replace(".", "_");
+    const secLng = lng.toFixed(2).replace(".", "_");
+    const sectorId = `sector_${secLat}_${secLng}`;
+    const sectorName = `Sector [${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E]`;
+
+    try {
+      const res = await fetch("/api/landslide/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sector_id: sectorId,
+          sector_name: sectorName,
+          lat,
+          lng,
+          tremor_g: 0.22,
+          frequency_hz: 18.5,
+          duration_s: 30,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (onShowToast) {
+          if (data.is_confirmed) {
+            onShowToast("1/3rd quorum reached at your GPS sector! Evacuation siren active.");
+          } else {
+            onShowToast(`Tremor report sent from your GPS location (${data.reporting_count || 1}/${data.quorum_threshold || 3} phones).`);
+          }
+        }
+        fetchSectors();
+      }
+    } catch {}
+    setLoadingAction(null);
+  };
+
   const confirmedCount = sectors.filter((s) => s.status === "CONFIRMED_LANDSLIDE").length;
 
   return (
@@ -131,7 +179,17 @@ export default function LandslideConsensusPanel({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleSimulateLiveTremor}
+            disabled={loadingAction === "sim_live_gps"}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Simulate a phone tremor sensor at your actual device GPS coordinates"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <span>Simulate Tremor (My GPS)</span>
+          </button>
+
           <span
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
               confirmedCount > 0

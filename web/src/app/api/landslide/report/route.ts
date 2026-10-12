@@ -19,13 +19,16 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {}
 
-  const sectorId = body.sector_id || "sector_wayanad_04";
+  const lat = Number(body.lat) || 11.5273;
+  const lng = Number(body.lng) || 76.1242;
+  const autoSectorId = `sector_${lat.toFixed(2).replace('.', '_')}_${lng.toFixed(2).replace('.', '_')}`;
+  const autoSectorName = `Sector [${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E]`;
+  const sectorId = body.sector_id || autoSectorId;
+  const sectorName = body.sector_name || autoSectorName;
   const deviceUuid = body.device_uuid || `dev_${Math.random().toString(36).substring(2, 8)}`;
   const tremorG = Number(body.tremor_g) || 0.18;
   const frequencyHz = Number(body.frequency_hz) || 18.5;
   const durationS = Number(body.duration_s) || 30;
-  const lat = Number(body.lat) || 11.5273;
-  const lng = Number(body.lng) || 76.1242;
 
   // 1. Try forwarding to FastAPI backend
   const backendData = await proxyToBackend<any>("/api/landslide/report", {
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (backendData.is_confirmed) {
       const emergencyMessage = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
       const nowIso = new Date().toISOString();
-      const secName = backendData.sector_name || body.sector_name || "Sector 4: Chooralmala / Meppadi (Wayanad)";
+      const secName = backendData.sector_name || body.sector_name || sectorName;
       const totalPhones = backendData.total_active_phones || 9;
 
       if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
   if (!state.sectors[sectorId]) {
     state.sectors[sectorId] = {
       sector_id: sectorId,
-      sector_name: body.sector_name || "Sector 4: Chooralmala / Meppadi (Wayanad)",
+      sector_name: sectorName,
       lat,
       lng,
       total_active_phones: 9,
@@ -154,8 +157,8 @@ export async function POST(req: NextRequest) {
     received_at: nowIso,
   });
 
-  // Retain reports within last 60s
-  sec.reports = sec.reports.filter((r) => nowTs - r.timestamp_sec <= 60.0);
+  // Retain reports within last 15 minutes (900s)
+  sec.reports = sec.reports.filter((r) => nowTs - r.timestamp_sec <= 900.0);
   const uniqueDevices = Array.from(new Set(sec.reports.map((r) => r.device_uuid)));
   sec.reporting_devices = uniqueDevices;
 

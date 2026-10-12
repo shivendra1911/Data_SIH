@@ -66,12 +66,60 @@ export async function GET(req: NextRequest) {
   }
 
   const routes: SafeEvacuationRoute[] = getSafeRoutesForZone(targetZone);
+  const safeRoute = routes.find((r) => r.route_type === "SAFE") || routes[0];
+  const fastRoute = routes.find((r) => r.route_type === "FAST") || routes[1] || routes[0];
+
+  const mobileRoutePoints = safeRoute.waypoints.map((pt) => ({
+    latitude: pt[0],
+    longitude: pt[1],
+  }));
+
+  const fastRoutePoints = fastRoute.waypoints.map((pt) => ({
+    latitude: pt[0],
+    longitude: pt[1],
+  }));
 
   return NextResponse.json(
     {
       status: "success",
+      success: true,
       zone_id: zoneId,
       total_routes: routes.length,
+      distance_meters: Math.round(safeRoute.distance_km * 1000),
+      distance_km: safeRoute.distance_km,
+      estimated_walk_minutes: safeRoute.walk_time_minutes,
+      safe_space: {
+        latitude: safeRoute.assembly_coords[0],
+        longitude: safeRoute.assembly_coords[1],
+        name: safeRoute.assembly_point_name,
+        sector: `${safeRoute.route_name} (${safeRoute.assembly_coords[0].toFixed(4)}°N, ${safeRoute.assembly_coords[1].toFixed(4)}°E)`,
+        elevation_meters: safeRoute.elevation_gain_m + 160,
+        capacity: safeRoute.shelter_capacity,
+        supplies: safeRoute.shelter_facilities,
+        contact_phone: "112",
+      },
+      fast_space: {
+        latitude: fastRoute.assembly_coords[0],
+        longitude: fastRoute.assembly_coords[1],
+        name: fastRoute.assembly_point_name,
+        sector: `${fastRoute.route_name} (${fastRoute.assembly_coords[0].toFixed(4)}°N, ${fastRoute.assembly_coords[1].toFixed(4)}°E)`,
+        elevation_meters: fastRoute.elevation_gain_m + 160,
+        capacity: fastRoute.shelter_capacity,
+        supplies: fastRoute.shelter_facilities,
+        contact_phone: "1078",
+      },
+      evacuation_instructions: safeRoute.turn_instructions || [
+        "Proceed along elevated high-ground contour road.",
+        "Avoid low-lying culverts and river flood plains.",
+      ],
+      route: mobileRoutePoints,
+      fast_route: {
+        name: fastRoute.route_name,
+        assembly_coords: fastRoute.assembly_coords,
+        distance_km: fastRoute.distance_km,
+        walk_time_minutes: fastRoute.walk_time_minutes,
+        waypoints: fastRoutePoints,
+      },
       routes,
       elevation_clearance_protocol: "MINIMUM +18M TO +28M VERTICAL BUFFER ABOVE 100-YR FLOOD LEVEL",
       timestamp: new Date().toISOString(),
@@ -83,28 +131,89 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const newRoute: SafeEvacuationRoute = {
-      id: body.id || `route-custom-${Date.now()}`,
-      zone_id: body.zone_id || "chamoli_01",
-      route_name: body.route_name || "Emergency High-Ground Escape Path",
-      start_point_name: body.start_point_name || "Current GPS Distress Position",
-      start_coords: body.start_coords || [30.5573, 79.5642],
-      assembly_point_name: body.assembly_point_name || "Nearest Designated Flood Shelter",
-      assembly_coords: body.assembly_coords || [30.5532, 79.5615],
-      elevation_gain_m: Number(body.elevation_gain_m) || 120,
-      distance_km: Number(body.distance_km) || 1.5,
-      walk_time_minutes: Number(body.walk_time_minutes) || 22,
-      risk_avoidance_status: body.risk_avoidance_status || "100% CLEAR OF FLOOD PLAIN",
-      waypoints: body.waypoints || [
-        body.start_coords || [30.5573, 79.5642],
-        body.assembly_coords || [30.5532, 79.5615],
-      ],
-      shelter_capacity: Number(body.shelter_capacity) || 500,
-      shelter_facilities: body.shelter_facilities || ["Water", "First-Aid", "Shelter"],
+    const lat = Number(body.lat || body.start_coords?.[0] || 30.5573);
+    const lng = Number(body.lng || body.start_coords?.[1] || 79.5642);
+    const zoneId = body.zone_id || "live_user_location";
+    const zoneName = body.zone_name || body.name || "Live Coordinate Sector";
+
+    const targetZone: HazardZone = {
+      id: zoneId as any,
+      name: zoneName,
+      district: zoneName.split("(")[0].trim(),
+      center: [lat, lng],
+      currentRisk: 10,
+      alertColor: "GREEN",
+      leadTimeMinutes: 480,
+      dangerMarkM: 5.0,
+      warningMarkM: 3.5,
+      primaryTrigger: "Live Navigation Request",
+      telemetry: {
+        rainfall_mm: 0,
+        soil_moisture_pct: 45,
+        slope_deg: 15,
+        river_level_m: 1.2,
+        seismic_mag: 0,
+      },
     };
 
+    const routes: SafeEvacuationRoute[] = getSafeRoutesForZone(targetZone);
+    const safeRoute = routes.find((r) => r.route_type === "SAFE") || routes[0];
+    const fastRoute = routes.find((r) => r.route_type === "FAST") || routes[1] || routes[0];
+
+    const mobileRoutePoints = safeRoute.waypoints.map((pt) => ({
+      latitude: pt[0],
+      longitude: pt[1],
+    }));
+
+    const fastRoutePoints = fastRoute.waypoints.map((pt) => ({
+      latitude: pt[0],
+      longitude: pt[1],
+    }));
+
     return NextResponse.json(
-      { success: true, route: newRoute },
+      {
+        success: true,
+        zone_id: targetZone.id,
+        zone_name: targetZone.name,
+        distance_meters: Math.round(safeRoute.distance_km * 1000),
+        distance_km: safeRoute.distance_km,
+        estimated_walk_minutes: safeRoute.walk_time_minutes,
+        safe_space: {
+          latitude: safeRoute.assembly_coords[0],
+          longitude: safeRoute.assembly_coords[1],
+          name: safeRoute.assembly_point_name,
+          sector: `${safeRoute.route_name} (${safeRoute.assembly_coords[0].toFixed(4)}°N, ${safeRoute.assembly_coords[1].toFixed(4)}°E)`,
+          elevation_meters: safeRoute.elevation_gain_m + 160,
+          capacity: safeRoute.shelter_capacity,
+          supplies: safeRoute.shelter_facilities,
+          contact_phone: "112",
+        },
+        fast_space: {
+          latitude: fastRoute.assembly_coords[0],
+          longitude: fastRoute.assembly_coords[1],
+          name: fastRoute.assembly_point_name,
+          sector: `${fastRoute.route_name} (${fastRoute.assembly_coords[0].toFixed(4)}°N, ${fastRoute.assembly_coords[1].toFixed(4)}°E)`,
+          elevation_meters: fastRoute.elevation_gain_m + 160,
+          capacity: fastRoute.shelter_capacity,
+          supplies: fastRoute.shelter_facilities,
+          contact_phone: "1078",
+        },
+        evacuation_instructions: safeRoute.turn_instructions || [
+          "Proceed along elevated high-ground contour road.",
+          "Avoid low-lying culverts and river flood plains.",
+        ],
+        route: mobileRoutePoints,
+        fast_route: {
+          name: fastRoute.route_name,
+          assembly_coords: fastRoute.assembly_coords,
+          distance_km: fastRoute.distance_km,
+          walk_time_minutes: fastRoute.walk_time_minutes,
+          waypoints: fastRoutePoints,
+        },
+        routes,
+        elevation_clearance_protocol: "MINIMUM +18M TO +28M VERTICAL BUFFER ABOVE 100-YR FLOOD LEVEL",
+        timestamp: new Date().toISOString(),
+      },
       { headers: corsHeaders }
     );
   } catch (err: any) {

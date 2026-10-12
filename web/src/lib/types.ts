@@ -274,3 +274,20 @@ export interface NationalSentinelScan {
     target_nodes_count: number;
   }[];
 }
+
+export interface CollapseCluster {
+  cluster_id: string;
+  status: "PENDING_QUORUM" | "CONFIRMED_COLLAPSE" | "RESOLVED_SAFE";
+  priority: string;
+  centroid_lat: number;
+  centroid_lng: number;
+  radius_meters: number;
+  reporting_devices: string[];
+  trapped_headcount: number;
+  first_detected_at: string;
+  last_report_at: string;
+  max_peak_g: number;
+  average_confidence: number;
+  elapsed_seconds?: number;
+}
+

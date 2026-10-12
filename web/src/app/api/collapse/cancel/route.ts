@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
   for (const [cid, cl] of Object.entries(state.collapseClusters)) {
     if (deviceUuid && (cl.reporting_devices.includes(deviceUuid) || deviceUuid.startsWith("col_phone"))) {
-      cl.reporting_devices = cl.reporting_devices.filter((d) => d.startsWith("col_phone") && d !== deviceUuid);
+      cl.reporting_devices = cl.reporting_devices.filter((d) => d !== deviceUuid);
       cl.trapped_headcount = cl.reporting_devices.length;
       if (cl.reporting_devices.length < 3) {
         cl.status = "PENDING_QUORUM";
@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
       if (cl.reporting_devices.length === 0) {
         cl.status = "RESOLVED_SAFE";
         cl.priority = "NORMAL";
+        delete state.collapseClusters[cid];
       }
       affectedClusters.push(cid);
     }

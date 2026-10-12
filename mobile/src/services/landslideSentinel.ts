@@ -236,27 +236,39 @@ class LandslideSentinel {
     console.warn('[LandslideSentinel] 🚨 1/3RD SECTOR CONSENSUS LANDSLIDE ALARM TRIGGERED!');
   }
 
+  private currentSectorId: string = 'sector_wayanad_04';
+
   private async reportTremorToBackend(loc: { lat: number; lng: number }, tremorG: number, durationS: number) {
+    const secLat = loc.lat.toFixed(2).replace('.', '_');
+    const secLng = loc.lng.toFixed(2).replace('.', '_');
+    const dynamicSectorId = `sector_${secLat}_${secLng}`;
+    const dynamicSectorName = `Sector [${loc.lat.toFixed(3)}°N, ${loc.lng.toFixed(3)}°E]`;
+    this.currentSectorId = dynamicSectorId;
+
     const candidateUrls = [
-      'http://192.168.0.185:3000',
-      'http://192.168.0.185:8000',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:8000',
-      'http://localhost:3000',
-      'http://localhost:8000',
-      'http://10.0.2.2:3000',
-      'http://10.0.2.2:8000',
       'https://data-sih.vercel.app',
+      'http://192.168.0.185:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3000',
+      'http://10.0.2.2:3000',
+      'http://192.168.0.185:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8000',
+      'http://10.0.2.2:8000',
     ];
+
     for (const base of candidateUrls) {
       try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 1200);
         const res = await fetch(`${base}/api/landslide/report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             device_uuid: meshManager.getMyDeviceId(),
-            sector_id: 'sector_wayanad_04',
-            sector_name: 'Sector 4: Chooralmala / Meppadi (Wayanad)',
+            sector_id: dynamicSectorId,
+            sector_name: dynamicSectorName,
             lat: loc.lat,
             lng: loc.lng,
             tremor_g: tremorG,
@@ -264,6 +276,7 @@ class LandslideSentinel {
             duration_s: durationS,
           }),
         });
+        clearTimeout(tId);
         if (res.ok) {
           const data = await res.json();
           if (data.is_confirmed && !this.alertActive) {
@@ -286,21 +299,21 @@ class LandslideSentinel {
 
     // Cancel on backend
     const candidateUrls = [
-      'http://192.168.0.185:3000',
-      'http://192.168.0.185:8000',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:8000',
-      'http://localhost:3000',
-      'http://localhost:8000',
-      'http://10.0.2.2:3000',
-      'http://10.0.2.2:8000',
       'https://data-sih.vercel.app',
+      'http://192.168.0.185:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3000',
+      'http://10.0.2.2:3000',
+      'http://192.168.0.185:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8000',
+      'http://10.0.2.2:8000',
     ];
     for (const base of candidateUrls) {
       fetch(`${base}/api/landslide/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sector_id: 'sector_wayanad_04' }),
+        body: JSON.stringify({ sector_id: this.currentSectorId }),
       }).catch(() => {});
     }
 
@@ -311,33 +324,76 @@ class LandslideSentinel {
 
   /**
    * Testing & simulation hook: Triggers full 1/3rd Sector Quorum Consensus
+   * using real GPS coordinates and live device telemetry.
    */
-  public async simulateOneThirdSectorQuorum() {
-    const candidateUrls = [
-      'http://192.168.0.185:3000',
-      'http://192.168.0.185:8000',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:8000',
-      'http://localhost:3000',
-      'http://localhost:8000',
-      'http://10.0.2.2:3000',
-      'http://10.0.2.2:8000',
-      'https://data-sih.vercel.app',
-    ];
-    for (const base of candidateUrls) {
+  public async simulateOneThirdSectorQuorum(customLoc?: { lat: number; lng: number }) {
+    let loc = customLoc;
+    if (!loc) {
       try {
-        await fetch(`${base}/api/landslide/simulate-quorum`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sector_id: 'sector_wayanad_04' }),
-        });
+        loc = await getCurrentDeviceLocation();
       } catch {}
     }
+    if (!loc) {
+      loc = { lat: 27.6015, lng: 77.5975 };
+    }
+
+    const secLat = loc.lat.toFixed(2).replace('.', '_');
+    const secLng = loc.lng.toFixed(2).replace('.', '_');
+    const dynamicSectorId = `sector_${secLat}_${secLng}`;
+    const dynamicSectorName = `Sector [${loc.lat.toFixed(3)}°N, ${loc.lng.toFixed(3)}°E]`;
+    this.currentSectorId = dynamicSectorId;
+
+    const myDeviceId = meshManager.getMyDeviceId();
+    const candidateUrls = [
+      'https://data-sih.vercel.app',
+      'http://192.168.0.185:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3000',
+      'http://10.0.2.2:3000',
+      'http://192.168.0.185:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8000',
+      'http://10.0.2.2:8000',
+    ];
+
+    const simPeers = [
+      { device_uuid: myDeviceId, lat: loc.lat, lng: loc.lng, tremor_g: 0.22, frequency_hz: 18.5 },
+      { device_uuid: `PEER_LS_ALPHA_${Date.now().toString(36).slice(-4)}`, lat: Number((loc.lat + 0.0002).toFixed(5)), lng: Number((loc.lng + 0.0002).toFixed(5)), tremor_g: 0.24, frequency_hz: 18.3 },
+      { device_uuid: `PEER_LS_BETA_${Date.now().toString(36).slice(-4)}`, lat: Number((loc.lat - 0.0002).toFixed(5)), lng: Number((loc.lng - 0.0002).toFixed(5)), tremor_g: 0.21, frequency_hz: 18.6 },
+    ];
+
+    // Transmit 3 co-located devices to achieve 1/3rd quorum consensus in the sector
+    for (const p of simPeers) {
+      for (const base of candidateUrls) {
+        try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(`${base}/api/landslide/report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              device_uuid: p.device_uuid,
+              sector_id: dynamicSectorId,
+              sector_name: dynamicSectorName,
+              lat: p.lat,
+              lng: p.lng,
+              tremor_g: p.tremor_g,
+              frequency_hz: p.frequency_hz,
+              duration_s: 30,
+            }),
+          });
+          clearTimeout(tId);
+          if (res.ok) break;
+        } catch {}
+      }
+    }
+
     this.triggerLandslideAlarm(30, true);
   }
 
-  public simulateLandslideTremor() {
-    this.simulateOneThirdSectorQuorum();
+  public simulateLandslideTremor(customLoc?: { lat: number; lng: number }) {
+    this.simulateOneThirdSectorQuorum(customLoc);
   }
 }
 

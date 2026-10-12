@@ -66,14 +66,25 @@ export default function BuildingCollapsePanel({
 
   const handleSimulateShock = async () => {
     setIsSimulating(true);
+    let coords = { lat: 27.6015, lng: 77.5975 };
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 1500 })
+        );
+        if (pos?.coords) {
+          coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        }
+      } catch {}
+    }
     try {
       const res = await fetch("/api/collapse/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lat: 30.5512,
-          lng: 79.5621,
-          peak_g: 4.2,
+          lat: coords.lat,
+          lng: coords.lng,
+          peak_g: 4.5,
           confidence: 0.94,
         }),
       });
@@ -179,7 +190,7 @@ export default function BuildingCollapsePanel({
                   <div className="space-y-1.5 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-slate-900 font-display">
-                        Joshimath Sector Collapse Alert #{cluster.cluster_id.slice(-6).toUpperCase()}
+                        Structural Collapse Cluster #{cluster.cluster_id.slice(-6).toUpperCase()}
                       </span>
                       <span
                         className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${

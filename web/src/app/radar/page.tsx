@@ -21,6 +21,7 @@ import {
   CitizenLocation,
   SafeEvacuationRoute,
   EmergencyResponder,
+  CollapseCluster,
 } from "@/lib/types";
 import { fetchActiveClusters } from "@/lib/api";
 import { subscribeToSOSEvents } from "@/lib/supabase";
@@ -72,6 +73,7 @@ export default function TacticalRadarPage() {
   const [selectedZone, setSelectedZone] = useState<HazardZone>(INDIA_FLOOD_ZONES[0]);
   const [sosEvents, setSOSEvents] = useState<SOSEvent[]>([]);
   const [clusters, setClusters] = useState<SOSCluster[]>([]);
+  const [collapseClusters, setCollapseClusters] = useState<CollapseCluster[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>(INDIA_FLOOD_ZONES[0].center);
   const [mapZoom, setMapZoom] = useState<number>(12);
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
@@ -117,6 +119,29 @@ export default function TacticalRadarPage() {
           if (uuid) {
             setSelectedEventId(uuid);
           }
+          const incidentZone: HazardZone = {
+            id: `incident_${pLat.toFixed(3)}_${pLng.toFixed(3)}` as any,
+            name: `Incident Sector (${pLat.toFixed(4)}°N, ${pLng.toFixed(4)}°E)`,
+            district: "Emergency Sector",
+            center: [pLat, pLng],
+            currentRisk: 88,
+            alertColor: "RED",
+            dangerMarkM: 5.0,
+            warningMarkM: 3.5,
+            leadTimeMinutes: 30,
+            primaryTrigger: "Active Incident Focus Telemetry",
+            telemetry: {
+              rainfall_mm: 0,
+              soil_moisture_pct: 50,
+              slope_deg: 12,
+              river_level_m: 2.1,
+              seismic_mag: 0,
+            },
+            hydrograph: [],
+            preventiveDirectives: [],
+            infrastructure: [],
+          };
+          setSelectedZone(incidentZone);
         }
       }
     }
@@ -127,9 +152,10 @@ export default function TacticalRadarPage() {
     const fetchCit = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
       try {
-        const [citRes, clusterList] = await Promise.all([
+        const [citRes, clusterList, clpRes] = await Promise.all([
           fetch("/api/citizen/locations"),
           fetchActiveClusters(selectedZone.id),
+          fetch("/api/collapse/active-clusters"),
         ]);
         if (citRes.ok) {
           const data = await citRes.json();
@@ -149,6 +175,12 @@ export default function TacticalRadarPage() {
                 rescued: false,
               }));
             setSOSEvents(liveSos);
+          }
+        }
+        if (clpRes.ok) {
+          const clpData = await clpRes.json();
+          if (clpData.clusters && Array.isArray(clpData.clusters)) {
+            setCollapseClusters(clpData.clusters);
           }
         }
         setClusters(clusterList);
@@ -534,6 +566,7 @@ export default function TacticalRadarPage() {
                   safeRoutes={activeSafeRoutes}
                   responders={activeResponders}
                   selectedEventId={selectedEventId}
+                  collapseClusters={collapseClusters}
                   onSelectEvent={(e) => {
                     setSelectedEventId(e.id);
                     setMapCenter([e.lat, e.lng]);

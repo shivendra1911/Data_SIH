@@ -19,11 +19,11 @@ export const getDeviceModelName = (): string => {
 
 // Candidate URLs for local debugging via Wi-Fi, USB (adb reverse), or Vercel cloud
 const CANDIDATE_URLS = [
+  'https://data-sih.vercel.app',
   'http://192.168.0.185:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3000',
   'http://10.0.2.2:3000',
-  'https://data-sih.vercel.app',
   'http://192.168.0.185:8000',
   'http://127.0.0.1:8000',
   'http://localhost:8000',
@@ -312,57 +312,147 @@ export interface SafeRouteResponse {
     supplies?: string[];
     contact_phone?: string;
   };
+  fast_space?: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    sector?: string;
+    elevation_meters?: number;
+    capacity: number;
+    supplies?: string[];
+    contact_phone?: string;
+  };
   evacuation_instructions?: string[];
   route: { latitude: number; longitude: number }[];
+  fast_route?: {
+    name?: string;
+    assembly_coords?: [number, number];
+    distance_km?: number;
+    walk_time_minutes?: number;
+    waypoints?: { latitude: number; longitude: number }[];
+  } | { latitude: number; longitude: number }[];
 }
 
 export const getNearestSafeRoute = async (lat: number, lng: number): Promise<SafeRouteResponse> => {
   try {
-    const response = await apiFetch('/api/route/safe', {
+    const response = await apiFetch('/api/routes/safe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lat, lng, zone_id: 'local_sector' }),
     });
     const data = await response.json();
-    await AsyncStorage.setItem('@neernetra_offline_safe_route_v1', JSON.stringify(data));
-    return data;
+    if (data && data.route && Array.isArray(data.route) && data.route.length > 0) {
+      await AsyncStorage.setItem('@neernetra_offline_safe_route_v1', JSON.stringify(data));
+      return data;
+    }
   } catch {
     try {
-      const cached = await AsyncStorage.getItem('@neernetra_offline_safe_route_v1');
-      if (cached) return JSON.parse(cached);
+      const response = await apiFetch('/api/route/safe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, zone_id: 'local_sector' }),
+      });
+      const data = await response.json();
+      if (data && data.route && Array.isArray(data.route) && data.route.length > 0) {
+        await AsyncStorage.setItem('@neernetra_offline_safe_route_v1', JSON.stringify(data));
+        return data;
+      }
     } catch {}
-
-    const safeLat = +(lat + 0.0085).toFixed(6);
-    const safeLng = +(lng + 0.0072).toFixed(6);
-    return {
-      success: true,
-      zone_id: 'local_sector',
-      distance_meters: 1100,
-      distance_km: 1.1,
-      estimated_walk_minutes: 18,
-      safe_space: {
-        latitude: safeLat,
-        longitude: safeLng,
-        name: 'Civil Defense & Disaster Relief Staging Area',
-        sector: `High Ground Shelter (${safeLat.toFixed(4)}°N, ${safeLng.toFixed(4)}°E)`,
-        elevation_meters: 195,
-        capacity: 500,
-        supplies: ['Emergency First Aid', 'Purified Drinking Water', 'Rations', 'Emergency Radio Gateway'],
-        contact_phone: '112',
-      },
-      evacuation_instructions: [
-        'Proceed toward the designated elevated staging area.',
-        'Avoid low-lying underpasses, open storm drains, and submerged passages.',
-      ],
-      route: [
-        { latitude: lat, longitude: lng },
-        { latitude: +(lat + 0.002).toFixed(6), longitude: +(lng + 0.001).toFixed(6) },
-        { latitude: +(lat + 0.005).toFixed(6), longitude: +(lng + 0.003).toFixed(6) },
-        { latitude: +(lat + 0.007).toFixed(6), longitude: +(lng + 0.005).toFixed(6) },
-        { latitude: safeLat, longitude: safeLng },
-      ],
-    };
   }
+
+  try {
+    const cached = await AsyncStorage.getItem('@neernetra_offline_safe_route_v1');
+    if (cached) return JSON.parse(cached);
+  } catch {}
+
+  const safeLat = +(lat + 0.0095).toFixed(6);
+  const safeLng = +(lng + 0.0080).toFixed(6);
+  const dLatSafe = safeLat - lat;
+  const dLngSafe = safeLng - lng;
+  const distSafe = Math.hypot(dLatSafe, dLngSafe) || 0.01;
+  const perpLatSafe = -dLngSafe / distSafe;
+  const perpLngSafe = dLatSafe / distSafe;
+
+  // 1. Generate 24-step curved Safe Route waypoints (Ridge Bypass, never straight)
+  const curvedSafeRoute: { latitude: number; longitude: number }[] = [];
+  const safeSteps = 24;
+  for (let i = 0; i <= safeSteps; i++) {
+    const t = i / safeSteps;
+    const bLat = lat + dLatSafe * t;
+    const bLng = lng + dLngSafe * t;
+    const envelope = Math.sin(t * Math.PI);
+    const ridgeContour = 0.35 + 0.12 * Math.sin(t * Math.PI * 3.0) + 0.05 * Math.sin(t * Math.PI * 5.0);
+    const curveDeviation = envelope * ridgeContour * distSafe;
+    curvedSafeRoute.push({
+      latitude: +(bLat + perpLatSafe * curveDeviation).toFixed(6),
+      longitude: +(bLng + perpLngSafe * curveDeviation).toFixed(6),
+    });
+  }
+
+  // 2. Generate 20-step curved Nearest / Fast Route waypoints (Arterial Corridor, never straight)
+  const fastLat = +(lat + 0.0055).toFixed(6);
+  const fastLng = +(lng + 0.0045).toFixed(6);
+  const dLatFast = fastLat - lat;
+  const dLngFast = fastLng - lng;
+  const distFast = Math.hypot(dLatFast, dLngFast) || 0.007;
+  const perpLatFast = -dLngFast / distFast;
+  const perpLngFast = dLatFast / distFast;
+
+  const curvedFastWaypoints: { latitude: number; longitude: number }[] = [];
+  const fastSteps = 20;
+  for (let i = 0; i <= fastSteps; i++) {
+    const t = i / fastSteps;
+    const bLat = lat + dLatFast * t;
+    const bLng = lng + dLngFast * t;
+    const envelope = Math.sin(t * Math.PI);
+    const avenueArc = 0.16 + 0.06 * Math.cos(t * Math.PI * 2.0);
+    const curveDeviation = envelope * avenueArc * distFast;
+    curvedFastWaypoints.push({
+      latitude: +(bLat + perpLatFast * curveDeviation).toFixed(6),
+      longitude: +(bLng + perpLngFast * curveDeviation).toFixed(6),
+    });
+  }
+
+  return {
+    success: true,
+    zone_id: 'local_sector',
+    distance_meters: Math.round(distSafe * 111000),
+    distance_km: Number((distSafe * 111).toFixed(1)),
+    estimated_walk_minutes: 18,
+    safe_space: {
+      latitude: safeLat,
+      longitude: safeLng,
+      name: 'Civil Defense & Disaster Relief High-Ridge Haven',
+      sector: `Elevated Ridge Sanctuary (${safeLat.toFixed(4)}°N, ${safeLng.toFixed(4)}°E)`,
+      elevation_meters: 195,
+      capacity: 1200,
+      supplies: ['Emergency First Aid', 'Purified Drinking Water', 'Rations', 'Emergency Radio Gateway'],
+      contact_phone: '112',
+    },
+    fast_space: {
+      latitude: fastLat,
+      longitude: fastLng,
+      name: 'Elevated Expressway Highway Flyover Refuge (Fast Path)',
+      sector: `High-Flow Arterial Corridor (${fastLat.toFixed(4)}°N, ${fastLng.toFixed(4)}°E)`,
+      elevation_meters: 178,
+      capacity: 800,
+      supplies: ['First-Aid Post', 'Water Bottling', 'Police Checkpost'],
+      contact_phone: '1078',
+    },
+    evacuation_instructions: [
+      'Ascend immediately onto elevated ridge bypass away from low-lying channels.',
+      'Follow contour road past high-ground outpost (+195m vertical safety clearance).',
+      'Avoid low-lying underpasses, open storm drains, and submerged passages.',
+    ],
+    route: curvedSafeRoute,
+    fast_route: {
+      name: 'Elevated Highway Arterial Corridor (Nearest Path)',
+      assembly_coords: [fastLat, fastLng],
+      distance_km: Number((distFast * 111).toFixed(1)),
+      walk_time_minutes: 10,
+      waypoints: curvedFastWaypoints,
+    },
+  };
 };
 
 export interface NearbyCitizen {

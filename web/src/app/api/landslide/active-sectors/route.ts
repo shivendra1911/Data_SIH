@@ -23,9 +23,9 @@ export async function GET() {
   const nowTs = Date.now() / 1000;
 
   const sectorsList = Object.values(state.sectors).map((sec) => {
-    // Retain reports within last 60 seconds
+    // Retain reports within last 15 minutes (900 seconds)
     const activeReports = (sec.reports || []).filter(
-      (r) => nowTs - (r.timestamp_sec || nowTs) <= 60.0
+      (r) => nowTs - (r.timestamp_sec || nowTs) <= 900.0
     );
     const uniqueDevices = Array.from(new Set(activeReports.map((r) => r.device_uuid)));
     const totalPhones = sec.total_active_phones || 9;
@@ -65,6 +65,17 @@ export async function GET() {
       consensus_ratio_percent: consensusRatioPercent,
       has_active_directive: status === "CONFIRMED_LANDSLIDE" || sec.has_active_directive,
     };
+  });
+
+  // Sort sectors: CONFIRMED_LANDSLIDE first, then PENDING_QUORUM, then sectors with reports, then others
+  sectorsList.sort((a, b) => {
+    const score = (s: typeof a) => {
+      if (s.status === "CONFIRMED_LANDSLIDE") return 100 + s.reporting_count;
+      if (s.status === "PENDING_QUORUM") return 50 + s.reporting_count;
+      if (s.reporting_count > 0) return 20 + s.reporting_count;
+      return 0;
+    };
+    return score(b) - score(a);
   });
 
   return NextResponse.json(

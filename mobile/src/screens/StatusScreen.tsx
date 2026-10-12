@@ -37,6 +37,7 @@ import * as Notifications from 'expo-notifications';
 
 interface StatusScreenProps {
   prediction: ZonePrediction | null;
+  lastLocation?: { lat: number; lng: number } | null;
   isRedZone?: boolean;
   onSOSTrigger?: (type: any) => void;
   networkMode?: string;
@@ -57,6 +58,7 @@ interface StatusScreenProps {
 
 export const StatusScreen: React.FC<StatusScreenProps> = ({
   prediction,
+  lastLocation,
   isRedZone = false,
   onSOSTrigger,
   networkMode = 'ONLINE',
@@ -457,7 +459,11 @@ export const StatusScreen: React.FC<StatusScreenProps> = ({
           <TouchableOpacity
             style={styles.havenRedirectBtn}
             onPress={() => {
-              onNavigate?.('map', { lat: 27.6050, lng: 77.5930 });
+              const uLat = lastLocation?.lat || 27.6015;
+              const uLng = lastLocation?.lng || 77.5975;
+              const havenLat = Number((uLat + 0.0095).toFixed(6));
+              const havenLng = Number((uLng + 0.0080).toFixed(6));
+              onNavigate?.('map', { lat: havenLat, lng: havenLng });
             }}
             activeOpacity={0.85}
           >

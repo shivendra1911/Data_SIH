@@ -554,7 +554,15 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
-  const handleSimulateCollapse = () => {
+  const handleSimulateCollapse = async () => {
+    let loc = lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : null;
+    if (!loc) {
+      try {
+        loc = await getCurrentDeviceLocation();
+      } catch {}
+    }
+    const finalLoc = loc || { lat: 27.6015, lng: 77.5975 };
+
     setQuorumCount(0);
     setCollapseCountdown(60);
     setCollapseEventData({
@@ -563,13 +571,21 @@ export const HomeScreen: React.FC = () => {
       rubbleDurationMs: 8000,
       freeFallDurationMs: 350,
       timestamp: Date.now(),
-      location: lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : { lat: 30.5573, lng: 79.5642 },
+      location: finalLoc,
     });
     setShowCollapseModal(true);
-    buildingCollapseDetector.simulateCollapseEvent(4.8);
+    await buildingCollapseDetector.simulateCollapseEvent(4.8, finalLoc);
   };
 
-  const handleSimulateQuorumCollapse = () => {
+  const handleSimulateQuorumCollapse = async () => {
+    let loc = lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : null;
+    if (!loc) {
+      try {
+        loc = await getCurrentDeviceLocation();
+      } catch {}
+    }
+    const finalLoc = loc || { lat: 27.6015, lng: 77.5975 };
+
     setQuorumCount(3);
     setCollapseCountdown(60);
     setCollapseEventData({
@@ -578,14 +594,21 @@ export const HomeScreen: React.FC = () => {
       rubbleDurationMs: 8000,
       freeFallDurationMs: 350,
       timestamp: Date.now(),
-      location: lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : { lat: 30.5573, lng: 79.5642 },
+      location: finalLoc,
     });
     setShowCollapseModal(true);
-    buildingCollapseDetector.simulateQuorumConsensus(3, 4.8);
+    await buildingCollapseDetector.simulateQuorumConsensus(3, 4.8, finalLoc);
   };
 
-  const handleSimulateLandslide = () => {
-    landslideSentinel.simulateLandslideTremor();
+  const handleSimulateLandslide = async () => {
+    let loc = lastLocation ? { lat: lastLocation.lat, lng: lastLocation.lng } : null;
+    if (!loc) {
+      try {
+        loc = await getCurrentDeviceLocation();
+      } catch {}
+    }
+    const finalLoc = loc || { lat: 27.6015, lng: 77.5975 };
+    landslideSentinel.simulateLandslideTremor(finalLoc);
   };
 
   const handleSimulateStormDrop = () => {
@@ -735,6 +758,7 @@ export const HomeScreen: React.FC = () => {
         {currentTab === 'status' && (
           <StatusScreen
             prediction={prediction}
+            lastLocation={lastLocation}
             isRedZone={isRedZone}
             onSOSTrigger={handleSOSTrigger}
             networkMode={networkMode}

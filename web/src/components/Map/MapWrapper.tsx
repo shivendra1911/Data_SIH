@@ -8,6 +8,7 @@ import {
   CitizenLocation,
   SafeEvacuationRoute,
   EmergencyResponder,
+  CollapseCluster,
 } from "@/lib/types";
 
 interface MapWrapperProps {
@@ -22,6 +23,7 @@ interface MapWrapperProps {
   selectedEventId?: string;
   onSelectEvent?: (event: SOSEvent) => void;
   onDispatchCluster?: (clusterId: number) => void;
+  collapseClusters?: CollapseCluster[];
 }
 
 // Dynamically import EmergencyMap without SSR

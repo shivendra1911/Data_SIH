@@ -58,8 +58,9 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [safeRouteData, setSafeRouteData] = useState<SafeRouteResponse | null>(null);
+  const [activePathMode, setActivePathMode] = useState<'both' | 'safe' | 'fast'>('safe');
   const [nearbyCitizens, setNearbyCitizens] = useState<NearbyCitizen[]>([]);
-  const [showEvacCard, setShowEvacCard] = useState<boolean>(isRedZone);
+  const [showEvacCard, setShowEvacCard] = useState<boolean>(true);
   const [mapLayer, setMapLayer] = useState<'street' | 'satellite' | 'terrain' | 'hybrid' | 'dark' | 'offline'>('street');
 
   const [isCellularConnected, setIsCellularConnected] = useState<boolean>(true);
@@ -86,19 +87,14 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   }, [isOffline]);
 
   useEffect(() => {
+    setShowEvacCard(true);
+    loadSafeRoute(currentLat, currentLng);
     if (targetHavenCoords) {
-      setShowEvacCard(true);
-      sendGpsToMap(targetHavenCoords.lat, targetHavenCoords.lng, 10, true);
-      loadSafeRoute(currentLat, currentLng);
-    } else if (isRedZone) {
-      setShowEvacCard(true);
-      loadSafeRoute(currentLat, currentLng);
-    } else {
-      setShowEvacCard(false);
-      setSafeRouteData(null);
-      sendMessageToWebView({ type: 'CLEAR_ROUTE' });
+      setTimeout(() => {
+        sendMessageToWebView({ type: 'CENTER_HAVEN' });
+      }, 600);
     }
-  }, [isRedZone, targetHavenCoords]);
+  }, [isRedZone, targetHavenCoords, currentLat, currentLng]);
 
   const isMockOrFalsePeer = (id?: string, name?: string) => {
     if (!id && !name) return true;
@@ -281,9 +277,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     if (!ready && !isOffline) {
       handleDownload();
     }
-    if (isRedZone) {
-      await loadSafeRoute(lat, lng);
-    }
+    await loadSafeRoute(lat, lng);
     await loadNearbyCitizens(lat, lng);
   };
 
@@ -292,16 +286,12 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       const data = await getNearestSafeRoute(lat, lng);
       if (data && data.safe_space) {
         setSafeRouteData(data);
-        if (isRedZone) {
-          sendRouteToMap(data);
-        }
+        sendRouteToMap(data);
       } else {
         const cached = await getCachedSafeRoute();
         if (cached) {
           setSafeRouteData(cached);
-          if (isRedZone) {
-            sendRouteToMap(cached);
-          }
+          sendRouteToMap(cached);
         }
       }
     } catch (err) {
@@ -309,9 +299,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       const cached = await getCachedSafeRoute();
       if (cached) {
         setSafeRouteData(cached);
-        if (isRedZone) {
-          sendRouteToMap(cached);
-        }
+        sendRouteToMap(cached);
       }
     }
   };
@@ -345,10 +333,16 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   };
 
   const sendRouteToMap = (routeData: SafeRouteResponse) => {
+    const rawFastWaypoints = Array.isArray(routeData.fast_route)
+      ? routeData.fast_route
+      : (routeData.fast_route as any)?.waypoints || [];
+
     sendMessageToWebView({
       type: 'SET_ROUTE',
       route: routeData.route || [],
       safeSpace: routeData.safe_space,
+      fastRoute: rawFastWaypoints,
+      fastSpace: routeData.fast_space,
     });
   };
 
@@ -369,8 +363,21 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     sendMessageToWebView({ type: 'CENTER_HAVEN' });
   };
 
+  const centerOnFastRefuge = () => {
+    sendMessageToWebView({ type: 'CENTER_FAST' });
+  };
+
   const centerOnEvacRoute = () => {
     sendMessageToWebView({ type: 'FIT_ROUTE' });
+  };
+
+  const centerOnFastRoute = () => {
+    sendMessageToWebView({ type: 'FIT_FAST' });
+  };
+
+  const focusRouteMode = (mode: 'both' | 'safe' | 'fast') => {
+    setActivePathMode(mode);
+    sendMessageToWebView({ type: 'FOCUS_ROUTE', mode });
   };
 
   const handleDownload = async () => {
@@ -486,7 +493,21 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+      box-shadow: 0 4px 12px rgba(16,185,129,0.5);
+    }
+    .fast-haven-pin {
+      background: #0284c7;
+      border: 3px solid #ffffff;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 800;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(2,132,199,0.5);
     }
     .citizen-pin {
       width: 22px;
@@ -655,13 +676,21 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     };
 
     window.clearSafeRoute = function() {
-      if (window.evacPolyline) {
-        map.removeLayer(window.evacPolyline);
-        window.evacPolyline = null;
+      if (window.safePolyline) {
+        map.removeLayer(window.safePolyline);
+        window.safePolyline = null;
       }
-      if (window.havenMarker) {
-        map.removeLayer(window.havenMarker);
-        window.havenMarker = null;
+      if (window.fastPolyline) {
+        map.removeLayer(window.fastPolyline);
+        window.fastPolyline = null;
+      }
+      if (window.shelterMarker) {
+        map.removeLayer(window.shelterMarker);
+        window.shelterMarker = null;
+      }
+      if (window.fastRefugeMarker) {
+        map.removeLayer(window.fastRefugeMarker);
+        window.fastRefugeMarker = null;
       }
     };
 
@@ -675,7 +704,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       } else if (data.type === 'SWITCH_LAYER') {
         window.switchLayer(data.layer);
       } else if (data.type === 'SET_ROUTE') {
-        window.setSafeRoute(data.route, data.safeSpace);
+        window.setSafeRoute(data.route, data.safeSpace, data.fastRoute, data.fastSpace);
       } else if (data.type === 'CLEAR_ROUTE') {
         window.clearSafeRoute();
       } else if (data.type === 'SET_CITIZENS') {
@@ -684,8 +713,14 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         window.centerOnUser();
       } else if (data.type === 'CENTER_HAVEN') {
         window.centerOnSafeHaven();
+      } else if (data.type === 'CENTER_FAST') {
+        window.centerOnFastRefuge();
       } else if (data.type === 'FIT_ROUTE') {
         window.fitEvacuationRoute();
+      } else if (data.type === 'FIT_FAST') {
+        window.fitFastRoute();
+      } else if (data.type === 'FOCUS_ROUTE') {
+        window.focusRoute(data.mode);
       }
     }
     window.handleAppMessage = handleMessage;
@@ -747,9 +782,13 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     };
 
     var shelterMarker = null;
-    var routePolyline = null;
+    var fastRefugeMarker = null;
+    var safePolyline = null;
+    var fastPolyline = null;
     var lastShelterLat = null;
     var lastShelterLng = null;
+    var lastFastLat = null;
+    var lastFastLng = null;
 
     var havenIcon = L.divIcon({
       className: '',
@@ -758,42 +797,99 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       iconAnchor: [19, 19]
     });
 
-    window.setSafeRoute = function(routePoints, safeSpace) {
-      if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
-      if (shelterMarker) { map.removeLayer(shelterMarker); shelterMarker = null; }
+    var fastHavenIcon = L.divIcon({
+      className: '',
+      html: '<div class="fast-haven-pin">⚡</div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
 
+    window.setSafeRoute = function(routePoints, safeSpace, fastRoutePoints, fastSpace) {
+      window.clearSafeRoute();
+
+      // 1. Safe Haven (High-Ground Sanctuary)
       if (safeSpace && safeSpace.latitude && safeSpace.longitude) {
         lastShelterLat = safeSpace.latitude;
         lastShelterLng = safeSpace.longitude;
 
         shelterMarker = L.marker([safeSpace.latitude, safeSpace.longitude], {
           icon: havenIcon,
-          zIndexOffset: 900
+          zIndexOffset: 950
         }).addTo(map);
 
         var popupContent = '<div style="padding:4px 6px;">' +
-          '<div style="font-weight:800; color:#10b981; font-size:13px; margin-bottom:2px;">🛡️ ' + safeSpace.name + '</div>' +
+          '<div style="font-weight:800; color:#10b981; font-size:13px; margin-bottom:2px;">🛡️ ' + safeSpace.name + ' (Safest Path)</div>' +
           '<div style="color:#94a3b8; font-size:11px; margin-bottom:4px;">' + (safeSpace.sector || 'Ridge Evacuation Center') + '</div>' +
-          '<div style="color:#e2e8f0; font-size:11px;">Elevation: ' + (safeSpace.elevation_meters || 1650) + 'm (+180m above valley)</div>' +
-          '<div style="color:#e2e8f0; font-size:11px;">Capacity: ' + (safeSpace.capacity || 500) + ' citizens</div>' +
-          '<div style="color:#38bdf8; font-weight:700; font-size:11px; margin-top:3px;">Hotline: ' + (safeSpace.contact_phone || '112') + '</div>' +
+          '<div style="color:#e2e8f0; font-size:11px;">Elevation: ' + (safeSpace.elevation_meters || 195) + 'm (+180m above valley)</div>' +
+          '<div style="color:#e2e8f0; font-size:11px;">Capacity: ' + (safeSpace.capacity || 1200) + ' citizens</div>' +
+          '<div style="color:#10b981; font-weight:700; font-size:11px; margin-top:3px;">Route: Ridge Contour Road (Flood-Clear)</div>' +
+          '<div style="color:#38bdf8; font-weight:700; font-size:11px;">Hotline: ' + (safeSpace.contact_phone || '112') + '</div>' +
         '</div>';
 
         shelterMarker.bindPopup(popupContent);
+        window.shelterMarker = shelterMarker;
       }
 
+      // 2. Fast Refuge (Highway Arterial Refuge)
+      if (fastSpace && fastSpace.latitude && fastSpace.longitude) {
+        lastFastLat = fastSpace.latitude;
+        lastFastLng = fastSpace.longitude;
+
+        fastRefugeMarker = L.marker([fastSpace.latitude, fastSpace.longitude], {
+          icon: fastHavenIcon,
+          zIndexOffset: 940
+        }).addTo(map);
+
+        var fastPopupContent = '<div style="padding:4px 6px;">' +
+          '<div style="font-weight:800; color:#38bdf8; font-size:13px; margin-bottom:2px;">⚡ ' + fastSpace.name + ' (Nearest Path)</div>' +
+          '<div style="color:#94a3b8; font-size:11px; margin-bottom:4px;">' + (fastSpace.sector || 'High-Flow Arterial Corridor') + '</div>' +
+          '<div style="color:#e2e8f0; font-size:11px;">Elevation: ' + (fastSpace.elevation_meters || 178) + 'm</div>' +
+          '<div style="color:#e2e8f0; font-size:11px;">Capacity: ' + (fastSpace.capacity || 800) + ' citizens</div>' +
+          '<div style="color:#38bdf8; font-weight:700; font-size:11px; margin-top:3px;">Route: Elevated Arterial Corridor (Fastest)</div>' +
+          '<div style="color:#fbbf24; font-weight:700; font-size:11px;">Hotline: ' + (fastSpace.contact_phone || '1078') + '</div>' +
+        '</div>';
+
+        fastRefugeMarker.bindPopup(fastPopupContent);
+        window.fastRefugeMarker = fastRefugeMarker;
+      }
+
+      var boundsToFit = [];
+
+      // 3. Render Curved Fast Route Polyline (Sky Blue #38bdf8)
+      if (fastRoutePoints && fastRoutePoints.length > 0) {
+        var fastLatLngs = fastRoutePoints.map(function(p) { return [p.latitude || p[0], p.longitude || p[1]]; });
+        fastPolyline = L.polyline(fastLatLngs, {
+          color: '#38bdf8',
+          weight: 5,
+          opacity: 0.9,
+          dashArray: '6, 6',
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(map);
+        fastPolyline.bindPopup('<b style="color:#38bdf8">⚡ Nearest Path: Arterial Corridor</b><br/><span style="font-size:10px;color:#94a3b8">Fastest access to elevated highway refuge</span>');
+        window.fastPolyline = fastPolyline;
+        boundsToFit.push.apply(boundsToFit, fastLatLngs);
+      }
+
+      // 4. Render Curved Safe Route Polyline (Emerald Green #10b981)
       if (routePoints && routePoints.length > 0) {
-        var latlngs = routePoints.map(function(p) { return [p.latitude, p.longitude]; });
-        routePolyline = L.polyline(latlngs, {
+        var safeLatLngs = routePoints.map(function(p) { return [p.latitude || p[0], p.longitude || p[1]]; });
+        safePolyline = L.polyline(safeLatLngs, {
           color: '#10b981',
           weight: 6,
+          opacity: 0.95,
           dashArray: '8, 6',
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(map);
+        safePolyline.bindPopup('<b style="color:#10b981">🛡️ Safest Path: Ridge Bypass</b><br/><span style="font-size:10px;color:#94a3b8">Curved contour route away from river channels</span>');
+        window.safePolyline = safePolyline;
+        boundsToFit.push.apply(boundsToFit, safeLatLngs);
+      }
 
+      if (boundsToFit.length > 0) {
         setTimeout(function() {
-          map.fitBounds(routePolyline.getBounds(), { padding: [100, 40] });
+          map.fitBounds(L.latLngBounds(boundsToFit), { padding: [90, 40] });
         }, 300);
       }
     };
@@ -805,11 +901,55 @@ export const MapScreen: React.FC<MapScreenProps> = ({
       }
     };
 
+    window.centerOnFastRefuge = function() {
+      if (lastFastLat && lastFastLng) {
+        map.flyTo([lastFastLat, lastFastLng], 16, { duration: 0.8 });
+        if (fastRefugeMarker) fastRefugeMarker.openPopup();
+      }
+    };
+
     window.fitEvacuationRoute = function() {
-      if (routePolyline) {
-        map.fitBounds(routePolyline.getBounds(), { padding: [120, 60], animate: true });
+      if (safePolyline) {
+        map.fitBounds(safePolyline.getBounds(), { padding: [100, 50], animate: true });
+        if (shelterMarker) shelterMarker.openPopup();
       } else if (lastShelterLat && lastShelterLng) {
         window.centerOnSafeHaven();
+      }
+    };
+
+    window.fitFastRoute = function() {
+      if (fastPolyline) {
+        map.fitBounds(fastPolyline.getBounds(), { padding: [100, 50], animate: true });
+        if (fastRefugeMarker) fastRefugeMarker.openPopup();
+      } else if (lastFastLat && lastFastLng) {
+        window.centerOnFastRefuge();
+      }
+    };
+
+    window.focusRoute = function(mode) {
+      if (mode === 'safe') {
+        if (safePolyline) {
+          safePolyline.setStyle({ weight: 7, opacity: 1.0 });
+          if (fastPolyline) fastPolyline.setStyle({ weight: 3, opacity: 0.35 });
+          map.fitBounds(safePolyline.getBounds(), { padding: [100, 50], animate: true });
+          if (shelterMarker) shelterMarker.openPopup();
+        }
+      } else if (mode === 'fast') {
+        if (fastPolyline) {
+          fastPolyline.setStyle({ weight: 7, opacity: 1.0 });
+          if (safePolyline) safePolyline.setStyle({ weight: 3, opacity: 0.35 });
+          map.fitBounds(fastPolyline.getBounds(), { padding: [100, 50], animate: true });
+          if (fastRefugeMarker) fastRefugeMarker.openPopup();
+        }
+      } else {
+        if (safePolyline) safePolyline.setStyle({ weight: 6, opacity: 0.95 });
+        if (fastPolyline) fastPolyline.setStyle({ weight: 5, opacity: 0.9 });
+        var allBounds = [];
+        if (safePolyline) allBounds.push.apply(allBounds, safePolyline.getLatLngs());
+        if (fastPolyline) allBounds.push.apply(allBounds, fastPolyline.getLatLngs());
+        if (allBounds.length > 0) {
+          map.fitBounds(L.latLngBounds(allBounds), { padding: [90, 40], animate: true });
+        }
       }
     };
 
@@ -882,7 +1022,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
               } else {
                 sendGpsToMap(currentLat, currentLng, 15, true);
               }
-              if (isRedZone && safeRouteData) {
+              if (safeRouteData) {
                 sendRouteToMap(safeRouteData);
               }
               if (nearbyCitizens.length > 0) {
@@ -1028,37 +1168,119 @@ export const MapScreen: React.FC<MapScreenProps> = ({
 
       {/* ─── Floating Map Quick-Action Buttons (Right Column) ─── */}
       <View style={styles.floatingActionCol}>
-        <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnUser} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnUser} activeOpacity={0.8} accessibilityLabel="Center on GPS">
           <Crosshair size={20} color="#0284c7" />
         </TouchableOpacity>
-        {isRedZone && (
-          <>
-            <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnEvacRoute} activeOpacity={0.8}>
-              <Navigation size={18} color="#10b981" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnSafeHaven} activeOpacity={0.8}>
-              <Shield size={18} color="#10b981" />
-            </TouchableOpacity>
-          </>
-        )}
+        <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnEvacRoute} activeOpacity={0.8} accessibilityLabel="Safest Path">
+          <Shield size={18} color="#10b981" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.mapIconBtn} onPress={centerOnFastRoute} activeOpacity={0.8} accessibilityLabel="Nearest Path">
+          <Navigation size={18} color="#38bdf8" />
+        </TouchableOpacity>
       </View>
 
-      {/* ─── Bottom Nearest Safe Route Evacuation Card (Shown Only During Active Danger / Red Zone) ─── */}
-      {isRedZone && showEvacCard && safeRouteData && safeRouteData.safe_space && (
+      {/* ─── Bottom Dual Safe Route Evacuation Card ─── */}
+      {showEvacCard && safeRouteData && safeRouteData.safe_space && (
         <View style={styles.evacCard}>
+          {/* Path Toggle Row */}
+          <View style={styles.pathToggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.pathToggleBtn,
+                activePathMode === 'safe' && styles.pathToggleBtnSafeActive,
+              ]}
+              onPress={() => focusRouteMode('safe')}
+              activeOpacity={0.8}
+            >
+              <Shield size={13} color={activePathMode === 'safe' ? '#047857' : '#64748B'} />
+              <Text
+                style={[
+                  styles.pathToggleBtnText,
+                  activePathMode === 'safe' && styles.pathToggleBtnTextSafe,
+                ]}
+              >
+                🛡️ Safest Path
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.pathToggleBtn,
+                activePathMode === 'fast' && styles.pathToggleBtnFastActive,
+              ]}
+              onPress={() => focusRouteMode('fast')}
+              activeOpacity={0.8}
+            >
+              <Navigation size={13} color={activePathMode === 'fast' ? '#0284C7' : '#64748B'} />
+              <Text
+                style={[
+                  styles.pathToggleBtnText,
+                  activePathMode === 'fast' && styles.pathToggleBtnTextFast,
+                ]}
+              >
+                ⚡ Nearest Path
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.pathToggleBtnBoth,
+                activePathMode === 'both' && styles.pathToggleBtnBothActive,
+              ]}
+              onPress={() => focusRouteMode('both')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.pathToggleBtnText,
+                  activePathMode === 'both' && styles.pathToggleBtnTextBoth,
+                ]}
+              >
+                🗺️ Both
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.evacCardHeader}>
             <View style={styles.evacTitleRow}>
-              <Shield size={18} color="#10b981" style={{ marginRight: 6 }} />
-              <Text style={styles.evacCardTitle}>Nearest Safe Evacuation Haven</Text>
+              {activePathMode === 'fast' ? (
+                <>
+                  <Navigation size={18} color="#0284c7" style={{ marginRight: 6 }} />
+                  <Text style={styles.evacCardTitle}>Nearest Arterial Refuge Corridor</Text>
+                </>
+              ) : (
+                <>
+                  <Shield size={18} color="#10b981" style={{ marginRight: 6 }} />
+                  <Text style={styles.evacCardTitle}>Nearest Safe Evacuation Haven</Text>
+                </>
+              )}
             </View>
-            <View style={styles.safeBadgePill}>
-              <Text style={styles.safeBadgePillText}>HIGH GROUND</Text>
+            <View
+              style={[
+                styles.safeBadgePill,
+                activePathMode === 'fast' && { backgroundColor: '#E0F2FE' },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.safeBadgePillText,
+                  activePathMode === 'fast' && { color: '#0369A1' },
+                ]}
+              >
+                {activePathMode === 'fast' ? 'FAST ARTERIAL' : 'HIGH GROUND'}
+              </Text>
             </View>
           </View>
 
-          <Text style={styles.havenName}>{safeRouteData.safe_space.name}</Text>
+          <Text style={styles.havenName}>
+            {activePathMode === 'fast'
+              ? (safeRouteData.fast_space?.name || 'Elevated Expressway Highway Flyover Refuge')
+              : safeRouteData.safe_space.name}
+          </Text>
           <Text style={styles.havenSector}>
-            {safeRouteData.safe_space.sector || 'Designated High Ground Evacuation Sector'}
+            {activePathMode === 'fast'
+              ? (safeRouteData.fast_space?.sector || 'High-Flow Arterial Corridor')
+              : (safeRouteData.safe_space.sector || 'Designated High Ground Evacuation Sector')}
           </Text>
 
           {/* Quick Metrics */}
@@ -1066,28 +1288,36 @@ export const MapScreen: React.FC<MapScreenProps> = ({
             <View style={styles.metricItem}>
               <Text style={styles.metricLabel}>DISTANCE</Text>
               <Text style={styles.metricVal}>
-                {safeRouteData.distance_km || 1.29} km
+                {activePathMode === 'fast'
+                  ? `${(safeRouteData.distance_km * 0.65).toFixed(1)} km`
+                  : `${safeRouteData.distance_km || 1.29} km`}
               </Text>
             </View>
             <View style={styles.metricDivider} />
             <View style={styles.metricItem}>
               <Text style={styles.metricLabel}>EST. WALK</Text>
               <Text style={styles.metricVal}>
-                ~{safeRouteData.estimated_walk_minutes || 23} min
+                {activePathMode === 'fast'
+                  ? `~${Math.round((safeRouteData.estimated_walk_minutes || 23) * 0.6)} min`
+                  : `~${safeRouteData.estimated_walk_minutes || 23} min`}
               </Text>
             </View>
             <View style={styles.metricDivider} />
             <View style={styles.metricItem}>
               <Text style={styles.metricLabel}>ELEVATION</Text>
               <Text style={styles.metricVal}>
-                +{safeRouteData.safe_space.elevation_meters ? safeRouteData.safe_space.elevation_meters - 1470 : 180}m
+                {activePathMode === 'fast'
+                  ? '+160m'
+                  : `+${safeRouteData.safe_space.elevation_meters ? safeRouteData.safe_space.elevation_meters - 1470 : 180}m`}
               </Text>
             </View>
             <View style={styles.metricDivider} />
             <View style={styles.metricItem}>
               <Text style={styles.metricLabel}>CAPACITY</Text>
               <Text style={styles.metricVal}>
-                {safeRouteData.safe_space.capacity || 500}
+                {activePathMode === 'fast'
+                  ? (safeRouteData.fast_space?.capacity || 800)
+                  : (safeRouteData.safe_space.capacity || 1200)}
               </Text>
             </View>
           </View>
@@ -1095,12 +1325,19 @@ export const MapScreen: React.FC<MapScreenProps> = ({
           {/* Action Row */}
           <View style={styles.evacActionRow}>
             <TouchableOpacity
-              style={styles.primaryRouteBtn}
-              onPress={centerOnEvacRoute}
+              style={[
+                styles.primaryRouteBtn,
+                activePathMode === 'fast' && { backgroundColor: '#0284c7' },
+              ]}
+              onPress={activePathMode === 'fast' ? centerOnFastRoute : centerOnEvacRoute}
               activeOpacity={0.8}
             >
               <Navigation size={16} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.primaryRouteBtnText}>View Nearest Safe Evacuation Route</Text>
+              <Text style={styles.primaryRouteBtnText}>
+                {activePathMode === 'fast'
+                  ? 'Follow Nearest Arterial Route (Sky Blue)'
+                  : 'Follow Safest Contour Ridge Path (Emerald)'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1285,6 +1522,60 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
     zIndex: 30,
+  },
+  pathToggleRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  pathToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    gap: 4,
+  },
+  pathToggleBtnBoth: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pathToggleBtnSafeActive: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
+  pathToggleBtnFastActive: {
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+  },
+  pathToggleBtnBothActive: {
+    borderColor: '#6366F1',
+    backgroundColor: '#EEF2FF',
+  },
+  pathToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  pathToggleBtnTextSafe: {
+    color: '#065F46',
+  },
+  pathToggleBtnTextFast: {
+    color: '#0369A1',
+  },
+  pathToggleBtnTextBoth: {
+    color: '#4338CA',
   },
   evacCardHeader: {
     flexDirection: 'row',

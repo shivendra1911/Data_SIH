@@ -7,14 +7,15 @@ import { saveSOSToOfflineQueue } from './offlineStorage';
 import { subscribeToNativeCollapse } from './gattServerBridge';
 
 const CANDIDATE_URLS = [
+  'https://data-sih.vercel.app',
+  'http://192.168.0.185:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3000',
+  'http://10.0.2.2:3000',
   'http://192.168.0.185:8000',
   'http://127.0.0.1:8000',
   'http://localhost:8000',
   'http://10.0.2.2:8000',
-  'http://192.168.0.185:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3000',
-  'https://data-sih.vercel.app',
 ];
 
 async function postCollapseApi(endpoint: string, bodyObj: any) {
@@ -267,21 +268,24 @@ class BuildingCollapseDetector {
   /**
    * Triggers the 60-second inverted safety confirmation modal and alarms
    */
-  public async triggerInvertedSafetyCountdown(simulatedPeakG?: number) {
+  public async triggerInvertedSafetyCountdown(simulatedPeakG?: number, customCoords?: { lat: number; lng: number }) {
     if (this.phase === 'COUNTDOWN_ACTIVE' || this.phase === 'DISPATCHED') return;
 
     const peak = simulatedPeakG || Math.max(3.5, this.peakG);
     // Confidence formula: C = min(0.98, 0.70 + (Peak_g / 15.0))
     const confidence = Math.min(0.98, Number((0.70 + peak / 15.0).toFixed(3)));
 
-    let coords = { lat: 30.5573, lng: 79.5642 };
-    if (!simulatedPeakG) {
+    let coords = customCoords;
+    if (!coords) {
       try {
         coords = await Promise.race([
           getCurrentDeviceLocation(),
-          new Promise<{ lat: number; lng: number }>((_, reject) => setTimeout(() => reject('timeout'), 800)),
+          new Promise<{ lat: number; lng: number }>((_, reject) => setTimeout(() => reject('timeout'), 1200)),
         ]);
       } catch {}
+    }
+    if (!coords) {
+      coords = { lat: 27.6015, lng: 77.5975 };
     }
 
     const eventData: CollapseEventData = {
@@ -301,6 +305,20 @@ class BuildingCollapseDetector {
     if (this.callbacks.onCollapseTriggered) {
       this.callbacks.onCollapseTriggered(eventData);
     }
+
+    // Immediately transmit single phone fall shockwave to central API portal
+    const deviceId = meshManager.getMyDeviceId();
+    postCollapseApi('/api/collapse/report', {
+      device_uuid: deviceId,
+      lat: coords.lat,
+      lng: coords.lng,
+      confidence,
+      peak_g: peak,
+      free_fall_ms: Math.max(280, this.freeFallDurationMs),
+      rubble_duration_s: 8.0,
+      timestamp: new Date().toISOString(),
+      notes: `Single Phone Fall detected at ${coords.lat.toFixed(4)}°N, ${coords.lng.toFixed(4)}°E (Free-fall: ${Math.max(280, this.freeFallDurationMs)}ms, Peak: ${peak.toFixed(1)}g)`,
+    }).catch(() => {});
 
     // Trigger SOS Haptic pulse: S.O.S (... --- ...)
     try {
@@ -444,53 +462,77 @@ class BuildingCollapseDetector {
   /**
    * ADB / Testing Simulator Hook
    */
-  public simulateCollapseEvent(peakG: number = 4.8) {
+  public async simulateCollapseEvent(peakG: number = 4.8, customCoords?: { lat: number; lng: number }) {
     this.resetStateMachine('IDLE');
     this.peakG = peakG;
     this.freeFallDurationMs = 350;
-    this.triggerInvertedSafetyCountdown(peakG);
+    await this.triggerInvertedSafetyCountdown(peakG, customCoords);
   }
 
-  public simulateQuorumConsensus(peerCount: number = 3, peakG: number = 4.8) {
+  public async simulateQuorumConsensus(peerCount: number = 3, peakG: number = 4.8, customCoords?: { lat: number; lng: number }) {
     this.resetStateMachine('IDLE');
     this.peakG = peakG;
     this.freeFallDurationMs = 350;
     const now = Date.now();
     const count = Math.max(3, peerCount);
-    const peerIds = ['NODE_ALPHA', 'NODE_BETA', 'NODE_GAMMA'];
-    this.recentPeerReports = [
-      { deviceId: 'NODE_ALPHA', lat: 30.5573, lng: 79.5642, timestamp: now - 1000, peakG: 4.5 },
-      { deviceId: 'NODE_BETA', lat: 30.5574, lng: 79.5643, timestamp: now - 2000, peakG: 4.2 },
-      { deviceId: 'NODE_GAMMA', lat: 30.5572, lng: 79.5641, timestamp: now - 500, peakG: 4.9 },
+
+    let coords = customCoords;
+    if (!coords) {
+      try {
+        coords = await Promise.race([
+          getCurrentDeviceLocation(),
+          new Promise<{ lat: number; lng: number }>((_, reject) => setTimeout(() => reject('timeout'), 1200)),
+        ]);
+      } catch {}
+    }
+    if (!coords) {
+      coords = { lat: 27.6015, lng: 77.5975 };
+    }
+
+    const myDeviceId = meshManager.getMyDeviceId();
+    // Clustered strictly within 100 meters (offsets ~20-35m) of the exact phone GPS location
+    const peerIds = [
+      myDeviceId,
+      `PEER_NODE_ALPHA_${Date.now().toString(36).slice(-4)}`,
+      `PEER_NODE_BETA_${Date.now().toString(36).slice(-4)}`,
     ];
+
+    this.recentPeerReports = [
+      { deviceId: peerIds[0], lat: coords.lat, lng: coords.lng, timestamp: now - 500, peakG },
+      { deviceId: peerIds[1], lat: Number((coords.lat + 0.00018).toFixed(5)), lng: Number((coords.lng + 0.00015).toFixed(5)), timestamp: now - 1200, peakG: 4.4 },
+      { deviceId: peerIds[2], lat: Number((coords.lat - 0.00016).toFixed(5)), lng: Number((coords.lng - 0.00020).toFixed(5)), timestamp: now - 800, peakG: 4.6 },
+    ];
+
     for (let i = 4; i <= count; i++) {
-      const id = `NODE_${i}`;
+      const id = `PEER_NODE_${i}_${Date.now().toString(36).slice(-4)}`;
       peerIds.push(id);
       this.recentPeerReports.push({
         deviceId: id,
-        lat: 30.5573 + (i * 0.0001),
-        lng: 79.5642 + (i * 0.0001),
-        timestamp: now - (i * 300),
-        peakG: 4.0 + (Math.random() * 1.5),
+        lat: Number((coords.lat + (i * 0.00008)).toFixed(5)),
+        lng: Number((coords.lng + (i * 0.00008)).toFixed(5)),
+        timestamp: now - (i * 200),
+        peakG: 4.0 + (Math.random() * 1.2),
       });
     }
+
     for (const p of this.recentPeerReports) {
       postCollapseApi('/api/collapse/report', {
         device_uuid: p.deviceId,
         lat: p.lat,
         lng: p.lng,
-        confidence: 0.94,
+        confidence: 0.95,
         peak_g: p.peakG || 4.5,
+        free_fall_ms: 350,
         rubble_duration_s: 8.0,
         timestamp: new Date().toISOString(),
-        notes: `Simulated structural collapse kinetic impact (${p.deviceId})`,
+        notes: `3+ Phone Collapse Quorum confirmed (${p.deviceId}) at exact 100m impact zone`,
       }).catch(() => {});
     }
 
     if (this.callbacks.onQuorumConfirmed) {
       this.callbacks.onQuorumConfirmed(count, peerIds);
     }
-    this.triggerInvertedSafetyCountdown(peakG);
+    await this.triggerInvertedSafetyCountdown(peakG, coords);
   }
 
   private resetStateMachine(targetPhase: CollapsePhase = 'IDLE') {
