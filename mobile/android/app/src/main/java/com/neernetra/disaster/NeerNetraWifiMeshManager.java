@@ -141,7 +141,8 @@ public class NeerNetraWifiMeshManager {
         startUdpSocketListener();
         initWifiAware();
         initWifiP2p();
-        beaconHandler.postDelayed(beaconRunnable, 2000);
+        beaconHandler.removeCallbacks(beaconRunnable);
+        beaconHandler.postDelayed(beaconRunnable, 1500);
         startPeriodicP2pDiscovery();
     }
 
@@ -159,8 +160,10 @@ public class NeerNetraWifiMeshManager {
                 payload.put("id", myNodeId);
                 payload.put("name", myNodeName);
                 payload.put("transport", "wifi_direct");
+                payload.put("hop_count", 1);
                 payload.put("range", 250);
                 payload.put("isBeacon", true);
+                payload.put("isAck", true);
                 payload.put("battery", 85);
 
                 // Ingest active distance-vector gossip routing table for long-range multi-hop (up to kilometers)
@@ -192,7 +195,7 @@ public class NeerNetraWifiMeshManager {
                 envelope.put("s", myNodeId);
                 envelope.put("name", myNodeName);
                 envelope.put("d", "BROADCAST");
-                envelope.put("ttl", 5);
+                envelope.put("ttl", 7);
                 envelope.put("p", payload.toString());
 
                 byte[] packetBytes = envelope.toString().getBytes(StandardCharsets.UTF_8);
@@ -268,6 +271,9 @@ public class NeerNetraWifiMeshManager {
                         if (wifiP2pManager != null && wifiP2pChannel != null) {
                             wifiP2pManager.requestConnectionInfo(wifiP2pChannel, info -> {
                                 if (info != null && info.groupFormed) {
+                                    if (info.groupOwnerAddress != null) {
+                                        allKnownPeerAddresses.add(info.groupOwnerAddress);
+                                    }
                                     String goIp = info.groupOwnerAddress != null ? info.groupOwnerAddress.getHostAddress() : "unknown";
                                     Log.i(TAG, "⚡ Wi-Fi Direct group formed! IsGO=" + info.isGroupOwner + ", GroupOwnerIP=" + goIp);
                                 }
@@ -284,6 +290,10 @@ public class NeerNetraWifiMeshManager {
      */
     private void initWifiP2p() {
         try {
+            if (wifiP2pManager != null && wifiP2pChannel != null && isP2pReceiverRegistered) {
+                startP2pPeerDiscovery();
+                return;
+            }
             PackageManager pm = appContext.getPackageManager();
             if (!pm.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)) {
                 Log.i(TAG, "Wi-Fi Direct (P2P) hardware feature not available on this device.");
@@ -291,8 +301,10 @@ public class NeerNetraWifiMeshManager {
             }
             wifiP2pManager = (WifiP2pManager) appContext.getSystemService(Context.WIFI_P2P_SERVICE);
             if (wifiP2pManager != null) {
-                wifiP2pChannel = wifiP2pManager.initialize(appContext, Looper.getMainLooper(), null);
-                Log.i(TAG, "⚡ Wi-Fi Direct (P2P) subsystem initialized successfully!");
+                if (wifiP2pChannel == null) {
+                    wifiP2pChannel = wifiP2pManager.initialize(appContext, Looper.getMainLooper(), null);
+                    Log.i(TAG, "⚡ Wi-Fi Direct (P2P) subsystem initialized successfully!");
+                }
 
                 if (!isP2pReceiverRegistered) {
                     IntentFilter filter = new IntentFilter();
@@ -344,6 +356,9 @@ public class NeerNetraWifiMeshManager {
      * Initializes Wi-Fi Aware NAN (150m-300m zero-infrastructure discovery).
      */
     private void initWifiAware() {
+        if (isAwareAttached && awareSession != null) {
+            return;
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || wifiAwareManager == null) {
             Log.i(TAG, "Wi-Fi Aware (NAN) hardware not supported on this chipset. Relying on Wi-Fi Direct P2P & High-Performance UDP Socket Mesh.");
             return;
@@ -629,9 +644,10 @@ public class NeerNetraWifiMeshManager {
             }
         } catch (Exception ignored) {}
 
-        // 2. Send via UDP to global broadcast, subnet broadcasts, and all known peer IPs
+        // 2. Send via UDP to global broadcast, subnet broadcasts, and known peer IPs (deduplicated)
         try (DatagramSocket sendSocket = new DatagramSocket()) {
             sendSocket.setBroadcast(true);
+            Set<InetAddress> sentTargets = new HashSet<>();
 
             // Direct unicast if targetId is known
             if (targetId != null && !targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId)) {
@@ -640,15 +656,18 @@ public class NeerNetraWifiMeshManager {
                     try {
                         DatagramPacket unicastPacket = new DatagramPacket(packetBytes, packetBytes.length, targetAddr, MESH_PORT);
                         sendSocket.send(unicastPacket);
+                        sentTargets.add(targetAddr);
                     } catch (Exception ignored) {}
                 }
             }
 
-            // Unicast to all known peer addresses for high-throughput zero-loss delivery
+            // Unicast to all known peer addresses (skipping any already sent above)
             for (InetAddress peerIp : allKnownPeerAddresses) {
+                if (peerIp == null || sentTargets.contains(peerIp)) continue;
                 try {
                     DatagramPacket peerPacket = new DatagramPacket(packetBytes, packetBytes.length, peerIp, MESH_PORT);
                     sendSocket.send(peerPacket);
+                    sentTargets.add(peerIp);
                 } catch (Exception ignored) {}
             }
 
@@ -662,9 +681,11 @@ public class NeerNetraWifiMeshManager {
             // Interface-specific broadcasts (hotspot, P2P, local Wi-Fi)
             List<InetAddress> broadcastAddresses = getBroadcastAddresses();
             for (InetAddress broadcastAddr : broadcastAddresses) {
+                if (broadcastAddr == null || sentTargets.contains(broadcastAddr)) continue;
                 try {
                     DatagramPacket ifPacket = new DatagramPacket(packetBytes, packetBytes.length, broadcastAddr, MESH_PORT);
                     sendSocket.send(ifPacket);
+                    sentTargets.add(broadcastAddr);
                 } catch (Exception ignored) {}
             }
         } catch (Exception e) {
@@ -734,6 +755,7 @@ public class NeerNetraWifiMeshManager {
 
     public synchronized void stopWifiMesh() {
         releaseLocks();
+        beaconHandler.removeCallbacks(beaconRunnable);
         p2pDiscoveryHandler.removeCallbacks(p2pDiscoveryRunnable);
         if (isP2pReceiverRegistered) {
             try {

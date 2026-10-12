@@ -25,7 +25,7 @@ export const startGattServer = async (
   onPacketReceived: (fromDevice: string, base64Data: string) => void,
   onCentralConnected?: (clientAddress: string) => void,
   onCentralDisconnected?: (clientAddress: string) => void,
-  onNativePeerFound?: (deviceId: string, deviceName: string, rssi: number, hopCount?: number, distanceMeters?: number) => void
+  onNativePeerFound?: (deviceId: string, deviceName: string, rssi: number, hopCount?: number, distanceMeters?: number, bleAddress?: string, transport?: string) => void
 ): Promise<boolean> => {
   if (Platform.OS !== 'android') return false;
   if (!NeerNetraGatt) {
@@ -44,6 +44,13 @@ export const startGattServer = async (
     if (packetListener) {
       packetListener.remove();
     }
+    try {
+      emitter.removeAllListeners('onPacketReceived');
+      emitter.removeAllListeners('onCentralConnected');
+      emitter.removeAllListeners('onCentralDisconnected');
+      emitter.removeAllListeners('onNativePeerFound');
+      emitter.removeAllListeners('onNativeVoiceBurstReceived');
+    } catch {}
 
     packetListener = emitter.addListener('onPacketReceived', (event: { fromDevice: string; data: string }) => {
       console.log(`[GattBridge] Packet from central ${event.fromDevice}`);
@@ -61,8 +68,8 @@ export const startGattServer = async (
     });
 
     // Native background scanner found a NeerNetra peer (fires even when JS BLE scanner is throttled)
-    emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number; hopCount?: number; distanceMeters?: number }) => {
-      if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi, peer.hopCount, peer.distanceMeters);
+    emitter.addListener('onNativePeerFound', (peer: { id: string; name: string; rssi: number; hopCount?: number; distanceMeters?: number; bleAddress?: string; transport?: string }) => {
+      if (onNativePeerFound) onNativePeerFound(peer.id, peer.name, peer.rssi, peer.hopCount, peer.distanceMeters, peer.bleAddress, peer.transport);
     });
 
     // Native audio burst received directly via high-speed UDP 8765 or BLE GATT

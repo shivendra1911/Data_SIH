@@ -216,7 +216,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
     public void setLocalNodeId(String nodeId, Promise promise) {
         try {
             android.content.SharedPreferences sp = getReactApplicationContext().getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
-            sp.edit().putString("local_node_id", nodeId).apply();
+            sp.edit().putString("local_node_id", nodeId).commit();
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).refreshAdvertising();
             promise.resolve(true);
         } catch (Exception e) {
             promise.resolve(false);
@@ -361,7 +362,6 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             envelope.put("p", payload.toString());
 
             byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
             String b64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
             NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(b64);
             promise.resolve(true);
@@ -405,7 +405,6 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             envelope.put("p", payload.toString());
 
             byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
             String b64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
             NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(b64);
             promise.resolve(true);
@@ -450,7 +449,6 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             envelope.put("p", payload.toString());
 
             byte[] packetBytes = envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            NeerNetraWifiMeshManager.getInstance(getReactApplicationContext()).broadcastPacketOverWifi(packetBytes);
             String b64 = android.util.Base64.encodeToString(packetBytes, android.util.Base64.NO_WRAP);
             NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).notifyAllClients(b64);
             Log.i(TAG, "🎙️ Native Wi-Fi voice burst dispatched (" + base64Audio.length() + " chars) to " + dest);
@@ -877,8 +875,8 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
             long now = System.currentTimeMillis();
             // Audio deduplication fingerprint: sample 30 chars from audio string
             String hash = trimmedAudio.length() > 40 ? trimmedAudio.substring(10, 40) : trimmedAudio;
-            if (staticMediaPlayer != null && staticMediaPlayer.isPlaying() && (now - lastPlayedAudioTime < 2500) && hash.equals(lastPlayedAudioHash)) {
-                Log.d(TAG, "🔊 Audio already actively playing, ignoring duplicate trigger");
+            if ((now - lastPlayedAudioTime < 2500) && hash.equals(lastPlayedAudioHash)) {
+                Log.d(TAG, "🔊 Audio already played within 2.5s, ignoring duplicate trigger");
                 return true;
             }
             lastPlayedAudioHash = hash;

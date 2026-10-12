@@ -81,18 +81,28 @@ public class NeerNetraNativeMeshManager {
             String action = intent.getAction();
             if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
                 int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
-                if (state == BluetoothAdapter.STATE_ON) {
-                    Log.i(TAG, "Bluetooth re-enabled — restarting NeerNetra mesh advertising and scan");
+                if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
+                    Log.i(TAG, "Bluetooth turning off — cleaning up GATT server and BLE scan state");
+                    if (gattServer != null) {
+                        try { gattServer.close(); } catch (Exception ignored) {}
+                        gattServer = null;
+                    }
+                    notifyCharacteristic = null;
+                    isScanningNative = false;
+                    synchronized (connectedCentrals) {
+                        connectedCentrals.clear();
+                    }
+                } else if (state == BluetoothAdapter.STATE_ON) {
+                    Log.i(TAG, "Bluetooth re-enabled — restarting full NeerNetra GATT server, advertising, and scan");
                     new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                        if (isRunning) {
-                            try {
-                                if (advertiser != null) advertiser.stopAdvertising(advertiseCallback);
-                            } catch (Exception ignored) {}
-                            startAdvertising(bluetoothAdapter != null ? bluetoothAdapter.getName() : "NeerNetra-Node");
-                            restartNativeScanning();
-                        } else {
-                            startMeshEngine("NeerNetra-Node");
+                        if (gattServer != null) {
+                            try { gattServer.close(); } catch (Exception ignored) {}
+                            gattServer = null;
                         }
+                        isRunning = false;
+                        android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                        String name = sp.getString("local_node_name", "NeerNetra-Node");
+                        startMeshEngine(name);
                     }, 1500);
                 }
             }
@@ -148,6 +158,10 @@ public class NeerNetraNativeMeshManager {
         return false;
     }
 
+    public static boolean isRawMacAddress(String id) {
+        return id != null && id.trim().matches("^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$");
+    }
+
     public Map<String, MeshRoute> getRoutingTable() {
         Map<String, MeshRoute> clean = new ConcurrentHashMap<>();
         android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
@@ -157,6 +171,7 @@ public class NeerNetraNativeMeshManager {
         for (Map.Entry<String, MeshRoute> entry : routingTable.entrySet()) {
             MeshRoute r = entry.getValue();
             if (r != null) {
+                if (isRawMacAddress(entry.getKey()) || isRawMacAddress(r.peerId)) continue;
                 if (!myNodeId.isEmpty() && (entry.getKey().equalsIgnoreCase(myNodeId) || entry.getKey().contains(myNodeId) || (r.peerId != null && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId))))) continue;
                 if (!myNodeName.isEmpty() && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName))) continue;
                 if (isTestOrSimulatedPeer(entry.getKey(), r.name)) continue;
@@ -169,7 +184,7 @@ public class NeerNetraNativeMeshManager {
     }
 
     public synchronized void registerDiscoveredPeer(String peerId, String name, int rssi, int hopCount, int distanceMeters, String transport) {
-        if (peerId == null || peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) return;
+        if (peerId == null || peerId.isEmpty() || isRawMacAddress(peerId) || isTestOrSimulatedPeer(peerId, name)) return;
         if (hopCount > MAX_HOP_COUNT) return;
         android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
         String myNodeId = sp.getString("local_node_id", "");
@@ -213,7 +228,7 @@ public class NeerNetraNativeMeshManager {
             MeshRoute r = entry.getValue();
             boolean isSelf = (!myNodeId.isEmpty() && (entry.getKey().equalsIgnoreCase(myNodeId) || entry.getKey().contains(myNodeId) || (r != null && r.peerId != null && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId)))))
                     || (!myNodeName.isEmpty() && r != null && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName)));
-            if (r == null || isSelf || isTestOrSimulatedPeer(entry.getKey(), r.name) || r.hopCount > MAX_HOP_COUNT || (now - r.lastSeen > 120000)) {
+            if (r == null || isSelf || isRawMacAddress(entry.getKey()) || isRawMacAddress(r.peerId) || isTestOrSimulatedPeer(entry.getKey(), r.name) || r.hopCount > MAX_HOP_COUNT || (now - r.lastSeen > 120000)) {
                 it.remove();
             }
         }
@@ -241,6 +256,7 @@ public class NeerNetraNativeMeshManager {
             JSONArray array = new JSONArray();
             for (MeshRoute r : routingTable.values()) {
                 if (r == null || r.peerId == null) continue;
+                if (isRawMacAddress(r.peerId)) continue;
                 if (!myNodeId.isEmpty() && (r.peerId.equalsIgnoreCase(myNodeId) || r.peerId.contains(myNodeId))) continue;
                 if (!myNodeName.isEmpty() && r.name != null && (r.name.equalsIgnoreCase(myNodeName) || r.name.contains(myNodeName))) continue;
                 if (isTestOrSimulatedPeer(r.peerId, r.name)) continue;
@@ -278,7 +294,7 @@ public class NeerNetraNativeMeshManager {
                 if (obj == null) continue;
                 String peerId = obj.optString("peerId", "");
                 String name = obj.optString("name", "Citizen [" + peerId + "]");
-                if (peerId.isEmpty()) continue;
+                if (peerId.isEmpty() || isRawMacAddress(peerId)) continue;
                 if (!myNodeId.isEmpty() && (peerId.equalsIgnoreCase(myNodeId) || peerId.contains(myNodeId))) continue;
                 if (!myNodeName.isEmpty() && (name.equalsIgnoreCase(myNodeName) || name.contains(myNodeName))) continue;
                 if (isTestOrSimulatedPeer(peerId, name)) continue;
@@ -338,7 +354,7 @@ public class NeerNetraNativeMeshManager {
             long now = System.currentTimeMillis();
             JSONArray neighborArray = new JSONArray();
             for (MeshRoute route : routingTable.values()) {
-                if (!route.peerId.equalsIgnoreCase(myNodeId) && !isTestOrSimulatedPeer(route.peerId, route.name)) {
+                if (!route.peerId.equalsIgnoreCase(myNodeId) && !isRawMacAddress(route.peerId) && !isTestOrSimulatedPeer(route.peerId, route.name)) {
                     JSONObject n = new JSONObject();
                     n.put("peer_id", route.peerId);
                     n.put("name", route.name);
@@ -548,12 +564,23 @@ public class NeerNetraNativeMeshManager {
             .addServiceUuid(new ParcelUuid(NEERNETRA_SERVICE_UUID))
             .build();
 
-        // Scan response packet: Manufacturer signature only (8 bytes, well within 31-byte limit)
+        // Scan response packet: Manufacturer signature + local_node_id (up to 24 bytes, within 31-byte limit)
         AdvertiseData.Builder scanBuilder = new AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false);
         try {
-            scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'E', 'E', 'R' });
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String myNodeId = sp.getString("local_node_id", "");
+            byte[] mfrData;
+            if (!myNodeId.isEmpty() && myNodeId.startsWith("dev_") && myNodeId.length() <= 20) {
+                byte[] idBytes = myNodeId.getBytes(StandardCharsets.UTF_8);
+                mfrData = new byte[4 + idBytes.length];
+                mfrData[0] = 'N'; mfrData[1] = 'E'; mfrData[2] = 'E'; mfrData[3] = 'R';
+                System.arraycopy(idBytes, 0, mfrData, 4, idBytes.length);
+            } else {
+                mfrData = new byte[] { 'N', 'E', 'E', 'R' };
+            }
+            scanBuilder.addManufacturerData(0x4E65, mfrData);
         } catch (Exception ignored) {}
 
         try {
@@ -565,6 +592,7 @@ public class NeerNetraNativeMeshManager {
                     return;
                 }
             }
+            try { advertiser.stopAdvertising(advertiseCallback); } catch (Exception ignored) {}
             advertiser.startAdvertising(settings, data, scanBuilder.build(), advertiseCallback);
             Log.i(TAG, "Native BLE advertising started for NeerNetra");
         } catch (SecurityException se) {
@@ -572,6 +600,15 @@ public class NeerNetraNativeMeshManager {
         } catch (Exception e) {
             Log.w(TAG, "Advertising start error: " + e.getMessage());
         }
+    }
+
+    public synchronized void refreshAdvertising() {
+        if (!isRunning || bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) return;
+        try {
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            String name = sp.getString("local_node_name", "NeerNetra-Node");
+            startAdvertising(name);
+        } catch (Exception ignored) {}
     }
 
     private final AdvertiseCallback advertiseCallback = new AdvertiseCallback() {
@@ -642,7 +679,17 @@ public class NeerNetraNativeMeshManager {
                 byte[] beacon = new byte[] { 'N', 'E', 'E', 'R', 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
                 scanBuilder.addManufacturerData(0x4E65, beacon);
             } else {
-                scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'E', 'E', 'R' });
+                android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                String myNodeId = sp.getString("local_node_id", "");
+                if (!myNodeId.isEmpty() && myNodeId.startsWith("dev_") && myNodeId.length() <= 20) {
+                    byte[] idBytes = myNodeId.getBytes(StandardCharsets.UTF_8);
+                    byte[] mfrData = new byte[4 + idBytes.length];
+                    mfrData[0] = 'N'; mfrData[1] = 'E'; mfrData[2] = 'E'; mfrData[3] = 'R';
+                    System.arraycopy(idBytes, 0, mfrData, 4, idBytes.length);
+                    scanBuilder.addManufacturerData(0x4E65, mfrData);
+                } else {
+                    scanBuilder.addManufacturerData(0x4E65, new byte[] { 'N', 'E', 'E', 'R' });
+                }
             }
 
             advertiser.startAdvertising(settings, data, scanBuilder.build(), advertiseCallback);
@@ -710,13 +757,15 @@ public class NeerNetraNativeMeshManager {
                         if (deviceName == null) deviceName = "";
                     } catch (SecurityException ignored) {}
 
-                    // Validate NeerNetra signature
+                    // Validate NeerNetra signature and extract embedded nodeId if present
                     ScanRecord record = result.getScanRecord();
                     boolean isNeer = false;
+                    String discoveredNodeId = null;
                     String devLower = deviceName.toLowerCase();
                     if (devLower.contains("neer") || devLower.contains("citizen")) {
                         isNeer = true;
-                    } else if (record != null) {
+                    }
+                    if (record != null) {
                         List<ParcelUuid> uuids = record.getServiceUuids();
                         if (uuids != null) {
                             for (ParcelUuid u : uuids) {
@@ -726,24 +775,46 @@ public class NeerNetraNativeMeshManager {
                                 }
                             }
                         }
-                        if (!isNeer) {
-                            byte[] mfr = record.getManufacturerSpecificData(0x4E65);
-                            if (mfr != null && mfr.length >= 2 && mfr[0] == 'N' && mfr[1] == 'E') {
-                                isNeer = true;
+                        byte[] mfr = record.getManufacturerSpecificData(0x4E65);
+                        if (mfr != null && mfr.length >= 2 && mfr[0] == 'N' && mfr[1] == 'E') {
+                            isNeer = true;
+                            if (mfr.length > 4 && mfr[2] == 'E' && mfr[3] == 'R') {
+                                try {
+                                    String rawId = new String(mfr, 4, mfr.length - 4, StandardCharsets.UTF_8).trim().replaceAll("[^a-zA-Z0-9_-]", "");
+                                    if (rawId.startsWith("dev_") && rawId.length() >= 8) {
+                                        discoveredNodeId = rawId;
+                                    }
+                                } catch (Exception ignored) {}
                             }
                         }
                     }
                     if (!isNeer) return;
 
+                    android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+                    String myNodeId = sp.getString("local_node_id", "");
+                    if (discoveredNodeId != null && !myNodeId.isEmpty() && discoveredNodeId.equalsIgnoreCase(myNodeId)) {
+                        return;
+                    }
+
+                    String canonicalId = (discoveredNodeId != null && !discoveredNodeId.isEmpty()) ? discoveredNodeId : address;
+                    if (isTestOrSimulatedPeer(canonicalId, deviceName)) return;
+
                     long now = System.currentTimeMillis();
                     Long lastSeen = nativePeerLastSeen.get(address);
                     nativePeerLastSeen.put(address, now);
 
-                    MeshRoute directRoute = routingTable.get(address);
+                    MeshRoute directRoute = routingTable.get(canonicalId);
+                    if (directRoute == null && discoveredNodeId != null) {
+                        directRoute = routingTable.remove(address);
+                    } else if (discoveredNodeId != null) {
+                        routingTable.remove(address);
+                    }
                     if (directRoute == null) directRoute = new MeshRoute();
-                    directRoute.peerId = address;
-                    if (directRoute.name == null || directRoute.name.startsWith("Citizen_") || !deviceName.isEmpty()) {
-                        directRoute.name = deviceName.isEmpty() ? "Citizen_" + address.replace(":", "").substring(Math.max(0, address.length() - 8)) : deviceName;
+                    directRoute.peerId = canonicalId;
+                    if (directRoute.name == null || directRoute.name.startsWith("Citizen_") || (!deviceName.isEmpty() && !deviceName.startsWith("Citizen_"))) {
+                        directRoute.name = deviceName.isEmpty()
+                            ? (directRoute.name != null ? directRoute.name : "Citizen [" + canonicalId.replace(":", "").substring(Math.max(0, canonicalId.length() - 4)) + "]")
+                            : deviceName;
                     }
                     directRoute.hopCount = 1;
                     directRoute.nextHop = address;
@@ -751,23 +822,26 @@ public class NeerNetraNativeMeshManager {
                     if (directRoute.status == null || "IDLE".equals(directRoute.status) || "PREVIOUSLY_SEEN".equals(directRoute.status)) {
                         directRoute.status = "SAFE";
                     }
-                    routingTable.put(address, directRoute);
-                    persistRoutingTable();
+                    if (!isRawMacAddress(canonicalId)) {
+                        routingTable.put(canonicalId, directRoute);
+                        persistRoutingTable();
+                    }
 
-                    // Emit to React Native so JS layer can update its peer list
+                    // Emit to React Native so JS layer can update its peer list and connect via BLE MAC
                     try {
                         WritableMap peerMap = Arguments.createMap();
-                        peerMap.putString("id", address);
+                        peerMap.putString("id", canonicalId);
                         peerMap.putString("name", directRoute.name);
                         peerMap.putInt("rssi", rssi);
                         peerMap.putInt("hopCount", 1);
                         peerMap.putInt("distanceMeters", 45);
+                        peerMap.putString("bleAddress", address);
+                        peerMap.putString("transport", "ble");
                         emitEventMapToReactNative("onNativePeerFound", peerMap);
                     } catch (Exception ignored) {}
 
-                    // If we haven't seen this peer recently, send a synthetic HELLO
                     if (lastSeen == null || now - lastSeen > 30000) {
-                        Log.i(TAG, "Native scan found NeerNetra peer: " + address + " (RSSI: " + rssi + ")");
+                        Log.i(TAG, "Native scan found NeerNetra peer: " + canonicalId + " [BLE=" + address + "] (RSSI: " + rssi + ")");
                     }
                 }
 
@@ -1272,6 +1346,12 @@ public class NeerNetraNativeMeshManager {
                         peerMap.putInt("rssi", -60);
                         peerMap.putInt("hopCount", 1);
                         peerMap.putInt("distanceMeters", 45);
+                        if (fromTransportOrDevice != null && !fromTransportOrDevice.startsWith("wifi:")) {
+                            peerMap.putString("bleAddress", fromTransportOrDevice);
+                            peerMap.putString("transport", "ble");
+                        } else {
+                            peerMap.putString("transport", "wifi");
+                        }
                         emitEventMapToReactNative("onNativePeerFound", peerMap);
                     } catch (Exception ignored) {}
                 }
@@ -1292,13 +1372,24 @@ public class NeerNetraNativeMeshManager {
             }
 
             // 0. Update native distance-vector routing table
-            if (!senderId.isEmpty()) {
+            if (!senderId.isEmpty() && !isRawMacAddress(senderId)) {
+                JSONArray existingPath = packet.optJSONArray("path");
+                int pktHops = (type == 1 || existingPath == null || existingPath.length() <= 1) ? 1 : existingPath.length();
+
                 MeshRoute directRoute = routingTable.get(senderId);
+                if (fromTransportOrDevice != null && !fromTransportOrDevice.startsWith("wifi:") && !fromTransportOrDevice.equalsIgnoreCase(senderId)) {
+                    MeshRoute macRoute = routingTable.remove(fromTransportOrDevice);
+                    if (directRoute == null && macRoute != null) {
+                        directRoute = macRoute;
+                    }
+                }
                 if (directRoute == null) directRoute = new MeshRoute();
                 directRoute.peerId = senderId;
                 directRoute.name = packet.optString("name", directRoute.name != null ? directRoute.name : "Citizen [" + senderId.substring(Math.max(0, senderId.length() - 4)) + "]");
-                directRoute.hopCount = 1;
-                directRoute.nextHop = senderId;
+                if (pktHops == 1 || directRoute.hopCount == 0 || pktHops < directRoute.hopCount) {
+                    directRoute.hopCount = pktHops;
+                    directRoute.nextHop = (fromTransportOrDevice != null && !fromTransportOrDevice.startsWith("wifi:") && pktHops == 1) ? fromTransportOrDevice : senderId;
+                }
                 directRoute.lastSeen = now;
                 directRoute.status = "SAFE";
                 routingTable.put(senderId, directRoute);
@@ -1310,8 +1401,14 @@ public class NeerNetraNativeMeshManager {
                     peerMap.putString("id", senderId);
                     peerMap.putString("name", directRoute.name);
                     peerMap.putInt("rssi", -60);
-                    peerMap.putInt("hopCount", 1);
-                    peerMap.putInt("distanceMeters", 45);
+                    peerMap.putInt("hopCount", directRoute.hopCount);
+                    peerMap.putInt("distanceMeters", directRoute.hopCount <= 1 ? 45 : (directRoute.hopCount * 200));
+                    if (fromTransportOrDevice != null && !fromTransportOrDevice.startsWith("wifi:")) {
+                        peerMap.putString("bleAddress", fromTransportOrDevice);
+                        peerMap.putString("transport", "ble");
+                    } else {
+                        peerMap.putString("transport", "wifi");
+                    }
                     emitEventMapToReactNative("onNativePeerFound", peerMap);
                 } catch (Exception ignored) {}
             }
@@ -1335,7 +1432,8 @@ public class NeerNetraNativeMeshManager {
                     if (n == null) continue;
                     String nId = n.optString("peer_id", n.optString("id", ""));
                     String nName = n.optString("name", "");
-                    if (nId.isEmpty() || (!myNodeId.isEmpty() && (nId.equalsIgnoreCase(myNodeId) || nId.contains(myNodeId)))
+                    if (nId.isEmpty() || isRawMacAddress(nId)
+                            || (!myNodeId.isEmpty() && (nId.equalsIgnoreCase(myNodeId) || nId.contains(myNodeId)))
                             || (!myNodeName.isEmpty() && (nName.equalsIgnoreCase(myNodeName) || nName.contains(myNodeName)))
                             || isTestOrSimulatedPeer(nId, nName)) continue;
                     int nHop = n.optInt("hop_count", n.optInt("hops", 1)) + 1;
@@ -1391,13 +1489,13 @@ public class NeerNetraNativeMeshManager {
             emitEventMapToReactNative("onPacketReceived", params);
 
             // 3. Multi-Hop Managed Relay (Linked List Forwarding across BLE & Wi-Fi)
-            // Relay if TTL > 1 and destination is not strictly and only self
+            // Do not flood-relay type 1 (HELLO/GOSSIP) packets; distance-vector neighbors table handles multi-hop discovery.
             boolean isStrictlyForMe = (!targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId))
                     && ((!myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId)))
                         || (!myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName)))
                         || targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me"));
 
-            if (ttl > 1 && !isStrictlyForMe) {
+            if (ttl > 1 && type != 1 && !isStrictlyForMe) {
                 int newTtl = ttl - 1;
                 packet.put("ttl", newTtl);
 
@@ -1711,7 +1809,8 @@ public class NeerNetraNativeMeshManager {
 
     public synchronized void pokeRadio() {
         try {
-            if (!isRunning) {
+            if (!isRunning || (bluetoothAdapter != null && bluetoothAdapter.isEnabled() && gattServer == null)) {
+                isRunning = false;
                 android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
                 String name = sp.getString("local_node_name", "NeerNetra-Node");
                 startMeshEngine(name);

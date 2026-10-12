@@ -113,20 +113,32 @@ function isNeerManufacturerData(b64?: string | null): boolean {
   return false;
 }
 
+export function isMacAddress(id?: string): boolean {
+  if (!id) return false;
+  return /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(id.trim());
+}
+
+function extractNodeIdFromManufacturerData(b64?: string | null): string | null {
+  if (!b64) return null;
+  try {
+    const raw = atob(cleanBase64(b64));
+    const idx = raw.indexOf('NEER');
+    if (idx !== -1 && raw.length > idx + 4) {
+      const candidate = raw.substring(idx + 4).replace(/[^a-zA-Z0-9_-]/g, '');
+      if (candidate.startsWith('dev_') && candidate.length >= 8) {
+        return candidate;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export function isMockOrFalsePeer(id?: string, name?: string): boolean {
   if (!id && !name) return true;
 
-  // Reject raw MAC addresses (e.g. 7e:8d:28:d7:98:6a or ba:82:f2:56:ed:10)
-  if (id) {
-    const trimmed = id.trim();
-    if (/^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(trimmed) || /^[0-9a-fA-F]{12}$/.test(trimmed)) {
-      return true;
-    }
-  }
-
   const s = `${id || ''} ${name || ''}`.toLowerCase();
 
-  // Generic mock / simulation tokens and unverified Wi-Fi Direct devices
+  // Generic mock / simulation tokens and non-phone PC hosts
   return (
     s.includes('mock') ||
     s.includes('test_') ||
@@ -145,7 +157,6 @@ export function isMockOrFalsePeer(id?: string, name?: string): boolean {
     s.includes('macbook') ||
     s.includes('kushagra') ||
     s.includes('hp-i5') ||
-    s.includes('motoedge60fusion_ishl') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
     s.includes('katy') ||
@@ -205,12 +216,14 @@ function decodePacket(base64: string): {
   payload: string;
 } | null {
   try {
-    const cleaned = cleanBase64(base64);
-    if (!cleaned) return null;
+    const trimmedInput = (base64 || '').trim();
+    if (!trimmedInput) return null;
     let raw = '';
-    if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-      raw = cleaned;
+    if (trimmedInput.startsWith('{') && trimmedInput.endsWith('}')) {
+      raw = trimmedInput;
     } else {
+      const cleaned = cleanBase64(base64);
+      if (!cleaned) return null;
       try {
         raw = decodeURIComponent(escape(atob(cleaned)));
       } catch {
@@ -337,7 +350,7 @@ class NeerNetraBLEMesh {
     const nowMs = Date.now();
     for (const [id, peer] of this.activePeers.entries()) {
       const lastSeenMs = peer.lastSeen ? new Date(peer.lastSeen).getTime() : 0;
-      if (isMockOrFalsePeer(id, peer.name) || (nowMs - lastSeenMs > 120000)) {
+      if (isMacAddress(id) || id.startsWith('wifi:') || isMockOrFalsePeer(id, peer.name) || (nowMs - lastSeenMs > 120000)) {
         this.activePeers.delete(id);
         this.peerNodeIdToMac.delete(id);
         this.macToNodeId.delete(id);
@@ -405,7 +418,9 @@ class NeerNetraBLEMesh {
   public async persistPeers(): Promise<void> {
     try {
       if (Platform.OS === 'web') return;
-      const peersArray = Array.from(this.activePeers.values());
+      const peersArray = Array.from(this.activePeers.values()).filter(
+        (p) => p && p.id && !isMacAddress(p.id) && !p.id.startsWith('wifi:') && !isMockOrFalsePeer(p.id, p.name)
+      );
       await AsyncStorage.setItem(KNOWN_PEERS_STORAGE_KEY, JSON.stringify(peersArray));
     } catch (e: any) {
       console.warn('[BLE Mesh] Failed to persist peers to AsyncStorage:', e?.message);
@@ -429,6 +444,7 @@ class NeerNetraBLEMesh {
         if (Array.isArray(storedPeers)) {
           for (const p of storedPeers) {
             if (!p || !p.id) continue;
+            if (isMacAddress(p.id) || p.id.startsWith('wifi:')) continue;
             if (this.myDeviceId && (p.id === this.myDeviceId || p.id.includes(this.myDeviceId) || this.myDeviceId.includes(p.id) || (p.nodeId && (p.nodeId === this.myDeviceId || p.nodeId.includes(this.myDeviceId))))) continue;
             if (this.myName && p.name && (p.name === this.myName || p.name.includes(this.myName))) continue;
             if (isMockOrFalsePeer(p.id, p.name)) continue;
@@ -443,10 +459,6 @@ class NeerNetraBLEMesh {
               status: isIdle && p.status !== 'SOS' ? 'IDLE' : (p.status || 'SAFE'),
             };
             this.activePeers.set(peer.id, peer);
-            if (peer.nodeId) {
-              this.peerNodeIdToMac.set(peer.nodeId, peer.id);
-              this.macToNodeId.set(peer.id, peer.nodeId);
-            }
           }
           console.log(`[BLE Mesh] 💾 Loaded ${this.activePeers.size} persistent peers from AsyncStorage`);
         }
@@ -488,8 +500,11 @@ class NeerNetraBLEMesh {
             lng: np.lng || existing?.lng,
           };
           this.activePeers.set(np.id, merged);
-          this.peerNodeIdToMac.set(np.id, np.id);
-          this.macToNodeId.set(np.id, np.id);
+          if (np.nextHop && isMacAddress(np.nextHop) && !isMacAddress(np.id)) {
+            this.peerNodeIdToMac.set(np.id, np.nextHop);
+            this.macToNodeId.set(np.nextHop, np.id);
+            this.activePeers.delete(np.nextHop);
+          }
         }
         console.log(`[BLE Mesh] 🗺️ Ingested ${nativePeers.length} native known routes from GATT module`);
       }
@@ -531,8 +546,17 @@ class NeerNetraBLEMesh {
       this.manager.onStateChange((state: any) => {
         console.log('[BLE Mesh] Bluetooth state changed:', state);
         if (this.onStateChange) this.onStateChange(state);
-        if (state === State.PoweredOn && !this.isMeshStarted) {
-          this.startMesh().catch((e) => console.warn('[BLE Mesh] startMesh error:', e));
+        if (state === State.PoweredOff || state === State.Resetting) {
+          this.isScanning = false;
+          this.connectedDevices.clear();
+          this.connectingDevices.clear();
+          this.peripheralClients.clear();
+        } else if (state === State.PoweredOn) {
+          if (!this.isMeshStarted) {
+            this.startMesh().catch((e) => console.warn('[BLE Mesh] startMesh error:', e));
+          } else {
+            this.startScanning().catch((e) => console.warn('[BLE Mesh] restart startScanning error:', e));
+          }
         }
       }, true);
     } catch (e) {
@@ -661,105 +685,107 @@ class NeerNetraBLEMesh {
         (clientAddress) => {
           console.log('[BLE Mesh] Remote device connected as Central to us:', clientAddress);
           this.peripheralClients.add(clientAddress);
-          const existingPeer = this.activePeers.get(clientAddress);
-          if (!existingPeer) {
-            const peer: MeshPeer = {
-              id: clientAddress,
-              name: `Citizen [${clientAddress.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`,
-              signalStrength: -60,
-              relayedPacketsCount: 0,
-              role: 'Citizen Node',
-              distanceMeters: 5,
-              status: 'SAFE',
-              lastSeen: new Date(),
-            };
-            this.activePeers.set(clientAddress, peer);
-          } else {
-            // Refresh lastSeen so stale pruning doesn't remove them
-            this.activePeers.set(clientAddress, { ...existingPeer, lastSeen: new Date() });
+          const knownNodeId = this.macToNodeId.get(clientAddress);
+          if (knownNodeId && !isMacAddress(knownNodeId)) {
+            const existingPeer = this.activePeers.get(knownNodeId);
+            if (existingPeer) {
+              this.activePeers.set(knownNodeId, { ...existingPeer, id: knownNodeId, lastSeen: new Date() });
+              this.activePeers.delete(clientAddress);
+              this.emitPeersUpdate();
+            }
           }
-          this.emitPeersUpdate();
 
-          // Immediately send a HELLO via GATT notify so the peer knows we exist
-          // even if their Central→us connection failed or is still pending.
+          // Immediately send a HELLO via GATT notify so the peer knows we exist and replies with its canonical nodeId
           setTimeout(() => {
-            const helloPayload = JSON.stringify({ name: this.myName, id: this.myDeviceId, isAck: false });
-            const helloPkt = encodePacket(BLEMsgType.HELLO, this.myDeviceId, helloPayload, 1);
+            const helloPayload = JSON.stringify({ name: this.myName, id: this.myDeviceId, hop_count: 1, isAck: false });
+            const helloPkt = encodePacket(BLEMsgType.HELLO, this.myDeviceId, helloPayload, 7);
             notifyAllCentrals(helloPkt).catch(() => {});
             console.log(`[BLE Mesh] Sent HELLO-notify to newly connected Central: ${clientAddress}`);
           }, 500);
-
-          // Bidirectional: Connect back as Central ONLY if we haven't already AND
-          // our MAC is "lower" (prevents both sides connecting simultaneously → GATT 133).
-          // Lower MAC connects as Central; higher MAC stays as Peripheral only.
-          const myMac = this.myDeviceId;
-          const shouldWeConnect = !this.connectedDevices.has(clientAddress) &&
-                                  !this.connectingDevices.has(clientAddress) &&
-                                  myMac.toLowerCase() < clientAddress.toLowerCase();
-          if (shouldWeConnect) {
-            // Small delay to let the peer finish their connection setup
-            setTimeout(() => {
-              this.connectToPeer(clientAddress).catch(() => {});
-            }, 1200);
-          }
         },
         (clientAddress) => {
           console.log('[BLE Mesh] Remote Central disconnected from our server:', clientAddress);
           this.peripheralClients.delete(clientAddress);
-          // Keep peer visible in UI — update lastSeen so 90s pruning timer is reset
-          const existing = this.activePeers.get(clientAddress);
-          if (existing && !this.connectedDevices.has(clientAddress)) {
-            this.activePeers.set(clientAddress, { ...existing, lastSeen: new Date() });
-            this.emitPeersUpdate();
+          const knownNodeId = this.macToNodeId.get(clientAddress);
+          if (knownNodeId && !isMacAddress(knownNodeId)) {
+            const existing = this.activePeers.get(knownNodeId);
+            if (existing && !this.connectedDevices.has(clientAddress)) {
+              this.activePeers.set(knownNodeId, { ...existing, id: knownNodeId, lastSeen: new Date() });
+              this.emitPeersUpdate();
+            }
           }
         },
         // Native scanner callback: Java found a NeerNetra peer via its own BLE scan or multi-hop routing table
-        (nativeDeviceId, nativeDeviceName, rssi, nativeHopCount, nativeDistanceMeters) => {
+        (nativeDeviceId, nativeDeviceName, rssi, nativeHopCount, nativeDistanceMeters, bleAddress, transport) => {
           if (!nativeDeviceId) return;
           if (this.myDeviceId && (nativeDeviceId === this.myDeviceId || nativeDeviceId.includes(this.myDeviceId) || this.myDeviceId.includes(nativeDeviceId))) return;
           if (this.myName && nativeDeviceName && (nativeDeviceName === this.myName || nativeDeviceName.includes(this.myName))) return;
           if (isMockOrFalsePeer(nativeDeviceId, nativeDeviceName)) return;
           if (nativeHopCount && nativeHopCount > 15) return;
           if (nativeDistanceMeters && nativeDistanceMeters > 3000) return;
-          const existing = this.activePeers.get(nativeDeviceId);
-          const resolvedName = (nativeDeviceName && !nativeDeviceName.startsWith('Citizen_'))
-            ? nativeDeviceName
-            : (existing?.name || `Citizen_${nativeDeviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`);
-          const hopCount = nativeHopCount || (existing ? existing.hopCount || 1 : 1);
-          if (hopCount > 15) return;
-          const isRelayed = hopCount > 1;
-          const peer: MeshPeer = {
-            id: nativeDeviceId,
-            name: existing?.name && !existing.name.startsWith('Citizen_') ? existing.name : resolvedName,
-            signalStrength: rssi,
-            relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
-            role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',
-            distanceMeters: nativeDistanceMeters || (existing?.distanceMeters && !isRelayed ? existing.distanceMeters : (isRelayed ? hopCount * 200 : this.rssiToDistance(rssi))),
-            status: existing ? existing.status : 'SAFE',
-            lastSeen: new Date(),
-            hopCount,
-          };
-          this.activePeers.set(nativeDeviceId, peer);
-          this.emitPeersUpdate();
 
-          // Try to connect if not already connected
-          if (!this.connectedDevices.has(nativeDeviceId) &&
-              !this.connectingDevices.has(nativeDeviceId) &&
-              !this.peripheralClients.has(nativeDeviceId)) {
-            const myId = (this.myDeviceId || '').toLowerCase();
-            const peerId = (nativeDeviceId || '').toLowerCase();
-            if (myId < peerId) {
-              this.connectToPeer(nativeDeviceId).catch(() => {});
-            } else {
-              setTimeout(() => {
-                if (
-                  !this.connectedDevices.has(nativeDeviceId) &&
-                  !this.connectingDevices.has(nativeDeviceId) &&
-                  !this.peripheralClients.has(nativeDeviceId)
-                ) {
-                  this.connectToPeer(nativeDeviceId).catch(() => {});
-                }
-              }, 2500);
+          if (bleAddress && isMacAddress(bleAddress) && !isMacAddress(nativeDeviceId)) {
+            this.peerNodeIdToMac.set(nativeDeviceId, bleAddress);
+            this.macToNodeId.set(bleAddress, nativeDeviceId);
+            this.activePeers.delete(bleAddress);
+          }
+
+          const canonicalId = isMacAddress(nativeDeviceId)
+            ? (this.macToNodeId.get(nativeDeviceId) || nativeDeviceId)
+            : nativeDeviceId;
+          if (canonicalId !== nativeDeviceId) {
+            this.activePeers.delete(nativeDeviceId);
+          }
+
+          const hopCount = nativeHopCount || 1;
+          if (hopCount > 15) return;
+
+          // Only insert into activePeers once canonical non-MAC nodeId is known
+          if (!isMacAddress(canonicalId) && !canonicalId.startsWith('wifi:')) {
+            const existing = this.activePeers.get(canonicalId);
+            const resolvedName = (nativeDeviceName && !nativeDeviceName.startsWith('Citizen_'))
+              ? nativeDeviceName
+              : (existing?.name || `Citizen [${canonicalId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+            const isRelayed = hopCount > 1;
+            const peer: MeshPeer = {
+              id: canonicalId,
+              nodeId: canonicalId,
+              name: existing?.name && !existing.name.startsWith('Citizen_') ? existing.name : resolvedName,
+              signalStrength: rssi,
+              relayedPacketsCount: existing ? existing.relayedPacketsCount : 0,
+              role: isRelayed ? 'Mesh Relay Node' : 'Citizen Node',
+              distanceMeters: nativeDistanceMeters || (existing?.distanceMeters && !isRelayed ? existing.distanceMeters : (isRelayed ? hopCount * 200 : this.rssiToDistance(rssi))),
+              status: existing ? existing.status : 'SAFE',
+              lastSeen: new Date(),
+              hopCount,
+            };
+            this.activePeers.set(canonicalId, peer);
+            this.emitPeersUpdate();
+          }
+
+          // Always attempt BLE GATT connection when we have a valid Bluetooth MAC address for a direct (1-hop) peer
+          const targetBleMac = (bleAddress && isMacAddress(bleAddress))
+            ? bleAddress
+            : (isMacAddress(nativeDeviceId) ? nativeDeviceId : this.peerNodeIdToMac.get(canonicalId));
+          if (targetBleMac && isMacAddress(targetBleMac) && hopCount === 1) {
+            if (!this.connectedDevices.has(targetBleMac) &&
+                !this.connectingDevices.has(targetBleMac) &&
+                !this.peripheralClients.has(targetBleMac)) {
+              const myId = (this.myDeviceId || '').toLowerCase();
+              const peerId = (canonicalId || targetBleMac).toLowerCase();
+              if (myId < peerId) {
+                this.connectToPeer(targetBleMac).catch(() => {});
+              } else {
+                setTimeout(() => {
+                  if (
+                    !this.connectedDevices.has(targetBleMac) &&
+                    !this.connectingDevices.has(targetBleMac) &&
+                    !this.peripheralClients.has(targetBleMac)
+                  ) {
+                    this.connectToPeer(targetBleMac).catch(() => {});
+                  }
+                }, 2500);
+              }
             }
           }
         }
@@ -806,8 +832,8 @@ class NeerNetraBLEMesh {
         lng?: number;
       }> = [];
 
-      this.activePeers.forEach((p) => {
-        if (p.id !== this.myDeviceId) {
+      this.activePeers.forEach((p, key) => {
+        if (p.id !== this.myDeviceId && !key.startsWith('wifi:') && !p.id.startsWith('wifi:') && !isMacAddress(key) && !isMacAddress(p.id)) {
           neighborList.push({
             peer_id: p.id,
             name: p.name,
@@ -824,14 +850,16 @@ class NeerNetraBLEMesh {
       const payload = JSON.stringify({
         id: this.myDeviceId,
         name: this.myName || 'Citizen Node',
+        hop_count: 1,
         battery: 88,
         lat: 27.6015,
         lng: 77.5975,
         neighbors: neighborList,
         isGossip: true,
+        isAck: true,
       });
 
-      await this.broadcastToAll(BLEMsgType.HELLO, payload, 5, undefined, this.myDeviceId, 'BROADCAST');
+      await this.broadcastToAll(BLEMsgType.HELLO, payload, 7, undefined, this.myDeviceId, 'BROADCAST');
     } catch {}
   }
 
@@ -884,27 +912,45 @@ class NeerNetraBLEMesh {
           // Only filter mock/fake peers by name AFTER confirming this is a NeerNetra device
           if (isMockOrFalsePeer(undefined, devName)) return;
 
+          const mfrNodeId = extractNodeIdFromManufacturerData(device.manufacturerData);
+          if (mfrNodeId && this.myDeviceId && mfrNodeId === this.myDeviceId) return;
+          if (mfrNodeId) {
+            this.peerNodeIdToMac.set(mfrNodeId, device.id);
+            this.macToNodeId.set(device.id, mfrNodeId);
+            this.activePeers.delete(device.id);
+          }
+
+          const canonicalId = mfrNodeId || this.macToNodeId.get(device.id) || device.id;
+          if (canonicalId !== device.id) {
+            this.activePeers.delete(device.id);
+          }
+
           const peerRssi = device.rssi || -68;
           const rawName = device.name || (device as any).localName;
+          const existingPeer = this.activePeers.get(canonicalId);
           const peerName = rawName && rawName.trim().length > 0
             ? rawName
-            : `Citizen_${device.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}`;
-          const existingPeer = this.activePeers.get(device.id);
+            : (existingPeer?.name || `Citizen [${canonicalId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
 
-          console.log(`[BLE Mesh] 🎯 Verified NeerNetra peer: ${device.id} (${peerName}) [RSSI: ${peerRssi}dBm]`);
+          console.log(`[BLE Mesh] 🎯 Verified NeerNetra peer: ${canonicalId} [BLE=${device.id}] (${peerName}) [RSSI: ${peerRssi}dBm]`);
 
-          const peer: MeshPeer = {
-            id: device.id,
-            name: existingPeer?.name && !existingPeer.name.startsWith('Citizen_') ? existingPeer.name : peerName,
-            signalStrength: peerRssi,
-            relayedPacketsCount: existingPeer ? existingPeer.relayedPacketsCount : 0,
-            role: 'Citizen Node',
-            distanceMeters: this.rssiToDistance(peerRssi),
-            status: existingPeer ? existingPeer.status : 'SAFE',
-            lastSeen: new Date(),
-          };
+          if (!isMacAddress(canonicalId) && !canonicalId.startsWith('wifi:')) {
+            const peer: MeshPeer = {
+              id: canonicalId,
+              nodeId: canonicalId,
+              name: existingPeer?.name && !existingPeer.name.startsWith('Citizen_') ? existingPeer.name : peerName,
+              signalStrength: peerRssi,
+              relayedPacketsCount: existingPeer ? existingPeer.relayedPacketsCount : 0,
+              role: 'Citizen Node',
+              distanceMeters: existingPeer?.distanceMeters || this.rssiToDistance(peerRssi),
+              status: existingPeer ? existingPeer.status : 'SAFE',
+              lastSeen: new Date(),
+              hopCount: 1,
+            };
 
-          this.activePeers.set(device.id, peer);
+            this.activePeers.set(canonicalId, peer);
+            this.emitPeersUpdate();
+          }
 
           // Stale peer maintenance: In disaster offline mesh, keep known peers persistent (mark IDLE instead of deleting)
           const nowMs = Date.now();
@@ -921,17 +967,13 @@ class NeerNetraBLEMesh {
             }
           });
 
-          this.emitPeersUpdate();
-
           // Connect in background if not already connected in either Central or Peripheral role
           const isAlreadyConnected = this.connectedDevices.has(device.id) ||
                                      this.connectingDevices.has(device.id) ||
                                      this.peripheralClients.has(device.id);
           if (!isAlreadyConnected) {
-            // Deterministic initiator tie-breaker:
-            // Device with smaller ID connects as Central; larger ID waits for incoming connection
             const myId = (this.myDeviceId || '').toLowerCase();
-            const peerId = (device.id || '').toLowerCase();
+            const peerId = (canonicalId || device.id || '').toLowerCase();
             const shouldInitiate = myId < peerId;
             if (shouldInitiate) {
               this.connectToPeer(device).catch(() => {});
@@ -944,7 +986,7 @@ class NeerNetraBLEMesh {
                 ) {
                   this.connectToPeer(device).catch(() => {});
                 }
-              }, 3000);
+              }, 2500);
             }
           }
         }
@@ -999,7 +1041,13 @@ class NeerNetraBLEMesh {
 
   // ── Connect to a discovered peer ───────────────────────────────────────────
   private async connectToPeer(deviceOrId: Device | string) {
-    const devId = typeof deviceOrId === 'string' ? deviceOrId : deviceOrId.id;
+    const rawId = typeof deviceOrId === 'string' ? deviceOrId : deviceOrId.id;
+    const devId = typeof deviceOrId === 'string'
+      ? (isMacAddress(rawId) ? rawId : (this.peerNodeIdToMac.get(rawId) || ''))
+      : rawId;
+    if (!devId || !isMacAddress(devId)) {
+      return;
+    }
     if (
       this.connectingDevices.has(devId) ||
       this.connectedDevices.has(devId) ||
@@ -1025,7 +1073,7 @@ class NeerNetraBLEMesh {
 
       let connected: Device;
       if (typeof deviceOrId === 'string') {
-        connected = await this.manager.connectToDevice(deviceOrId, { autoConnect: false, timeout: 6000 });
+        connected = await this.manager.connectToDevice(devId, { autoConnect: false, timeout: 6000 });
       } else {
         connected = await deviceOrId.connect({ timeout: 6000 });
       }
@@ -1056,19 +1104,28 @@ class NeerNetraBLEMesh {
 
       this.connectedDevices.set(devId, discovered);
 
-      const existingPeer = this.activePeers.get(devId);
-      const peer: MeshPeer = {
-        id: devId,
-        name: existingPeer?.name || discovered.name || `Peer_${devId.substring(0, 6)}`,
-        signalStrength: discovered.rssi || -70,
-        relayedPacketsCount: 0,
-        role: 'Citizen Node',
-        distanceMeters: this.rssiToDistance(discovered.rssi || -70),
-        status: 'SAFE',
-      };
+      const canonicalId = this.macToNodeId.get(devId) || devId;
+      if (canonicalId !== devId) {
+        this.activePeers.delete(devId);
+      }
+      if (!isMacAddress(canonicalId)) {
+        const existingPeer = this.activePeers.get(canonicalId) || this.activePeers.get(devId);
+        const peer: MeshPeer = {
+          id: canonicalId,
+          nodeId: canonicalId,
+          name: existingPeer?.name || discovered.name || `Citizen [${canonicalId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`,
+          signalStrength: discovered.rssi || -70,
+          relayedPacketsCount: existingPeer ? existingPeer.relayedPacketsCount : 0,
+          role: 'Citizen Node',
+          distanceMeters: existingPeer?.distanceMeters || this.rssiToDistance(discovered.rssi || -70),
+          status: existingPeer ? existingPeer.status : 'SAFE',
+          lastSeen: new Date(),
+          hopCount: 1,
+        };
 
-      this.activePeers.set(devId, peer);
-      this.emitPeersUpdate();
+        this.activePeers.set(canonicalId, peer);
+        this.emitPeersUpdate();
+      }
 
       // Subscribe to notify characteristic
       await this.subscribeToNotifications(discovered);
@@ -1077,18 +1134,17 @@ class NeerNetraBLEMesh {
       await this.sendToPeer(discovered, BLEMsgType.HELLO, JSON.stringify({
         name: this.myName,
         id: this.myDeviceId,
-      }));
+        hop_count: 1,
+      }), 7);
 
       discovered.onDisconnected(() => {
         console.log(`[BLE Mesh] Peer Central-connection dropped: ${devId}`);
         this.connectedDevices.delete(devId);
-        // Only remove from activePeers if also not connected via our GATT server
-        // This preserves the peer card when only one direction disconnects
+        const mappedId = this.macToNodeId.get(devId) || devId;
         if (!this.peripheralClients.has(devId)) {
-          // Update lastSeen so peer is still visible in UI for 90s
-          const existing = this.activePeers.get(devId);
+          const existing = this.activePeers.get(mappedId);
           if (existing) {
-            this.activePeers.set(devId, { ...existing, lastSeen: new Date() });
+            this.activePeers.set(mappedId, { ...existing, lastSeen: new Date() });
           }
         }
         this.emitPeersUpdate();
@@ -1342,8 +1398,11 @@ class NeerNetraBLEMesh {
 
     // 2. Ignore if already processed this message ID (except for HELLO beacons, which refresh lastSeen)
     if (this.isMessageSeen(packet.msgId)) {
-      if (packet.type === BLEMsgType.HELLO) {
-        this.handleHello(fromDeviceId, packet.senderId, packet.payload, packet.ttl);
+      if (packet.type === BLEMsgType.HELLO && packet.senderId) {
+        const existing = this.activePeers.get(packet.senderId);
+        if (existing) {
+          this.activePeers.set(packet.senderId, { ...existing, lastSeen: new Date() });
+        }
       }
       return;
     }
@@ -1423,8 +1482,9 @@ class NeerNetraBLEMesh {
       console.log(`[BLE Mesh] 🔀 Packet ${packet.msgId} (type ${packet.type}) is directed to ${packet.targetId} (not me: ${this.myDeviceId}). Forwarding without ringing.`);
     }
 
-    // Multi-hop managed relay: Relay ALL packet types (including HELLO, calls, voice, and SOS) when ttl > 1
-    if (packet.ttl > 1) {
+    // Multi-hop managed relay: Relay data/control packets (CHAT, SOS, SAFE, CALL, VOICE) when ttl > 1.
+    // Do not flood-relay HELLO beacons (distance-vector neighbors array handles multi-hop discovery).
+    if (packet.ttl > 1 && packet.type !== BLEMsgType.HELLO) {
       const peer = this.activePeers.get(fromDeviceId);
       const rssi = peer?.signalStrength || -75;
 
@@ -1462,18 +1522,18 @@ class NeerNetraBLEMesh {
       if (actualNodeId === this.myDeviceId || senderId === this.myDeviceId) {
         return;
       }
-      if (actualNodeId) {
+      if (actualNodeId && deviceId && isMacAddress(deviceId)) {
         this.peerNodeIdToMac.set(actualNodeId, deviceId);
         this.macToNodeId.set(deviceId, actualNodeId);
+        this.activePeers.delete(deviceId);
       }
-      this.peerNodeIdToMac.set(deviceId, deviceId);
 
       // 1. Ingest Distance-Vector Gossip Neighbor Table if present
       const neighbors = info.neighbors || info.known_peers || info.peers;
       if (Array.isArray(neighbors) && neighbors.length > 0) {
         for (const n of neighbors) {
-          const nId = n.peer_id || n.id || n.device_id || n.nodeId;
-          if (!nId || nId === this.myDeviceId) continue;
+          const nId = String(n.peer_id || n.id || n.device_id || n.nodeId || '');
+          if (!nId || nId === this.myDeviceId || isMacAddress(nId) || nId.startsWith('wifi:')) continue;
           const nHop = (n.hop_count || n.hops || 1) + 1;
           const nDist = nHop * 200;
           const existing = this.activePeers.get(nId);
@@ -1503,32 +1563,34 @@ class NeerNetraBLEMesh {
             lng: n.lng || existing?.lng,
           };
           this.activePeers.set(nId, relayedPeer);
-          this.peerNodeIdToMac.set(nId, deviceId);
-          this.macToNodeId.set(deviceId, nId);
+          if (isMacAddress(deviceId)) {
+            this.peerNodeIdToMac.set(nId, deviceId);
+          }
           console.log(`[BLE Mesh] 🗺️ [GossipRouting] Registered remote neighbor ${cleanName} via ${actualNodeId} (${nHop} hops, ${nDist}m)`);
         }
         this.emitPeersUpdate();
       }
 
-      // 2. Process the sender node itself
-      const explicitHop = info.hop_count !== undefined ? info.hop_count : (info.hops !== undefined ? info.hops : undefined);
-      const hopCount = explicitHop !== undefined ? explicitHop : Math.max(1, 8 - ttl);
+      // 2. Process the sender node itself (a direct HELLO sender is 1 hop away)
+      const explicitHop = info.hop_count !== undefined ? Number(info.hop_count) : (info.hops !== undefined ? Number(info.hops) : 1);
+      const hopCount = Math.max(1, explicitHop || 1);
       const isRelayed = hopCount > 1;
       const calculatedDistance = isRelayed ? (hopCount * 200) : (info.distance || 45);
 
-      const existing = this.activePeers.get(deviceId) || (actualNodeId ? this.activePeers.get(actualNodeId) : undefined);
-      const rawBaseName = info.name || (existing ? existing.name : `Citizen [${(actualNodeId || deviceId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
+      const canonicalId = actualNodeId || deviceId;
+      if (!canonicalId || isMacAddress(canonicalId) || canonicalId.startsWith('wifi:')) return;
+      const existing = this.activePeers.get(canonicalId) || (deviceId ? this.activePeers.get(deviceId) : undefined);
+      const rawBaseName = info.name || (existing ? existing.name : `Citizen [${canonicalId.replace(/[^a-zA-Z0-9]/g, '').slice(-4)}]`);
       const cleanPeerName = rawBaseName.replace(/\s*\(\d+\s*Hops[^\)]*\)/gi, '').trim();
 
-      if (isMockOrFalsePeer(actualNodeId || deviceId, cleanPeerName)) return;
+      if (isMockOrFalsePeer(canonicalId, cleanPeerName)) return;
 
-      if (actualNodeId && deviceId) {
-        this.peerNodeIdToMac.set(actualNodeId, deviceId);
-        this.macToNodeId.set(deviceId, actualNodeId);
+      if (deviceId && actualNodeId && deviceId !== actualNodeId) {
+        this.activePeers.delete(deviceId);
       }
 
       const updatedPeer: MeshPeer = {
-        id: actualNodeId || deviceId,
+        id: canonicalId,
         nodeId: actualNodeId || existing?.nodeId,
         name: cleanPeerName,
         signalStrength: existing ? existing.signalStrength : (isRelayed ? -85 : -60),
@@ -1543,31 +1605,28 @@ class NeerNetraBLEMesh {
         lng: info.lng || existing?.lng,
         batteryLevel: info.battery || info.battery_level || existing?.batteryLevel || 85,
       };
-      this.activePeers.set(actualNodeId || deviceId, updatedPeer);
-      if (deviceId && actualNodeId && deviceId !== actualNodeId) {
-        this.activePeers.set(deviceId, updatedPeer);
-      }
+      this.activePeers.set(canonicalId, updatedPeer);
       this.emitPeersUpdate();
       if (this.onPeerDiscovered) {
         this.onPeerDiscovered(updatedPeer);
       }
       console.log(`[BLE Mesh] HELLO registered from ${cleanPeerName} (${senderId}) [Hop: ${hopCount}]`);
 
-      // Bidirectional handshake: reply with our own identity so both nodes know each other across multi-hop links
+      // Bidirectional handshake: reply with our own identity so both nodes know each other
       if (!info.isAck) {
         const replyPayload = JSON.stringify({
           name: this.myName,
           id: this.myDeviceId,
+          hop_count: 1,
           isAck: true,
         });
-        const replyTtl = isRelayed ? Math.max(5, hopCount + 2) : 2;
         this.broadcastToAll(
           BLEMsgType.HELLO,
           replyPayload,
-          replyTtl,
+          7,
           undefined,
           this.myDeviceId,
-          actualNodeId || deviceId
+          canonicalId
         ).catch(() => {});
       }
     } catch {}
@@ -1936,28 +1995,25 @@ class NeerNetraBLEMesh {
     this.chatMessages.push(msg);
     this.markMessageSeen(msgId);
 
+    const peer = targetPeerId ? (this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId)) : undefined;
+    const targetNodeId = peer?.nodeId || (targetPeerId ? (this.macToNodeId.get(targetPeerId) || targetPeerId) : 'BROADCAST');
+
     const payload = JSON.stringify({
       senderId: this.myDeviceId,
       senderName: this.myName || 'Citizen Node',
       text,
-      targetId: targetPeerId || 'BROADCAST',
+      targetId: targetNodeId,
     });
 
-    await this.broadcastToAll(BLEMsgType.CHAT, payload, 7, msgId, this.myDeviceId);
+    await this.broadcastToAll(BLEMsgType.CHAT, payload, 10, msgId, this.myDeviceId, targetNodeId);
 
-    console.log(`[BLE Mesh] Broadcast chat "${text}" across mesh (id=${msgId})`);
+    console.log(`[BLE Mesh] Broadcast chat "${text}" across dual-radio mesh (id=${msgId}, target=${targetNodeId})`);
     return msg;
   }
 
   /** Send explicit long-range Wi-Fi Direct message (up to 250m) */
   async sendWifiDirectMessage(text: string, targetPeerId?: string): Promise<MeshChatMessage> {
     console.log(`[Mesh Engine] 📶 SENDING LONG-RANGE WI-FI DIRECT MESSAGE: "${text}" to ${targetPeerId || 'BROADCAST'}`);
-    const peer = targetPeerId ? (this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId)) : undefined;
-    const targetNodeId = peer?.nodeId || (targetPeerId ? (this.macToNodeId.get(targetPeerId) || targetPeerId) : 'BROADCAST');
-
-    // 1. Dispatch native Wi-Fi Direct socket burst on port 8765
-    await triggerWifiDirectMessage(targetNodeId, text);
-    // 2. Also register in local chat and broadcast via standard mesh for multi-hop resilience
     return this.sendChatMessage('You', text, targetPeerId);
   }
 
@@ -2015,7 +2071,7 @@ class NeerNetraBLEMesh {
     const payload = JSON.stringify({
       callerId: this.myDeviceId,
       callerName: this.myName || 'Citizen Node',
-      targetId: isGroup ? 'GROUP_CALL' : targetPeerId,
+      targetId: isGroup ? 'GROUP_CALL' : targetNodeId,
       targetNodeId,
       targetName: resolvedName,
       isGroupCall: isGroup,
@@ -2051,36 +2107,8 @@ class NeerNetraBLEMesh {
   /** Initiate an explicit long-range Wi-Fi Direct / Local Hotspot call (up to 250m) */
   async initiateWifiDirectCall(targetPeerId: string, targetName?: string): Promise<boolean> {
     console.log(`[Mesh Engine] 📶 INITIATING LONG-RANGE WI-FI DIRECT CALL to ${targetPeerId} (${targetName || 'Citizen'})`);
-    const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
-    let targetNodeId = peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId;
-    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
-      targetNodeId = peer.nodeId;
-    }
     const isGroup = Boolean(targetPeerId === 'GROUP_CALL');
-    const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
-
-    const wifiHops = peer?.hopCount || 1;
-    const callInfo = {
-      id: targetPeerId,
-      name: resolvedName,
-      distance: peer?.distanceMeters || (wifiHops >= 2 ? wifiHops * 200 : 100),
-      hopCount: wifiHops,
-      isGroupCall: isGroup,
-      transport: 'wifi_direct',
-      status: 'CALLING',
-    };
-    if (this.onOutgoingCall) {
-      try { this.onOutgoingCall(callInfo); } catch {}
-    }
-    try {
-      DeviceEventEmitter.emit('NEERNETRA_OUTGOING_CALL', callInfo);
-    } catch {}
-
-    // 1. Dispatch explicit native Wi-Fi Direct socket packet
-    await triggerWifiDirectCall(targetNodeId, targetName || this.myName);
-    // 2. Also mirror via standard mesh broadcast for multi-hop resilience
-    await this.initiateCall(targetPeerId, targetName, isGroup);
-    return true;
+    return this.initiateCall(targetPeerId, targetName, isGroup);
   }
 
   /** Accept an incoming call (TTL=16) */
@@ -2168,7 +2196,7 @@ class NeerNetraBLEMesh {
       audio: safeAudio,
       senderId: this.myDeviceId,
       senderName: this.myName,
-      targetId: isGroup ? 'GROUP_CALL' : targetPeerId,
+      targetId: isGroup ? 'GROUP_CALL' : targetNodeId,
       targetNodeId,
       targetName: peer?.name,
       isGroupCall: isGroup,
@@ -2177,10 +2205,7 @@ class NeerNetraBLEMesh {
 
     console.log(`[Dual Radio Mesh] 🎙️ Transmitting voice burst (${safeAudio.length} chars, TTL=10) to ${isGroup ? '🚨 ALL NODES (GROUP)' : (peer?.name || targetPeerId)}`);
 
-    // 1. Dispatch over High-Throughput 250m Wi-Fi Direct (UDP 8765 datagram sliced)
-    triggerWifiDirectVoiceBurst(targetNodeId, safeAudio, isGroup).catch(() => {});
-
-    // 2. Broadcast to all connected BLE devices and centrals with TTL=10 and targetNodeId
+    // Broadcast across all transports (notifyAllCentrals dispatches over Wi-Fi UDP 8765 + BLE GATT Server, plus sendToPeer for BLE GATT Client)
     await this.broadcastToAll(BLEMsgType.VOICE_BURST, payload, 10, undefined, this.myDeviceId, targetNodeId);
   }
 
@@ -2189,9 +2214,19 @@ class NeerNetraBLEMesh {
     return this.myDeviceId;
   }
 
-  /** Get all currently discovered/connected peers (strictly genuine devices) */
+  /** Get all currently discovered/connected peers (strictly genuine devices, deduplicated by canonical ID) */
   getConnectedPeers(): MeshPeer[] {
-    return Array.from(this.activePeers.values()).filter((p) => !isMockOrFalsePeer(p.id, p.name));
+    const seen = new Set<string>();
+    const result: MeshPeer[] = [];
+    for (const [key, p] of this.activePeers.entries()) {
+      if (!p || !p.id) continue;
+      if (key.startsWith('wifi:') || p.id.startsWith('wifi:') || isMacAddress(key) || isMacAddress(p.id)) continue;
+      if (isMockOrFalsePeer(p.id, p.name)) continue;
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      result.push(p);
+    }
+    return result;
   }
 
   getActivePeersCount(): number {
