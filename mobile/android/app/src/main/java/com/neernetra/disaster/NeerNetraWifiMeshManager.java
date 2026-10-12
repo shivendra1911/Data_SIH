@@ -93,6 +93,17 @@ public class NeerNetraWifiMeshManager {
     private volatile boolean isUdpListening = false;
     private Thread udpListenerThread;
 
+    // Peer IP tracking for zero-loss direct unicast UDP mesh
+    private final Map<String, InetAddress> knownPeerIps = new ConcurrentHashMap<>();
+    private final Set<InetAddress> allKnownPeerAddresses = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    public void registerPeerIp(String peerId, InetAddress ip) {
+        if (peerId != null && !peerId.isEmpty() && ip != null) {
+            knownPeerIps.put(peerId, ip);
+            allKnownPeerAddresses.add(ip);
+        }
+    }
+
     private NeerNetraWifiMeshManager(Context context) {
         this.appContext = context.getApplicationContext();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -242,16 +253,7 @@ public class NeerNetraWifiMeshManager {
                                 if (peerList == null) return;
                                 Collection<WifiP2pDevice> devices = peerList.getDeviceList();
                                 if (devices != null && !devices.isEmpty()) {
-                                    Log.i(TAG, "🎯 Wi-Fi Direct discovered " + devices.size() + " peer(s) in air!");
-                                    for (WifiP2pDevice dev : devices) {
-                                        if (dev == null || dev.deviceAddress == null) continue;
-                                        String devName = (dev.deviceName != null && !dev.deviceName.isEmpty())
-                                                ? dev.deviceName
-                                                : "Citizen [" + dev.deviceAddress.replace(":", "").substring(Math.max(0, dev.deviceAddress.length() - 4)) + "]";
-
-                                        NeerNetraNativeMeshManager.getInstance(appContext)
-                                                .registerDiscoveredPeer(dev.deviceAddress, devName, -55, 1, 45, "wifi_direct");
-                                    }
+                                    Log.d(TAG, "🎯 Wi-Fi Direct detected " + devices.size() + " device(s) in air (peers only registered upon receiving genuine NeerNetra protocol packets)");
                                 }
                             }
                         });
@@ -483,17 +485,55 @@ public class NeerNetraWifiMeshManager {
                     if (length > 0) {
                         java.net.InetAddress srcAddr = packet.getAddress();
                         if (srcAddr != null && !srcAddr.isLoopbackAddress()) {
-                            // Ignore self-echoes broadcast from our own physical Wi-Fi/cellular network interfaces
+                            // Ignore self-echoes: skip packets whose source address belongs to one of our own network interfaces
+                            boolean isSelfEcho = false;
                             try {
+                                // Direct match: srcAddr belongs to one of our own NIFs
                                 java.net.NetworkInterface nif = java.net.NetworkInterface.getByInetAddress(srcAddr);
-                                if (nif != null && !nif.isLoopback()) {
-                                    continue;
+                                if (nif != null) {
+                                    isSelfEcho = true;
                                 }
                             } catch (Exception ignored) {}
+                            if (!isSelfEcho) {
+                                // Also check all local addresses explicitly (catches broadcast-addressed self packets)
+                                try {
+                                    java.util.Enumeration<java.net.NetworkInterface> ifaces = java.net.NetworkInterface.getNetworkInterfaces();
+                                    outer:
+                                    while (ifaces != null && ifaces.hasMoreElements()) {
+                                        java.net.NetworkInterface iface = ifaces.nextElement();
+                                        if (iface.isLoopback() || !iface.isUp()) continue;
+                                        java.util.Enumeration<java.net.InetAddress> addrs = iface.getInetAddresses();
+                                        while (addrs.hasMoreElements()) {
+                                            if (srcAddr.equals(addrs.nextElement())) {
+                                                isSelfEcho = true;
+                                                break outer;
+                                            }
+                                        }
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                            if (isSelfEcho) {
+                                continue;
+                            }
                         }
                         byte[] receivedBytes = new byte[length];
                         System.arraycopy(packet.getData(), packet.getOffset(), receivedBytes, 0, length);
                         String senderIp = srcAddr != null ? srcAddr.getHostAddress() : "unknown";
+
+                        // Track peer IP address for zero-loss direct unicast UDP mesh
+                        if (srcAddr != null) {
+                            allKnownPeerAddresses.add(srcAddr);
+                            try {
+                                String peekStr = new String(receivedBytes, StandardCharsets.UTF_8).trim();
+                                if (peekStr.startsWith("{")) {
+                                    org.json.JSONObject peekObj = new org.json.JSONObject(peekStr);
+                                    String sId = peekObj.optString("s", peekObj.optString("origin_id", ""));
+                                    if (!sId.isEmpty()) {
+                                        registerPeerIp(sId, srcAddr);
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
 
                         // Dispatch to unified native mesh router
                         NeerNetraNativeMeshManager.getInstance(appContext)
@@ -579,14 +619,45 @@ public class NeerNetraWifiMeshManager {
             }
         }
 
-        // 2. Send via UDP Broadcast to 255.255.255.255 and all local subnet broadcast addresses
+        // Extract targetId if present for direct unicast
+        String targetId = null;
+        try {
+            String str = new String(packetBytes, StandardCharsets.UTF_8).trim();
+            if (str.startsWith("{")) {
+                org.json.JSONObject jo = new org.json.JSONObject(str);
+                targetId = jo.optString("d", jo.optString("dest_id", null));
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Send via UDP to global broadcast, subnet broadcasts, and all known peer IPs
         try (DatagramSocket sendSocket = new DatagramSocket()) {
             sendSocket.setBroadcast(true);
 
-            // Global broadcast
-            InetAddress globalBroadcast = InetAddress.getByName("255.255.255.255");
-            DatagramPacket globalPacket = new DatagramPacket(packetBytes, packetBytes.length, globalBroadcast, MESH_PORT);
-            sendSocket.send(globalPacket);
+            // Direct unicast if targetId is known
+            if (targetId != null && !targetId.isEmpty() && !"BROADCAST".equals(targetId) && !"GROUP_CALL".equals(targetId)) {
+                InetAddress targetAddr = knownPeerIps.get(targetId);
+                if (targetAddr != null) {
+                    try {
+                        DatagramPacket unicastPacket = new DatagramPacket(packetBytes, packetBytes.length, targetAddr, MESH_PORT);
+                        sendSocket.send(unicastPacket);
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            // Unicast to all known peer addresses for high-throughput zero-loss delivery
+            for (InetAddress peerIp : allKnownPeerAddresses) {
+                try {
+                    DatagramPacket peerPacket = new DatagramPacket(packetBytes, packetBytes.length, peerIp, MESH_PORT);
+                    sendSocket.send(peerPacket);
+                } catch (Exception ignored) {}
+            }
+
+            // Global broadcast (wrapped in own try-catch so failures don't abort subnet broadcasts)
+            try {
+                InetAddress globalBroadcast = InetAddress.getByName("255.255.255.255");
+                DatagramPacket globalPacket = new DatagramPacket(packetBytes, packetBytes.length, globalBroadcast, MESH_PORT);
+                sendSocket.send(globalPacket);
+            } catch (Exception ignored) {}
 
             // Interface-specific broadcasts (hotspot, P2P, local Wi-Fi)
             List<InetAddress> broadcastAddresses = getBroadcastAddresses();
@@ -604,44 +675,50 @@ public class NeerNetraWifiMeshManager {
     private List<InetAddress> getBroadcastAddresses() {
         Set<InetAddress> broadcastSet = new HashSet<>();
         try {
-            // Explicit standard Wi-Fi Direct and Hotspot subnet broadcast targets
+            // Explicit standard local subnet, Wi-Fi Direct and Hotspot broadcast targets
+            try { broadcastSet.add(InetAddress.getByName("192.168.0.255")); } catch (Exception ignored) {}
+            try { broadcastSet.add(InetAddress.getByName("192.168.1.255")); } catch (Exception ignored) {}
             try { broadcastSet.add(InetAddress.getByName("192.168.49.255")); } catch (Exception ignored) {}
             try { broadcastSet.add(InetAddress.getByName("192.168.49.1")); } catch (Exception ignored) {}
             try { broadcastSet.add(InetAddress.getByName("192.168.43.255")); } catch (Exception ignored) {}
             try { broadcastSet.add(InetAddress.getByName("192.168.137.255")); } catch (Exception ignored) {}
 
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = interfaces.nextElement();
-                if (networkInterface.isLoopback() || !networkInterface.isUp()) continue;
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                try {
+                    NetworkInterface networkInterface = interfaces.nextElement();
+                    if (networkInterface.isLoopback() || !networkInterface.isUp()) continue;
 
-                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
-                    InetAddress broadcast = interfaceAddress.getBroadcast();
-                    if (broadcast != null) {
-                        broadcastSet.add(broadcast);
-                    } else {
-                        // Compute subnet broadcast from address and prefix length
-                        InetAddress ip = interfaceAddress.getAddress();
-                        if (ip instanceof java.net.Inet4Address) {
-                            short prefix = interfaceAddress.getNetworkPrefixLength();
-                            if (prefix > 0 && prefix < 32) {
-                                int ipInt = 0;
-                                byte[] ipBytes = ip.getAddress();
-                                for (byte b : ipBytes) {
-                                    ipInt = (ipInt << 8) | (b & 0xFF);
+                    for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                        try {
+                            InetAddress broadcast = interfaceAddress.getBroadcast();
+                            if (broadcast != null) {
+                                broadcastSet.add(broadcast);
+                            } else {
+                                // Compute subnet broadcast from address and prefix length
+                                InetAddress ip = interfaceAddress.getAddress();
+                                if (ip instanceof java.net.Inet4Address) {
+                                    short prefix = interfaceAddress.getNetworkPrefixLength();
+                                    if (prefix > 0 && prefix < 32) {
+                                        int ipInt = 0;
+                                        byte[] ipBytes = ip.getAddress();
+                                        for (byte b : ipBytes) {
+                                            ipInt = (ipInt << 8) | (b & 0xFF);
+                                        }
+                                        int mask = ~((1 << (32 - prefix)) - 1);
+                                        int bcastInt = ipInt | (~mask);
+                                        byte[] bcastBytes = new byte[4];
+                                        bcastBytes[0] = (byte) ((bcastInt >> 24) & 0xFF);
+                                        bcastBytes[1] = (byte) ((bcastInt >> 16) & 0xFF);
+                                        bcastBytes[2] = (byte) ((bcastInt >> 8) & 0xFF);
+                                        bcastBytes[3] = (byte) (bcastInt & 0xFF);
+                                        broadcastSet.add(InetAddress.getByAddress(bcastBytes));
+                                    }
                                 }
-                                int mask = ~((1 << (32 - prefix)) - 1);
-                                int bcastInt = ipInt | (~mask);
-                                byte[] bcastBytes = new byte[4];
-                                bcastBytes[0] = (byte) ((bcastInt >> 24) & 0xFF);
-                                bcastBytes[1] = (byte) ((bcastInt >> 16) & 0xFF);
-                                bcastBytes[2] = (byte) ((bcastInt >> 8) & 0xFF);
-                                bcastBytes[3] = (byte) (bcastInt & 0xFF);
-                                broadcastSet.add(InetAddress.getByAddress(bcastBytes));
                             }
-                        }
+                        } catch (Exception ignored) {}
                     }
-                }
+                } catch (Exception ignored) {}
             }
         } catch (Exception ignored) {}
         return new ArrayList<>(broadcastSet);

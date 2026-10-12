@@ -115,9 +115,18 @@ function isNeerManufacturerData(b64?: string | null): boolean {
 
 export function isMockOrFalsePeer(id?: string, name?: string): boolean {
   if (!id && !name) return true;
+
+  // Reject raw MAC addresses (e.g. 7e:8d:28:d7:98:6a or ba:82:f2:56:ed:10)
+  if (id) {
+    const trimmed = id.trim();
+    if (/^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(trimmed) || /^[0-9a-fA-F]{12}$/.test(trimmed)) {
+      return true;
+    }
+  }
+
   const s = `${id || ''} ${name || ''}`.toLowerCase();
 
-  // Generic mock / simulation tokens
+  // Generic mock / simulation tokens and unverified Wi-Fi Direct devices
   return (
     s.includes('mock') ||
     s.includes('test_') ||
@@ -134,6 +143,10 @@ export function isMockOrFalsePeer(id?: string, name?: string): boolean {
     s.includes('desktop') ||
     s.includes('windows') ||
     s.includes('macbook') ||
+    s.includes('kushagra') ||
+    s.includes('hp-i5') ||
+    s.includes('galaxy') ||
+    s.includes('motoedge60fusion_ishl') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
     s.includes('katy') ||
@@ -1994,7 +2007,10 @@ class NeerNetraBLEMesh {
     console.log(`[BLE Mesh] Initiating ${isGroup ? '🚨 GROUP EMERGENCY CALL' : '1-to-1 call'} to: ${targetPeerId}`);
 
     const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
-    const targetNodeId = isGroup ? 'GROUP_CALL' : (peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId);
+    let targetNodeId = isGroup ? 'GROUP_CALL' : (peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId);
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
     const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
 
     const payload = JSON.stringify({
@@ -2037,7 +2053,10 @@ class NeerNetraBLEMesh {
   async initiateWifiDirectCall(targetPeerId: string, targetName?: string): Promise<boolean> {
     console.log(`[Mesh Engine] 📶 INITIATING LONG-RANGE WI-FI DIRECT CALL to ${targetPeerId} (${targetName || 'Citizen'})`);
     const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
-    const targetNodeId = peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId;
+    let targetNodeId = peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId;
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
     const isGroup = Boolean(targetPeerId === 'GROUP_CALL');
     const resolvedName = isGroup ? 'ALL NEARBY CITIZENS (GROUP CALL)' : (targetName || peer?.name || 'Citizen Node');
 
@@ -2069,7 +2088,10 @@ class NeerNetraBLEMesh {
   async acceptCall(callerId: string): Promise<void> {
     console.log(`[BLE Mesh] Accepting call from: ${callerId}`);
     const peer = this.activePeers.get(callerId) || Array.from(this.activePeers.values()).find((p) => p.id === callerId || p.nodeId === callerId);
-    const targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+    let targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
 
     const payload = JSON.stringify({
       responderId: this.myDeviceId,
@@ -2086,7 +2108,10 @@ class NeerNetraBLEMesh {
   async declineCall(callerId: string): Promise<void> {
     console.log(`[BLE Mesh] Declining call from: ${callerId}`);
     const peer = this.activePeers.get(callerId) || Array.from(this.activePeers.values()).find((p) => p.id === callerId || p.nodeId === callerId);
-    const targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+    let targetNodeId = peer?.nodeId || this.macToNodeId.get(callerId) || callerId;
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
 
     const payload = JSON.stringify({
       responderId: this.myDeviceId,
@@ -2104,7 +2129,10 @@ class NeerNetraBLEMesh {
   async endCall(peerId: string): Promise<void> {
     console.log(`[BLE Mesh] Ending call with: ${peerId}`);
     const peer = this.activePeers.get(peerId) || Array.from(this.activePeers.values()).find((p) => p.id === peerId || p.nodeId === peerId);
-    const targetNodeId = peer?.nodeId || this.macToNodeId.get(peerId) || peerId;
+    let targetNodeId = peer?.nodeId || this.macToNodeId.get(peerId) || peerId;
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
 
     const payload = JSON.stringify({
       senderId: this.myDeviceId,
@@ -2132,7 +2160,10 @@ class NeerNetraBLEMesh {
 
     const isGroup = Boolean(isGroupCall || targetPeerId === 'GROUP_CALL' || targetPeerId === 'BROADCAST');
     const peer = this.activePeers.get(targetPeerId) || Array.from(this.activePeers.values()).find((p) => p.id === targetPeerId || p.nodeId === targetPeerId);
-    const targetNodeId = isGroup ? 'GROUP_CALL' : (peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId);
+    let targetNodeId = isGroup ? 'GROUP_CALL' : (peer?.nodeId || this.macToNodeId.get(targetPeerId) || targetPeerId);
+    if (peer?.nodeId && peer.nodeId.startsWith('dev_')) {
+      targetNodeId = peer.nodeId;
+    }
 
     const payload = JSON.stringify({
       audio: safeAudio,

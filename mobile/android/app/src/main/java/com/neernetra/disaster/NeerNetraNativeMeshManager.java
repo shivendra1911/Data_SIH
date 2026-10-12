@@ -130,14 +130,24 @@ public class NeerNetraNativeMeshManager {
 
     public static boolean isTestOrSimulatedPeer(String id, String name) {
         if ((id == null || id.trim().isEmpty()) && (name == null || name.trim().isEmpty())) return true;
+
+        // Reject raw MAC addresses (e.g. 7e:8d:28:d7:98:6a or ba:82:f2:56:ed:10)
+        if (id != null) {
+            String trimmedId = id.trim();
+            if (trimmedId.matches("^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$") || trimmedId.matches("^[0-9a-fA-F]{12}$")) {
+                return true;
+            }
+        }
+
         String s = ((id != null ? id : "") + " " + (name != null ? name : "")).toLowerCase();
 
-        // Generic mock / simulation tokens and non-phone PC hosts
+        // Generic mock / simulation tokens, non-phone PC hosts, and raw unverified Wi-Fi device names
         if (s.contains("mock") || s.contains("test_") || s.contains("test node") || s.contains("sim_") ||
             s.contains("dummy") || s.contains("synthetic") || s.contains("audit") || s.contains("fake") ||
             s.contains("sample") || s.contains("seed") || s.contains("cloud_device") ||
             s.contains("ramesh") || s.contains("anita") || s.contains("katy") ||
             s.contains("laptop") || s.contains("desktop") || s.contains("windows") || s.contains("macbook") ||
+            s.contains("kushagra") || s.contains("hp-i5") || s.contains("galaxy") || s.contains("motoedge60fusion_ishl") ||
             s.contains("priyanshu (citizen node 01)") || s.contains("dev_priyanshu_phone") ||
             s.contains("dev_ramesh_kumar") || s.contains("dev_katy_fuller") || s.contains("dev_anita_sharma")) {
             return true;
@@ -1278,6 +1288,15 @@ public class NeerNetraNativeMeshManager {
 
             Log.i(TAG, "📥 [MeshPacket] Ingested type=" + type + " id=" + msgId + " from=" + senderId + " target=" + targetId + " ttl=" + ttl + " via=" + fromTransportOrDevice);
 
+            // Register peer IP with Wi-Fi mesh manager for direct zero-loss UDP unicast
+            if (fromTransportOrDevice != null && fromTransportOrDevice.startsWith("wifi:") && !senderId.isEmpty()) {
+                try {
+                    String ipStr = fromTransportOrDevice.substring(5);
+                    java.net.InetAddress ip = java.net.InetAddress.getByName(ipStr);
+                    NeerNetraWifiMeshManager.getInstance(appContext).registerPeerIp(senderId, ip);
+                } catch (Exception ignored) {}
+            }
+
             // 0. Update native distance-vector routing table
             if (!senderId.isEmpty()) {
                 MeshRoute directRoute = routingTable.get(senderId);
@@ -1496,7 +1515,26 @@ public class NeerNetraNativeMeshManager {
                     boolean matchesId = !myNodeId.isEmpty() && (targetId.equalsIgnoreCase(myNodeId) || targetId.contains(myNodeId) || myNodeId.contains(targetId));
                     boolean matchesName = !myNodeName.isEmpty() && (targetId.equalsIgnoreCase(myNodeName) || targetId.contains(myNodeName) || myNodeName.contains(targetId));
                     boolean matchesSelf = targetId.equalsIgnoreCase("self") || targetId.equalsIgnoreCase("me");
-                    if (!myNodeId.isEmpty() && !matchesId && !matchesName && !matchesSelf) {
+                    boolean matchesModel = !targetId.isEmpty() && (Build.MODEL.toLowerCase().contains(targetId.toLowerCase()) || targetId.toLowerCase().contains(Build.MODEL.toLowerCase()));
+                    boolean matchesMac = false;
+                    try {
+                        Enumeration<java.net.NetworkInterface> nifs = java.net.NetworkInterface.getNetworkInterfaces();
+                        while (nifs != null && nifs.hasMoreElements()) {
+                            java.net.NetworkInterface nif = nifs.nextElement();
+                            byte[] mac = nif.getHardwareAddress();
+                            if (mac != null) {
+                                StringBuilder sb = new StringBuilder();
+                                for (byte b : mac) sb.append(String.format("%02x:", b));
+                                if (sb.length() > 0) sb.deleteCharAt(sb.length() - 1);
+                                if (targetId.equalsIgnoreCase(sb.toString())) {
+                                    matchesMac = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+
+                    if (!myNodeId.isEmpty() && !matchesId && !matchesName && !matchesSelf && !matchesModel && !matchesMac) {
                         Log.i(TAG, "Private intercom call addressed to " + targetId + " (not us: id=" + myNodeId + ", name=" + myNodeName + "). Suppressing lock-screen wake.");
                         return;
                     }
