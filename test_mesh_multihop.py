@@ -495,6 +495,14 @@ def run_all_tests():
 
     monitor.stop()
 
+    # Clean up test routes from device so physical peer discovery is 100% clean
+    try:
+        clean_sp_cmd = "run-as com.neernetra.disaster sed -i '/persistent_routing_table/d' shared_prefs/NeerNetraPrefs.xml"
+        subprocess.run(["adb", "-s", DEVICE_SERIAL, "shell", clean_sp_cmd], capture_output=True)
+        log("Cleaned test routes from device SharedPreferences successfully.")
+    except Exception as e:
+        log(f"Notice: cleanup error {e}")
+
     log("\n==================================================================")
     log(f"TEST RESULTS: {passed_count}/{total_count} TESTS PASSED")
     log("==================================================================")

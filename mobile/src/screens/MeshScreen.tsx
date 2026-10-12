@@ -26,6 +26,7 @@ import {
   X,
   Mic,
   Wifi,
+  Trash2,
 } from 'lucide-react-native';
 import { MeshPeer } from '../types';
 import { meshEngine, isMockOrFalsePeer } from '../services/bluetoothMesh';
@@ -788,9 +789,10 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
   const [selectedMessagePeer, setSelectedMessagePeer] = useState<MeshPeer | null>(null);
 
   useEffect(() => {
+    meshEngine.clearTestPeers().catch(() => {});
     const unsub = (meshEngine as any).subscribePeers
       ? (meshEngine as any).subscribePeers((newPeers: MeshPeer[]) => {
-          setLocalPeers([...newPeers]);
+          setLocalPeers(newPeers.filter((p) => !isMockOrFalsePeer(p.id, p.name)));
         })
       : undefined;
 
@@ -804,9 +806,30 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
 
   const livePeers = localPeers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
 
+  const handleClearPeers = () => {
+    Alert.alert(
+      'Clean Mesh Peers',
+      'Purge all simulated test nodes and cached offline routes so only active nearby phones appear?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Purge Test Nodes',
+          style: 'destructive',
+          onPress: async () => {
+            await meshEngine.clearTestPeers();
+            const clean = meshEngine.getConnectedPeers();
+            setLocalPeers([...clean]);
+            Alert.alert('✅ Mesh Cleaned', 'Test nodes purged. Ready for physical peer discovery.');
+          },
+        },
+      ]
+    );
+  };
+
   const handleManualScan = async () => {
     setIsScanning(true);
     try {
+      await meshEngine.clearTestPeers();
       await meshEngine.triggerManualScan();
       const updated = meshEngine.getConnectedPeers();
       setLocalPeers([...updated]);
@@ -922,6 +945,24 @@ export const MeshScreen: React.FC<MeshScreenProps> = ({
             setShowMessageModal(true);
           }}
         />
+
+        {/* Mesh Management / Clear Peer Cache */}
+        <View style={styles.meshManageRow}>
+          <Text style={styles.meshManageText}>
+            {livePeers.length === 0
+              ? 'Zero test nodes • Ready for real phones'
+              : `${livePeers.length} genuine device(s) nearby`}
+          </Text>
+          <TouchableOpacity
+            style={styles.clearPeersBtn}
+            onPress={handleClearPeers}
+            activeOpacity={0.7}
+          >
+            <Trash2 size={12} color="#dc2626" />
+            <Text style={styles.clearPeersBtnText}>Clear Peers</Text>
+          </TouchableOpacity>
+        </View>
+
         <MeshRelayFeed peers={livePeers} />
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -1012,6 +1053,38 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: '#047857',
+  },
+  meshManageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#F8FAF6',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  meshManageText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  clearPeersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+  },
+  clearPeersBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   actionRow: {
     flexDirection: 'row',

@@ -4,11 +4,7 @@ import { saveSOSToOfflineQueue } from './offlineStorage';
 class BluetoothMeshManager {
   private isAdvertising: boolean = false;
   private isDiscovering: boolean = false;
-  private connectedPeers: MeshPeer[] = [
-    { id: 'peer_node_01', name: 'Rescue-Relay-Alpha', signalStrength: -58, relayedPacketsCount: 14 },
-    { id: 'peer_node_02', name: 'Citizen-Edge-Node', signalStrength: -72, relayedPacketsCount: 3 },
-    { id: 'peer_node_03', name: 'Govt-Helipad-Node', signalStrength: -45, relayedPacketsCount: 89 },
-  ];
+  private connectedPeers: MeshPeer[] = [];
 
   public getActivePeersCount(): number {
     return this.connectedPeers.length;

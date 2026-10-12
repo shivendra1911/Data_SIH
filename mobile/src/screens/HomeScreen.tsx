@@ -44,7 +44,7 @@ import {
 } from '../services/dangerEscalation';
 import { triggerRedZoneEmergencyAlert } from '../services/pushNotification';
 import { getCurrentDeviceLocation } from '../services/locationService';
-import { bleEngine, meshEngine } from '../services/bluetoothMesh';
+import { bleEngine, meshEngine, isMockOrFalsePeer } from '../services/bluetoothMesh';
 import { mobileSirenListener, MobileSirenEvent } from '../services/mobileSirenListener';
 import {
   getPendingEmergencyIntent,
@@ -314,8 +314,9 @@ export const HomeScreen: React.FC = () => {
 
       // Initialize mesh engine listeners
       meshEngine.onPeersChanged = (newPeers: MeshPeer[]) => {
-        setPeers([...newPeers]);
-        setPeerCount(newPeers.length);
+        const genuine = newPeers.filter((p) => !isMockOrFalsePeer(p.id, p.name));
+        setPeers(genuine);
+        setPeerCount(genuine.length);
       };
       (meshEngine as any).onPeerDiscovered = (peer: MeshPeer) => {
         const current = meshEngine.getConnectedPeers();

@@ -126,8 +126,69 @@ public class NeerNetraNativeMeshManager {
 
     private final Map<String, MeshRoute> routingTable = new ConcurrentHashMap<>();
 
+    public static boolean isTestOrSimulatedPeer(String id, String name) {
+        if ((id == null || id.trim().isEmpty()) && (name == null || name.trim().isEmpty())) return true;
+        String s = ((id != null ? id : "") + " " + (name != null ? name : "")).toLowerCase();
+
+        // Synthetic prefixes and node IDs from multi-hop automated test suites
+        if (s.contains("dev_b_") || s.contains("dev_c_") || s.contains("dev_d_") || s.contains("dev_x_") || s.contains("dev_l_") ||
+            s.contains("dev_node_b") || s.contains("dev_node_c") || s.contains("dev_node_d") || s.contains("dev_node_x") || s.contains("dev_node_l") ||
+            s.contains("dev_node_l_2400m") || s.contains("dev_ndrf_") || s.contains("dev_large_sender") || s.contains("dev_initiator")) {
+            return true;
+        }
+
+        // Synthetic node labels created in simulation scripts
+        if (s.contains("relay gateway") || s.contains("rescue team") || s.contains("ridge shelter") ||
+            s.contains("suboptimal route") || s.contains("evacuation center") || s.contains("ndrf rescue ops") ||
+            s.contains("initiator node") ||
+            s.contains("node b") || s.contains("node c") || s.contains("node d") || s.contains("node x") || s.contains("node l")) {
+            return true;
+        }
+
+        // Generic mock / simulation tokens
+        if (s.contains("mock") || s.contains("test_") || s.contains("test node") || s.contains("sim_") ||
+            s.contains("dummy") || s.contains("synthetic") || s.contains("audit") || s.contains("fake") ||
+            s.contains("sample") || s.contains("seed") || s.contains("cloud_device") ||
+            s.contains("ramesh") || s.contains("anita") || s.contains("katy") ||
+            s.contains("priyanshu (citizen node 01)") || s.contains("dev_priyanshu_phone") ||
+            s.contains("dev_ramesh_kumar") || s.contains("dev_katy_fuller") || s.contains("dev_anita_sharma")) {
+            return true;
+        }
+
+        return false;
+    }
+
     public Map<String, MeshRoute> getRoutingTable() {
-        return routingTable;
+        Map<String, MeshRoute> clean = new ConcurrentHashMap<>();
+        for (Map.Entry<String, MeshRoute> entry : routingTable.entrySet()) {
+            MeshRoute r = entry.getValue();
+            if (r != null && !isTestOrSimulatedPeer(entry.getKey(), r.name)) {
+                clean.put(entry.getKey(), r);
+            }
+        }
+        return clean;
+    }
+
+    public synchronized void clearTestPeers() {
+        java.util.Iterator<Map.Entry<String, MeshRoute>> it = routingTable.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, MeshRoute> entry = it.next();
+            MeshRoute r = entry.getValue();
+            if (r == null || isTestOrSimulatedPeer(entry.getKey(), r.name)) {
+                it.remove();
+            }
+        }
+        persistRoutingTable();
+        Log.i(TAG, "Cleared test peers. Remaining active genuine routes: " + routingTable.size());
+    }
+
+    public synchronized void clearAllPeers() {
+        routingTable.clear();
+        try {
+            android.content.SharedPreferences sp = appContext.getSharedPreferences("NeerNetraPrefs", Context.MODE_PRIVATE);
+            sp.edit().putString("persistent_routing_table", "[]").apply();
+        } catch (Exception ignored) {}
+        Log.i(TAG, "Cleared all peers from routing table and storage");
     }
 
     public synchronized void persistRoutingTable() {
@@ -136,6 +197,7 @@ public class NeerNetraNativeMeshManager {
             JSONArray array = new JSONArray();
             for (MeshRoute r : routingTable.values()) {
                 if (r == null || r.peerId == null) continue;
+                if (isTestOrSimulatedPeer(r.peerId, r.name)) continue;
                 JSONObject obj = new JSONObject();
                 obj.put("peerId", r.peerId);
                 obj.put("name", r.name);
@@ -165,10 +227,11 @@ public class NeerNetraNativeMeshManager {
                 JSONObject obj = array.optJSONObject(i);
                 if (obj == null) continue;
                 String peerId = obj.optString("peerId", "");
-                if (peerId.isEmpty()) continue;
+                String name = obj.optString("name", "Citizen [" + peerId + "]");
+                if (peerId.isEmpty() || isTestOrSimulatedPeer(peerId, name)) continue;
                 MeshRoute r = new MeshRoute();
                 r.peerId = peerId;
-                r.name = obj.optString("name", "Citizen [" + peerId + "]");
+                r.name = name;
                 r.hopCount = obj.optInt("hopCount", 1);
                 r.nextHop = obj.optString("nextHop", peerId);
                 r.lastSeen = obj.optLong("lastSeen", now);
@@ -182,7 +245,7 @@ public class NeerNetraNativeMeshManager {
                 r.status = st;
                 routingTable.put(peerId, r);
             }
-            Log.i(TAG, "Loaded " + routingTable.size() + " persistent peers/routes from SharedPreferences");
+            Log.i(TAG, "Loaded " + routingTable.size() + " genuine persistent peers/routes from SharedPreferences");
         } catch (Exception e) {
             Log.w(TAG, "loadRoutingTableFromStorage error: " + e.getMessage());
         }
@@ -216,7 +279,7 @@ public class NeerNetraNativeMeshManager {
             long now = System.currentTimeMillis();
             JSONArray neighborArray = new JSONArray();
             for (MeshRoute route : routingTable.values()) {
-                if (!route.peerId.equalsIgnoreCase(myNodeId)) {
+                if (!route.peerId.equalsIgnoreCase(myNodeId) && !isTestOrSimulatedPeer(route.peerId, route.name)) {
                     JSONObject n = new JSONObject();
                     n.put("peer_id", route.peerId);
                     n.put("name", route.name);
@@ -1136,7 +1199,7 @@ public class NeerNetraNativeMeshManager {
             Log.i(TAG, "📥 [MeshPacket] Ingested type=" + type + " id=" + msgId + " from=" + senderId + " target=" + targetId + " ttl=" + ttl + " via=" + fromTransportOrDevice);
 
             // 0. Update native distance-vector routing table
-            if (!senderId.isEmpty()) {
+            if (!senderId.isEmpty() && !isTestOrSimulatedPeer(senderId, packet.optString("name", ""))) {
                 MeshRoute directRoute = routingTable.get(senderId);
                 if (directRoute == null) directRoute = new MeshRoute();
                 directRoute.peerId = senderId;
@@ -1178,7 +1241,8 @@ public class NeerNetraNativeMeshManager {
                     JSONObject n = neighbors.optJSONObject(i);
                     if (n == null) continue;
                     String nId = n.optString("peer_id", n.optString("id", ""));
-                    if (nId.isEmpty() || nId.equalsIgnoreCase(myNodeId)) continue;
+                    String nName = n.optString("name", "");
+                    if (nId.isEmpty() || nId.equalsIgnoreCase(myNodeId) || isTestOrSimulatedPeer(nId, nName)) continue;
                     int nHop = n.optInt("hop_count", n.optInt("hops", 1)) + 1;
                     MeshRoute existingRoute = routingTable.get(nId);
 

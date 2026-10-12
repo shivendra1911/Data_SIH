@@ -275,6 +275,7 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
                 if (r == null || r.peerId == null) continue;
                 if (!myNodeId.isEmpty() && r.peerId.equalsIgnoreCase(myNodeId)) continue;
                 if (!myNodeName.isEmpty() && r.peerId.equalsIgnoreCase(myNodeName)) continue;
+                if (NeerNetraNativeMeshManager.isTestOrSimulatedPeer(r.peerId, r.name)) continue;
 
                 WritableMap map = Arguments.createMap();
                 map.putString("id", r.peerId);
@@ -298,6 +299,28 @@ public class NeerNetraGattModule extends ReactContextBaseJavaModule {
         } catch (Exception e) {
             Log.e(TAG, "getKnownPeers error", e);
             promise.reject("GET_KNOWN_PEERS_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void clearTestPeers(Promise promise) {
+        try {
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).clearTestPeers();
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "clearTestPeers error", e);
+            promise.resolve(false);
+        }
+    }
+
+    @ReactMethod
+    public void clearAllPeers(Promise promise) {
+        try {
+            NeerNetraNativeMeshManager.getInstance(getReactApplicationContext()).clearAllPeers();
+            promise.resolve(true);
+        } catch (Exception e) {
+            Log.e(TAG, "clearAllPeers error", e);
+            promise.resolve(false);
         }
     }
 

@@ -31,6 +31,8 @@ import {
   broadcastWifiBeacon,
   clearNativeMessageCache,
   getKnownPeers,
+  clearTestPeers,
+  clearAllPeers,
 } from './gattServerBridge';
 import { audioStreamer } from './audioStreamer';
 import { startBLEAdvertising } from './bleAdvertiser';
@@ -113,15 +115,58 @@ function isNeerManufacturerData(b64?: string | null): boolean {
 export function isMockOrFalsePeer(id?: string, name?: string): boolean {
   if (!id && !name) return true;
   const s = `${id || ''} ${name || ''}`.toLowerCase();
-  // Never filter out real or simulated multi-hop mesh nodes
-  if (s.includes('relay') || s.includes('shelter') || s.includes('rescue') || s.includes('node_') || s.includes('dev_node') || s.includes('gateway')) {
-    return false;
+
+  // Synthetic prefixes and node IDs from multi-hop automated test suites
+  if (
+    s.includes('dev_b_') ||
+    s.includes('dev_c_') ||
+    s.includes('dev_d_') ||
+    s.includes('dev_x_') ||
+    s.includes('dev_l_') ||
+    s.includes('dev_node_b') ||
+    s.includes('dev_node_c') ||
+    s.includes('dev_node_d') ||
+    s.includes('dev_node_x') ||
+    s.includes('dev_node_l') ||
+    s.includes('dev_node_l_2400m') ||
+    s.includes('dev_ndrf_') ||
+    s.includes('dev_large_sender') ||
+    s.includes('dev_initiator')
+  ) {
+    return true;
   }
+
+  // Synthetic node labels created in simulation scripts
+  if (
+    s.includes('relay gateway') ||
+    s.includes('rescue team') ||
+    s.includes('ridge shelter') ||
+    s.includes('suboptimal route') ||
+    s.includes('evacuation center') ||
+    s.includes('ndrf rescue ops') ||
+    s.includes('initiator node') ||
+    s.includes('node b') ||
+    s.includes('node c') ||
+    s.includes('node d') ||
+    s.includes('node x') ||
+    s.includes('node l')
+  ) {
+    return true;
+  }
+
+  // Generic mock / simulation tokens
   return (
+    s.includes('mock') ||
+    s.includes('test_') ||
+    s.includes('test node') ||
+    s.includes('sim_') ||
     s.includes('dummy') ||
     s.includes('synthetic') ||
     s.includes('seed') ||
     s.includes('sample') ||
+    s.includes('fake') ||
+    s.includes('audit') ||
+    s.includes('cloud_device') ||
     s.includes('ramesh') ||
     s.includes('anita') ||
     s.includes('katy') ||
@@ -308,6 +353,32 @@ class NeerNetraBLEMesh {
     clearNativeMessageCache().catch(() => {});
     console.log('[BLE Mesh] Deduplication message cache cleared');
   }
+
+  public async clearTestPeers(): Promise<void> {
+    for (const [id, peer] of this.activePeers.entries()) {
+      if (isMockOrFalsePeer(id, peer.name)) {
+        this.activePeers.delete(id);
+        this.peerNodeIdToMac.delete(id);
+        this.macToNodeId.delete(id);
+      }
+    }
+    await this.persistPeers();
+    await clearTestPeers();
+    this.emitPeersUpdate();
+    console.log('[BLE Mesh] 🧹 Test peers purged from memory, AsyncStorage, and native storage');
+  }
+
+  public async clearAllPeers(): Promise<void> {
+    this.activePeers.clear();
+    this.peerNodeIdToMac.clear();
+    this.macToNodeId.clear();
+    try {
+      await AsyncStorage.removeItem(KNOWN_PEERS_STORAGE_KEY);
+    } catch {}
+    await clearAllPeers();
+    this.emitPeersUpdate();
+    console.log('[BLE Mesh] 🧹 All peers cleared from memory, AsyncStorage, and native storage');
+  }
   private myDeviceId: string = '';
   private myName: string = '';
   private isScanning: boolean = false;
@@ -377,6 +448,7 @@ class NeerNetraBLEMesh {
             if (!p || !p.id) continue;
             if (this.myDeviceId && (p.id === this.myDeviceId || (p.nodeId && p.nodeId === this.myDeviceId))) continue;
             if (this.myName && p.name && p.name === this.myName) continue;
+            if (isMockOrFalsePeer(p.id, p.name)) continue;
             const lastSeenTime = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
             const isIdle = (nowMs - lastSeenTime > 240000);
             const peer: MeshPeer = {
@@ -401,6 +473,7 @@ class NeerNetraBLEMesh {
           if (!np || !np.id) continue;
           if (this.myDeviceId && (np.id === this.myDeviceId || (np.nodeId && np.nodeId === this.myDeviceId))) continue;
           if (this.myName && np.name && np.name === this.myName) continue;
+          if (isMockOrFalsePeer(np.id, np.name)) continue;
           const existing = this.activePeers.get(np.id);
           const hops = np.hopCount || (existing?.hopCount || 1);
           const isRelayed = hops > 1;
@@ -432,6 +505,15 @@ class NeerNetraBLEMesh {
 
       if (this.myDeviceId) {
         this.activePeers.delete(this.myDeviceId);
+      }
+
+      // Clean out any test or mock peers that may have crept into activePeers
+      for (const [id, peer] of this.activePeers.entries()) {
+        if (isMockOrFalsePeer(id, peer.name)) {
+          this.activePeers.delete(id);
+          this.peerNodeIdToMac.delete(id);
+          this.macToNodeId.delete(id);
+        }
       }
       this.emitPeersUpdate();
     } catch (e: any) {
@@ -1245,13 +1327,13 @@ class NeerNetraBLEMesh {
     const isTargetingMe = Boolean(
       (this.myDeviceId && (
         packet.targetId === this.myDeviceId ||
-        packet.targetNodeId === this.myDeviceId ||
+        (packet as any).targetNodeId === this.myDeviceId ||
         targetMac === this.myDeviceId ||
         targetNode === this.myDeviceId
       )) ||
       (Boolean(this.myName) && Boolean(packet.targetId) &&
        (packet.targetId.toLowerCase().includes(this.myName.toLowerCase()) ||
-        (packet.targetName && packet.targetName.toLowerCase().includes(this.myName.toLowerCase())))) ||
+        ((packet as any).targetName && (packet as any).targetName.toLowerCase().includes(this.myName.toLowerCase())))) ||
       packet.targetId === 'self' ||
       packet.targetId === 'me'
     );
@@ -2021,13 +2103,13 @@ class NeerNetraBLEMesh {
     return this.myDeviceId;
   }
 
-  /** Get all currently discovered/connected peers */
+  /** Get all currently discovered/connected peers (strictly genuine devices) */
   getConnectedPeers(): MeshPeer[] {
-    return Array.from(this.activePeers.values());
+    return Array.from(this.activePeers.values()).filter((p) => !isMockOrFalsePeer(p.id, p.name));
   }
 
   getActivePeersCount(): number {
-    return this.activePeers.size;
+    return this.getConnectedPeers().length;
   }
 
   getMeshChatMessages(): MeshChatMessage[] {
@@ -2052,7 +2134,7 @@ class NeerNetraBLEMesh {
   }
 
   private emitPeersUpdate() {
-    const list = Array.from(this.activePeers.values());
+    const list = this.getConnectedPeers();
     if (this.onPeersChanged) {
       try {
         this.onPeersChanged(list);

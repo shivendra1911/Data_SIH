@@ -27,6 +27,18 @@ export function isGenuineDevice(device_uuid?: string, name?: string): boolean {
     "dev_node_x_relay",
     "dev_node_l_2400m",
     "dev_initiator_node",
+    "dev_b_",
+    "dev_c_",
+    "dev_d_",
+    "dev_x_",
+    "dev_l_",
+    "dev_ndrf_",
+    "dev_large_sender",
+    "relay gateway",
+    "rescue team",
+    "ridge shelter",
+    "suboptimal route",
+    "evacuation center",
     "ndrf rescue ops",
     "cell broadcast",
     "emergency cell siren",
@@ -35,6 +47,7 @@ export function isGenuineDevice(device_uuid?: string, name?: string): boolean {
     "govt_directive",
     "command_directive",
     "broadcast_all",
+    "test_",
   ];
 
   for (const kw of mockKeywords) {

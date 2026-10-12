@@ -96,6 +96,32 @@ export const getKnownPeers = async (): Promise<any[]> => {
 };
 
 /**
+ * Purge test / simulation peers from native routing table and SharedPreferences.
+ */
+export const clearTestPeers = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.clearTestPeers) return false;
+  try {
+    return await NeerNetraGatt.clearTestPeers();
+  } catch (err: any) {
+    console.warn('[GattBridge] clearTestPeers error:', err?.message);
+    return false;
+  }
+};
+
+/**
+ * Clear all peers from native routing table and SharedPreferences.
+ */
+export const clearAllPeers = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android' || !NeerNetraGatt?.clearAllPeers) return false;
+  try {
+    return await NeerNetraGatt.clearAllPeers();
+  } catch (err: any) {
+    console.warn('[GattBridge] clearAllPeers error:', err?.message);
+    return false;
+  }
+};
+
+/**
  * Send data to ALL phones currently connected to our GATT Server.
  * This is how we push updates/messages to phones that found us via BLE.
  */
