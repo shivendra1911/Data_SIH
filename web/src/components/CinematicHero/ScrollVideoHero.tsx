@@ -141,13 +141,6 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-xl text-white text-xs shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="font-semibold text-[10px] uppercase tracking-[2.5px] text-white/90 font-sans">
-                12 Basins Scanning
-              </span>
-            </div>
-
             <button
               onClick={scrollToCommandCenter}
               aria-label="Jump directly to Command Center"
@@ -173,21 +166,12 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             }}
           >
             <div className="space-y-4 max-w-4xl mx-auto">
-              <div className="corwdy-subtitle">
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                <span>/AUTONOMOUS FLASH FLOOD DETECTION &amp; AUTO-SOS</span>
-              </div>
-
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
                 Predicting Flash Floods Across India <br className="hidden sm:inline" />
                 <span className="font-extrabold text-white">
                   With Autonomous SOS Response
                 </span>
               </h1>
-
-              <p className="text-xs sm:text-sm text-white/75 max-w-2xl mx-auto leading-relaxed drop-shadow font-sans font-medium">
-                Real-time physics-informed AI evaluating Himalayan valleys, Northeast floodplains, and Western Ghats catchments simultaneously. Autonomously dispatches emergency evacuation alerts to citizen devices upon threshold breach.
-              </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
                 <button
@@ -232,7 +216,7 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
             <div className="space-y-4 max-w-4xl mx-auto">
               <div className="corwdy-subtitle text-emerald-400/90">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>/CRYO-SEISMIC TELEMETRY • GLOF EARLY BREACH RADAR</span>
+                <span>CRYO-SEISMIC TELEMETRY • GLOF EARLY BREACH RADAR</span>
               </div>
 
               <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white uppercase tracking-tight leading-[1.12] drop-shadow-2xl font-display">
@@ -241,10 +225,6 @@ export default function ScrollVideoHero({ onEnterCommandCenter }: ScrollVideoHer
                   With High-Precision Sensor Telemetry
                 </span>
               </h2>
-
-              <p className="text-xs sm:text-sm text-white/75 max-w-2xl mx-auto leading-relaxed drop-shadow font-sans font-medium">
-                Dynamic 2D shallow-water kinematic equations coupled with 4.6M cryo-seismic tremor detection to anticipate glacial moraine breach hours before peak flood surge arrival.
-              </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
                 <Link
