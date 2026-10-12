@@ -175,6 +175,9 @@ export interface SafeEvacuationRoute {
   waypoints: [number, number][];
   shelter_capacity: number;
   shelter_facilities: string[];
+  route_type?: "SAFE" | "FAST";
+  via_road?: string;
+  turn_instructions?: string[];
 }
 
 export interface EmergencyResponder {

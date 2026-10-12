@@ -47,6 +47,11 @@ import {
   Compass,
   ChevronRight,
   ChevronLeft,
+  Navigation,
+  ShieldCheck,
+  Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface EmergencyMapProps {
@@ -274,6 +279,103 @@ const createLastKnownLocationIcon = (citizen: CitizenLocation) => {
   });
 };
 
+const createStartOriginIcon = (name: string) => {
+  return L.divIcon({
+    className: "custom-origin-icon",
+    html: `
+      <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; cursor: pointer;">
+        <div style="position: absolute; width: 32px; height: 32px; border-radius: 9999px; background: rgba(59, 130, 246, 0.35); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+        <div style="
+          width: 24px;
+          height: 24px;
+          border-radius: 9999px;
+          background: #2563eb;
+          border: 2.5px solid #ffffff;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: 900;
+          font-size: 11px;
+        ">A</div>
+        <div style="
+          position: absolute;
+          bottom: -18px;
+          background: #1e293b;
+          color: #f8fafc;
+          font-size: 9px;
+          font-weight: 800;
+          padding: 1px 6px;
+          border-radius: 4px;
+          border: 1px solid rgba(255,255,255,0.3);
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        ">Origin</div>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
+  });
+};
+
+const createDestinationHavenIcon = (
+  name: string,
+  elevGain: number,
+  capacity: number,
+  isSafe: boolean,
+  isSelected: boolean
+) => {
+  const primaryColor = isSafe ? "#059669" : "#2563eb";
+  const badgeBg = isSafe ? "#064e3b" : "#1e3a8a";
+  const pinSymbol = isSafe ? "🛡️" : "⚡";
+
+  return L.divIcon({
+    className: "custom-destination-icon",
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; transform: ${isSelected ? 'scale(1.08)' : 'scale(1.0)'}; transition: transform 0.2s;">
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: ${badgeBg};
+          color: #ffffff;
+          padding: 3px 8px;
+          border-radius: 9999px;
+          font-size: 10px;
+          font-weight: 800;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+          border: 1.5px solid #ffffff;
+          white-space: nowrap;
+          margin-bottom: 2px;
+        ">
+          <span>${pinSymbol}</span>
+          <span>${name.split(" ")[0]}</span>
+          <span style="opacity: 0.85; font-size: 9px; font-family: monospace;">+${elevGain}m</span>
+        </div>
+        <div style="
+          width: 30px;
+          height: 30px;
+          background: ${primaryColor};
+          border: 2.5px solid #ffffff;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <div style="transform: rotate(45deg); font-size: 12px; font-weight: 900; color: white;">🏁</div>
+        </div>
+      </div>
+    `,
+    iconSize: [120, 56],
+    iconAnchor: [60, 52],
+    popupAnchor: [0, -48],
+  });
+};
+
 const createAssemblyIcon = (name: string, capacity: number) => {
   return L.divIcon({
     className: "custom-div-icon",
@@ -351,6 +453,8 @@ export default function EmergencyMap({
   const [showLiveCitizens, setShowLiveCitizens] = useState<boolean>(true);
   const [showLastKnownCitizens, setShowLastKnownCitizens] = useState<boolean>(true);
   const [showSafeRoutes, setShowSafeRoutes] = useState<boolean>(true);
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("");
+  const [showTurnGuidance, setShowTurnGuidance] = useState<boolean>(false);
   const [showResponders, setShowResponders] = useState<boolean>(true);
   const [basemap, setBasemap] = useState<"hybrid" | "satellite" | "terrain" | "street">("hybrid");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
@@ -389,6 +493,21 @@ export default function EmergencyMap({
     safeRoutes && safeRoutes.length > 0
       ? safeRoutes
       : getSafeRoutesForZone(activeZone);
+
+  const safeRoute = activeSafeRoutes.find((r) => r.route_type === "SAFE") || activeSafeRoutes[0];
+  const fastRoute = activeSafeRoutes.find((r) => r.route_type === "FAST") || activeSafeRoutes[1] || activeSafeRoutes[0];
+
+  const currentActiveRoute =
+    activeSafeRoutes.find((r) => r.id === selectedRouteId) || safeRoute || activeSafeRoutes[0];
+
+  useEffect(() => {
+    if (activeSafeRoutes.length > 0) {
+      const match = activeSafeRoutes.find((r) => r.id === selectedRouteId);
+      if (!match) {
+        setSelectedRouteId(safeRoute?.id || activeSafeRoutes[0].id);
+      }
+    }
+  }, [activeZone.id, activeSafeRoutes, safeRoute?.id, selectedRouteId]);
 
   const activeResponders =
     responders && responders.length > 0
@@ -755,47 +874,115 @@ export default function EmergencyMap({
             </Marker>
           ))}
 
-        {/* Verified Safe Evacuation Routes */}
+        {/* Google Maps Realistic Evacuation Route Paths (Safe & Fast) */}
         {showSafeRoutes &&
-          activeSafeRoutes.map((route) => (
-            <React.Fragment key={route.id}>
-              <Polyline
-                positions={route.waypoints}
-                pathOptions={{
-                  color: "rgba(255, 255, 255, 0.75)",
-                  weight: 4,
-                  opacity: 0.85,
-                  dashArray: "8, 8",
-                }}
-              />
-              <Marker
-                position={route.assembly_coords}
-                icon={createAssemblyIcon(route.assembly_point_name, route.shelter_capacity)}
-              >
-                <Popup>
-                  <div className="p-2 space-y-1.5 text-white min-w-[220px] bg-[#1b2027]">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-1">
-                      <span className="text-xs font-bold text-white">
-                        ⛺ HIGH GROUND SHELTER
-                      </span>
-                      <span className="text-[10px] text-white/70 font-bold">
-                        +{route.elevation_gain_m}m Gain
-                      </span>
+          activeSafeRoutes.map((route) => {
+            const isSelected = route.id === currentActiveRoute?.id;
+            const isSafe = route.route_type !== "FAST";
+            return (
+              <React.Fragment key={route.id}>
+                {/* Outer casing polyline for Google Maps street contrast */}
+                <Polyline
+                  positions={route.waypoints}
+                  pathOptions={{
+                    color: isSelected
+                      ? isSafe
+                        ? "#064e3b"
+                        : "#1e3a8a"
+                      : "#334155",
+                    weight: isSelected ? 9 : 7,
+                    opacity: isSelected ? 0.75 : 0.35,
+                    lineCap: "round",
+                    lineJoin: "round",
+                  }}
+                  eventHandlers={{
+                    click: () => setSelectedRouteId(route.id),
+                  }}
+                />
+
+                {/* Inner core road line (Emerald for Safe, Vibrant Blue for Fast, Slate for Inactive) */}
+                <Polyline
+                  positions={route.waypoints}
+                  pathOptions={{
+                    color: isSelected
+                      ? isSafe
+                        ? "#10b981"
+                        : "#3b82f6"
+                      : "#94a3b8",
+                    weight: isSelected ? 5 : 4,
+                    opacity: isSelected ? 1 : 0.75,
+                    lineCap: "round",
+                    lineJoin: "round",
+                  }}
+                  eventHandlers={{
+                    click: () => setSelectedRouteId(route.id),
+                  }}
+                />
+
+                {/* Google Maps Destination Haven Pin */}
+                <Marker
+                  position={route.assembly_coords}
+                  icon={createDestinationHavenIcon(
+                    route.assembly_point_name,
+                    route.elevation_gain_m || 0,
+                    route.shelter_capacity,
+                    isSafe,
+                    isSelected
+                  )}
+                  eventHandlers={{
+                    click: () => setSelectedRouteId(route.id),
+                  }}
+                >
+                  <Popup>
+                    <div className="p-2 space-y-1.5 text-white min-w-[220px] bg-[#1b2027]">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1">
+                        <span className="text-xs font-bold text-white flex items-center gap-1">
+                          {isSafe ? "🛡️ SAFE PATH HAVEN" : "⚡ FAST PATH HAVEN"}
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-bold">
+                          +{route.elevation_gain_m}m Gain
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-white">
+                        {route.assembly_point_name}
+                      </div>
+                      <div className="text-[11px] text-white/70">
+                        Via: <strong className="text-white">{route.via_road || "Elevated Road Corridor"}</strong>
+                      </div>
+                      <div className="text-[11px] text-white/70">
+                        Capacity: <strong className="text-white">{route.shelter_capacity} citizens</strong>
+                      </div>
+                      <div className="text-[10px] text-white/80 font-mono">
+                        Distance: {route.distance_km}km • ~{route.walk_time_minutes} min walk
+                      </div>
                     </div>
-                    <div className="text-xs font-bold text-white">
-                      {route.assembly_point_name}
-                    </div>
-                    <div className="text-[11px] text-white/70">
-                      Capacity: <strong className="text-white">{route.shelter_capacity} citizens</strong>
-                    </div>
-                    <div className="text-[10px] text-white/80 font-mono">
-                      Safe Route: {route.distance_km}km • ~{route.walk_time_minutes} min walk
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            </React.Fragment>
-          ))}
+                  </Popup>
+                </Marker>
+              </React.Fragment>
+            );
+          })}
+
+        {/* Start / Origin Pin for Selected Active Route */}
+        {showSafeRoutes && currentActiveRoute && (
+          <Marker
+            position={currentActiveRoute.start_coords}
+            icon={createStartOriginIcon(currentActiveRoute.start_point_name)}
+          >
+            <Popup>
+              <div className="p-2 space-y-1 text-white bg-[#1b2027] min-w-[190px]">
+                <div className="text-xs font-bold text-blue-400 flex items-center gap-1">
+                  <span>🔵 Start Location (A)</span>
+                </div>
+                <div className="text-xs font-semibold text-white">
+                  {currentActiveRoute.start_point_name}
+                </div>
+                <div className="text-[10px] text-white/60 font-mono">
+                  Lowland Sector Origin
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Emergency Responders Grid (Ambulances, Police, NDRF) */}
         {showResponders &&
@@ -1002,33 +1189,106 @@ export default function EmergencyMap({
         </button>
       )}
 
-      {/* Map Overlay Header / Legend */}
-      <div className="absolute top-3 left-3 z-[1000] bg-[#1b2027]/95 backdrop-blur-md border border-white/15 rounded-2xl p-3 shadow-2xl max-w-xs pointer-events-auto">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
-          <span className="text-xs font-extrabold uppercase tracking-wider text-white">
-            India Flood Radar
-          </span>
+      {/* Google Maps Route Navigation Control Card */}
+      {showSafeRoutes && currentActiveRoute && (
+        <div className="absolute top-14 left-3 z-[1000] max-w-sm sm:max-w-md w-[calc(100%-24px)] sm:w-auto bg-[#1b2027]/95 backdrop-blur-md border border-white/15 rounded-2xl p-3 shadow-2xl text-white space-y-2 pointer-events-auto">
+          {/* Top Google Maps Route Chips */}
+          <div className="flex items-center gap-2">
+            {safeRoute && (
+              <button
+                onClick={() => setSelectedRouteId(safeRoute.id)}
+                className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between gap-2 cursor-pointer ${
+                  currentActiveRoute.id === safeRoute.id
+                    ? "bg-emerald-600 text-white shadow-sm ring-1 ring-white/30"
+                    : "bg-white/10 hover:bg-white/20 text-white/80"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                  <span>Safe Path</span>
+                </div>
+                <span className="font-mono text-[11px] font-extrabold">{safeRoute.walk_time_minutes}m</span>
+              </button>
+            )}
+
+            {fastRoute && (
+              <button
+                onClick={() => setSelectedRouteId(fastRoute.id)}
+                className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-between gap-2 cursor-pointer ${
+                  currentActiveRoute.id === fastRoute.id
+                    ? "bg-blue-600 text-white shadow-sm ring-1 ring-white/30"
+                    : "bg-white/10 hover:bg-white/20 text-white/80"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-white" />
+                  <span>Fast Path</span>
+                </div>
+                <span className="font-mono text-[11px] font-extrabold">{fastRoute.walk_time_minutes}m</span>
+              </button>
+            )}
+          </div>
+
+          {/* Route Metric Summary */}
+          <div className="flex items-center justify-between text-xs pt-1 border-t border-white/10">
+            <div>
+              <div className="font-bold text-white flex items-center gap-1.5">
+                <span>{currentActiveRoute.route_type === "FAST" ? "⚡ Fast Arterial" : "🛡️ High-Ridge Safe Path"}</span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  +{currentActiveRoute.elevation_gain_m}m AMSL
+                </span>
+              </div>
+              <div className="text-[11px] text-white/70 line-clamp-1">
+                {currentActiveRoute.via_road || currentActiveRoute.route_name}
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <div className="font-mono font-black text-sm text-white">
+                ~{currentActiveRoute.walk_time_minutes} min
+              </div>
+              <div className="text-[10px] font-mono text-white/60">
+                {currentActiveRoute.distance_km} km
+              </div>
+            </div>
+          </div>
+
+          {/* Toggle Turn-by-Turn Guidance */}
+          {currentActiveRoute.turn_instructions && currentActiveRoute.turn_instructions.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowTurnGuidance((prev) => !prev)}
+                className="w-full py-1 px-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-bold text-white/90 flex items-center justify-between transition cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Navigation className="w-3 h-3 text-emerald-400" />
+                  <span>Turn-by-turn directions ({currentActiveRoute.turn_instructions.length} steps)</span>
+                </span>
+                {showTurnGuidance ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-white/70" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5 text-white/70" />
+                )}
+              </button>
+
+              {showTurnGuidance && (
+                <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1 text-[11px] text-white/80 font-mono">
+                  {currentActiveRoute.turn_instructions.map((step, idx) => (
+                    <div key={idx} className="flex items-start gap-1.5 bg-black/30 p-1.5 rounded-lg border border-white/5">
+                      <span className="text-white/50 shrink-0 font-bold">{idx + 1}.</span>
+                      <span className="leading-tight text-white/90">{step}</span>
+                    </div>
+                  ))}
+                  <div className="p-1 text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                    <span>🏁 Destination:</span>
+                    <span className="text-white font-semibold truncate">{currentActiveRoute.assembly_point_name}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-white/80">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">⚡</span>
-            <span>Dam / Barrage</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">🌉</span>
-            <span>River Bridge</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">⛺</span>
-            <span>Evac Shelter</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-white ring-2 ring-white/30"></span>
-            <span>Citizen SOS</span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Floating Active Zone Banner */}
       <div className="absolute bottom-3 left-3 z-[1000] bg-[#1b2027]/95 backdrop-blur-md border border-white/15 rounded-xl px-3.5 py-2 text-xs flex items-center gap-2.5 shadow-xl">

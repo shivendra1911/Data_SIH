@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Mountain, AlertTriangle, ShieldCheck, Radio, CheckCircle2, Navigation, Activity, Users, Volume2 } from "lucide-react";
+import { Mountain, AlertTriangle, Radio, CheckCircle2, Navigation, Activity, Users, Volume2, RotateCcw, Zap } from "lucide-react";
 
 export interface LandslideSector {
   sector_id: string;
@@ -59,18 +59,18 @@ export default function LandslideConsensusPanel({
         body: JSON.stringify({
           sector_id: sectorId,
           message: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW",
-          authorized_by: "COMMAND_PORTAL_USAR",
+          authorized_by: "COMMAND_PORTAL",
         }),
       });
       if (res.ok) {
-        if (onShowToast) onShowToast("Area-wide evacuation siren broadcast dispatched to all devices in sector!");
+        if (onShowToast) onShowToast("Area-wide evacuation siren signal sent to citizen phones in sector!");
         fetchSectors();
       }
     } catch {}
     setLoadingAction(null);
   };
 
-  const handleSimulate = async (sectorId: string) => {
+  const handleSimulatePhone = async (sectorId: string) => {
     setLoadingAction(`sim_${sectorId}`);
     try {
       const res = await fetch("/api/landslide/simulate-quorum", {
@@ -79,23 +79,30 @@ export default function LandslideConsensusPanel({
         body: JSON.stringify({ sector_id: sectorId }),
       });
       if (res.ok) {
-        if (onShowToast) onShowToast("Simulated 1/3rd sector quorum! 3+ devices confirmed landslide tremor.");
+        const data = await res.json();
+        if (onShowToast) {
+          if (data.status === "CONFIRMED_LANDSLIDE") {
+            onShowToast("1/3rd quorum reached! Alert signal transmitted to phones.");
+          } else {
+            onShowToast(`Phone tremor registered in sector (${data.reporting_count || 1}/${data.quorum_threshold || 3} phones).`);
+          }
+        }
         fetchSectors();
       }
     } catch {}
     setLoadingAction(null);
   };
 
-  const handleCancel = async (sectorId: string) => {
-    setLoadingAction(`cancel_${sectorId}`);
+  const handleResetSector = async (sectorId: string) => {
+    setLoadingAction(`reset_${sectorId}`);
     try {
-      const res = await fetch("/api/landslide/cancel", {
+      const res = await fetch("/api/landslide/simulate-quorum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sector_id: sectorId }),
+        body: JSON.stringify({ sector_id: sectorId, reset: true }),
       });
       if (res.ok) {
-        if (onShowToast) onShowToast(`Landslide alarm cancelled for sector ${sectorId}`);
+        if (onShowToast) onShowToast("Sector reset to normal monitoring.");
         fetchSectors();
       }
     } catch {}
@@ -105,157 +112,164 @@ export default function LandslideConsensusPanel({
   const confirmedCount = sectors.filter((s) => s.status === "CONFIRMED_LANDSLIDE").length;
 
   return (
-    <div className="tilt-card rounded-2xl bg-[#1b2027]/90 shadow-xl overflow-hidden flex flex-col h-full border border-amber-500/30 text-white">
+    <div className="rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-800 font-sans h-full flex flex-col">
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-amber-500/20 flex items-center justify-between bg-amber-950/20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shadow-xs">
-            <Mountain className="w-4 h-4 text-amber-400" aria-hidden />
+          <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 shrink-0">
+            <Mountain className={`w-4 h-4 ${confirmedCount > 0 ? "text-amber-600 animate-pulse" : "text-slate-600"}`} aria-hidden />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-white uppercase tracking-wide font-display flex items-center gap-2">
-              Sub-Surface Landslide Sentinel (1/3rd Quorum)
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 font-display">
+                Landslide Early Warning
+              </h3>
               {confirmedCount > 0 && (
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
               )}
-            </h2>
-            <p className="text-[11px] font-semibold text-white/60">
-              Harmonic Tremor Verification • Confirmed when &ge; 1/3rd area mobiles report
-            </p>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <span
-            className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
-              confirmedCount > 0 ? "bg-red-600 text-white animate-pulse" : "bg-emerald-600/80 text-white"
-            } shadow-xs`}
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+              confirmedCount > 0
+                ? "bg-red-500/10 text-red-700 border border-red-500/20"
+                : "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
+            }`}
           >
             {confirmedCount > 0 ? `${confirmedCount} Quorum Confirmed` : "All Sectors Stable"}
           </span>
-          <span className="text-[11px] font-bold text-white/80">
-            {sectors.length} Monitored Sectors
+          <span className="text-xs font-semibold text-slate-500">
+            {sectors.length} Sectors Monitored
           </span>
         </div>
       </div>
 
       {/* Content List */}
-      <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar flex-1">
+      <div className="space-y-3 flex-1 overflow-y-auto max-h-[440px] pr-1">
         {sectors.length === 0 ? (
-          <div className="text-center py-6 text-white/50 text-xs">
+          <div className="p-8 text-center text-slate-500 text-xs rounded-2xl bg-slate-50 border border-slate-100">
             Connecting to Landslide Sector Telemetry Engine...
           </div>
         ) : (
           sectors.map((sec) => {
             const isConfirmed = sec.status === "CONFIRMED_LANDSLIDE";
             const isPending = sec.status === "PENDING_QUORUM";
-            const progressRatio = Math.min(100, Math.round((sec.reporting_count / sec.quorum_threshold) * 100));
+            const hasReports = (sec.reporting_count || 0) > 0;
 
             return (
               <div
                 key={sec.sector_id}
-                className={`p-3.5 rounded-xl border transition-all ${
+                className={`p-4 rounded-2xl border transition-all ${
                   isConfirmed
-                    ? "bg-red-950/40 border-red-500/50 shadow-lg shadow-red-950/20"
+                    ? "bg-red-50/70 border-red-200 shadow-xs"
                     : isPending
-                    ? "bg-amber-950/30 border-amber-500/40"
-                    : "bg-white/5 border-white/10"
+                    ? "bg-amber-50/60 border-amber-200"
+                    : "bg-slate-50 border-slate-200"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-white">{sec.sector_name}</span>
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2.5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-slate-900">{sec.sector_name}</span>
                       <span
-                        className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                           isConfirmed
                             ? "bg-red-600 text-white"
                             : isPending
-                            ? "bg-amber-600 text-white"
-                            : "bg-emerald-600/30 text-emerald-400 border border-emerald-500/30"
+                            ? "bg-amber-500 text-white"
+                            : "bg-emerald-100 text-emerald-800 border border-emerald-300"
                         }`}
                       >
-                        {isConfirmed ? "⛰️ 1/3RD QUORUM CONFIRMED" : isPending ? "PENDING 1/3RD QUORUM" : "STABLE • MONITORING"}
+                        {isConfirmed
+                          ? "1/3rd Quorum Confirmed"
+                          : isPending
+                          ? "Analyzing Harmonic Tremor"
+                          : "Stable Ground"}
                       </span>
                     </div>
-                    <div className="text-[11px] text-white/60 mt-0.5 flex items-center gap-2">
+                    <div className="text-xs text-slate-500 flex items-center gap-2">
                       <span>Coordinates: {sec.lat.toFixed(4)}°N, {sec.lng.toFixed(4)}°E</span>
                       <span>•</span>
-                      <span>Total Active Devices: {sec.total_active_phones}</span>
+                      <span>Active Sector Devices: {sec.total_active_phones}</span>
                     </div>
                   </div>
 
                   {onFocusCoordinates && (
                     <button
                       onClick={() => onFocusCoordinates(sec.lat, sec.lng)}
-                      className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+                      className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 font-medium transition-colors"
                       title="Focus on Command Map"
                     >
                       <Navigation className="w-3.5 h-3.5" />
+                      <span>Locate Sector</span>
                     </button>
                   )}
                 </div>
 
                 {/* Consensus Progress Bar & Telemetry Metrics */}
-                <div className="bg-black/30 rounded-lg p-2.5 my-2.5 space-y-2">
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-white/70 font-semibold flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-amber-400" />
-                      1/3rd Consensus Quorum:
+                <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Phones Hit Threshold Frequency:</span>
                     </span>
-                    <span className="font-mono font-bold text-white">
-                      {sec.reporting_count} / {sec.total_active_phones} Devices ({sec.consensus_ratio_percent}%)
-                      <span className="text-white/50 text-[10px] ml-1">
-                        [Threshold: {sec.quorum_threshold} devices]
-                      </span>
+                    <span className="font-mono font-bold text-slate-900">
+                      <strong className={isConfirmed ? "text-red-600" : isPending ? "text-amber-600" : "text-emerald-600"}>
+                        {sec.reporting_count} / {sec.quorum_threshold}
+                      </strong>{" "}
+                      Phones ({sec.consensus_ratio_percent}%)
                     </span>
                   </div>
 
                   {/* Visual Progress Bar */}
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
                     <div
                       className={`h-full transition-all duration-500 rounded-full ${
                         isConfirmed
-                          ? "bg-gradient-to-r from-amber-500 to-red-500"
+                          ? "bg-red-600"
                           : isPending
                           ? "bg-amber-500"
                           : "bg-emerald-500"
                       }`}
-                      style={{ width: `${Math.max(5, (sec.reporting_count / sec.total_active_phones) * 100)}%` }}
+                      style={{ width: `${Math.max(hasReports ? 33 : 4, (sec.reporting_count / sec.quorum_threshold) * 100)}%` }}
                     />
                   </div>
 
                   {/* Seismic Vibration Frequency Readout */}
-                  <div className="flex justify-between items-center text-[10px] text-white/60 pt-1 border-t border-white/5">
+                  <div className="flex justify-between items-center text-[11px] text-slate-600 pt-1 border-t border-slate-100">
                     <span className="flex items-center gap-1 font-mono">
-                      <Activity className="w-3 h-3 text-cyan-400" />
-                      Seismic Band: {sec.latest_frequency_hz > 0 ? `${sec.latest_frequency_hz.toFixed(1)} Hz` : "18.4 Hz harmonic"}
+                      <Activity className="w-3 h-3 text-slate-500" />
+                      Seismic Frequency: {sec.latest_frequency_hz > 0 ? `${sec.latest_frequency_hz.toFixed(1)} Hz` : "Normal (18.4 Hz band)"}
                     </span>
-                    <span className="font-mono">
-                      Tremor: {sec.latest_tremor_g > 0 ? `${sec.latest_tremor_g.toFixed(2)}g` : "0.20g RMS"}
+                    <span className="font-mono font-semibold text-slate-700">
+                      Tremor: {sec.latest_tremor_g > 0 ? `${sec.latest_tremor_g.toFixed(2)}g` : "0.0g RMS (Stable)"}
                     </span>
                   </div>
                 </div>
 
-                {/* Directive & Simulation Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                {/* Actions: Simulate Phone Tremor / Send Alert Signal */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleSimulate(sec.sector_id)}
+                      onClick={() => handleSimulatePhone(sec.sector_id)}
                       disabled={loadingAction === `sim_${sec.sector_id}`}
-                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[11px] font-bold text-amber-300 transition-colors flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
-                      <Radio className="w-3 h-3" />
-                      Simulate 1/3rd Quorum
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Simulate Phone Tremor</span>
                     </button>
 
-                    {isConfirmed && (
+                    {hasReports && (
                       <button
-                        onClick={() => handleCancel(sec.sector_id)}
-                        disabled={loadingAction === `cancel_${sec.sector_id}`}
-                        className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-semibold text-white/80 transition-colors"
+                        onClick={() => handleResetSector(sec.sector_id)}
+                        disabled={loadingAction === `reset_${sec.sector_id}`}
+                        className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-600 transition cursor-pointer"
+                        title="Reset sector to normal"
                       >
-                        Reset / Safe
+                        <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -263,14 +277,14 @@ export default function LandslideConsensusPanel({
                   <button
                     onClick={() => handleBroadcast(sec.sector_id)}
                     disabled={loadingAction === sec.sector_id}
-                    className={`px-3 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
                       isConfirmed
-                        ? "bg-red-600 hover:bg-red-500 text-white animate-pulse"
-                        : "bg-white/10 hover:bg-white/20 text-white/90"
+                        ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
+                        : "bg-slate-800 hover:bg-slate-900 text-white"
                     }`}
                   >
-                    <Volume2 className="w-3 h-3" />
-                    {isConfirmed ? "Broadcast Sector Evacuation Siren" : "Issue Sector Directive"}
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>{isConfirmed ? "Send Signal to Phones (Evacuation Siren)" : "Issue Sector Directive"}</span>
                   </button>
                 </div>
               </div>

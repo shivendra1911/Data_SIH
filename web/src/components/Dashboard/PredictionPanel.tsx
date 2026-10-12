@@ -12,6 +12,7 @@ import {
   PhoneCall,
   ArrowRight,
   Sparkles,
+  Mountain,
 } from "lucide-react";
 
 interface PredictionPanelProps {
@@ -154,11 +155,11 @@ export default function PredictionPanel({
         </div>
       </div>
 
-      {/* Merged 3-Column Supporting Metrics Container with Vertical Dividers */}
-      <div className="rounded-2xl bg-[#f1f5f9]/90 border border-slate-200/90 p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200/90 gap-4 md:gap-0 shadow-xs">
+      {/* 4-Column Supporting Metrics Container with Vertical Dividers */}
+      <div className="rounded-2xl bg-[#f1f5f9]/90 border border-slate-200/90 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 lg:divide-x divide-slate-200/90 gap-4 sm:gap-6 lg:gap-0 shadow-xs">
         
         {/* Column 1: Water Depth with Visual Progress Bar */}
-        <div className="md:px-4 first:md:pl-1 space-y-2">
+        <div className="lg:px-4 first:lg:pl-1 space-y-2">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
             Water Depth
           </span>
@@ -191,7 +192,7 @@ export default function PredictionPanel({
         </div>
 
         {/* Column 2: Catchment Rain */}
-        <div className="md:px-5 pt-3 md:pt-0 space-y-2">
+        <div className="lg:px-5 pt-3 sm:pt-0 space-y-2">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
             Catchment Rain
           </span>
@@ -200,15 +201,49 @@ export default function PredictionPanel({
             <span className="text-xs font-semibold text-slate-500 font-sans">mm/hr</span>
           </div>
           <p className="text-[11px] text-slate-500 font-medium pt-3">
-            Soil Saturation:{" "}
-            <span className="font-mono font-semibold text-slate-700">
-              {prediction.telemetry?.soil_moisture_pct.toFixed(0)}%
-            </span>
+            Precipitation rate across upstream watershed
           </p>
         </div>
 
-        {/* Column 3: Response Time */}
-        <div className="md:px-5 pt-3 md:pt-0 space-y-2">
+        {/* Column 3: Mountain Slope & Ground Stability (Adjusted from TelemetryStrip) */}
+        <div className="lg:px-5 pt-3 sm:pt-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Slope & Ground
+            </span>
+            <span
+              className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                (prediction.telemetry?.seismic_mag ?? 0) >= 3.0
+                  ? "bg-red-500/10 text-red-700 border border-red-500/20"
+                  : (prediction.telemetry?.soil_moisture_pct ?? 0) >= 75
+                  ? "bg-amber-500/10 text-amber-700 border border-amber-500/20"
+                  : "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
+              }`}
+            >
+              {(prediction.telemetry?.seismic_mag ?? 0) >= 3.0
+                ? "Seismic Shock"
+                : (prediction.telemetry?.soil_moisture_pct ?? 0) >= 75
+                ? "Saturated Soil"
+                : "Stable Ground"}
+            </span>
+          </div>
+          <div className="text-xl font-black font-mono text-slate-800 flex items-baseline gap-2">
+            <span>{(prediction.telemetry?.slope_deg ?? 15.0).toFixed(1)}°</span>
+            <span className="text-xs font-medium text-slate-500 font-sans">
+              Incline &bull; <span className="font-mono font-bold text-slate-700">{(prediction.telemetry?.soil_moisture_pct ?? 45).toFixed(0)}%</span> Moisture
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium pt-3">
+            {(prediction.telemetry?.seismic_mag ?? 0) >= 3.0
+              ? `Tremor: Mag ${(prediction.telemetry?.seismic_mag ?? 0).toFixed(1)} recorded via USGS`
+              : (prediction.telemetry?.soil_moisture_pct ?? 0) >= 75
+              ? "High soil water saturation increases mudslide risk"
+              : "Geological stability normal • Zero tremors"}
+          </p>
+        </div>
+
+        {/* Column 4: Response Time */}
+        <div className="lg:px-5 pt-3 sm:pt-0 space-y-2">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
             Response Time
           </span>

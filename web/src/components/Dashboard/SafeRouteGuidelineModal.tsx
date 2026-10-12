@@ -396,19 +396,26 @@ export default function SafeRouteGuidelineModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {safeRoutes.map((route) => {
                 const isSelected = activeRoute?.id === route.id;
+                const isSafe = route.route_type !== "FAST";
                 return (
                   <div
                     key={route.id}
                     onClick={() => setSelectedRouteId(route.id)}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                       isSelected
                         ? "bg-[#faf9f5] border-slate-900 shadow-sm ring-2 ring-slate-900/10"
                         : "bg-white border-slate-200 hover:border-slate-300"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                        {route.risk_avoidance_status}
+                    <div className="flex items-center justify-between mb-2">
+                      <span
+                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                          isSafe
+                            ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                            : "bg-blue-100 text-blue-900 border-blue-300"
+                        }`}
+                      >
+                        {isSafe ? "🛡️ SAFE PATH" : "⚡ FAST PATH"}
                       </span>
                       <span className="text-xs font-mono font-bold text-slate-900">
                         +{route.elevation_gain_m}m Gain
@@ -417,14 +424,34 @@ export default function SafeRouteGuidelineModal({
 
                     <h4 className="text-xs font-bold text-slate-950 mb-1">{route.route_name}</h4>
 
-                    <div className="text-[11px] text-slate-600 space-y-0.5 mb-2">
-                      <div>📍 <strong>From:</strong> {route.start_point_name}</div>
-                      <div>⛺ <strong>To:</strong> {route.assembly_point_name}</div>
+                    {route.via_road && (
+                      <div className="text-[11px] font-medium text-slate-600 mb-2">
+                        🛣️ <span className="font-semibold">{route.via_road}</span>
+                      </div>
+                    )}
+
+                    <div className="text-[11px] text-slate-600 space-y-1 mb-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                      <div>📍 <strong>Origin:</strong> {route.start_point_name}</div>
+                      <div>🏁 <strong>Destination:</strong> {route.assembly_point_name}</div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 pt-2 border-t border-slate-100">
+                    {route.turn_instructions && route.turn_instructions.length > 0 && (
+                      <div className="text-[11px] text-slate-600 space-y-1 my-2">
+                        <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider">
+                          Turn-by-Turn Guidance:
+                        </div>
+                        {route.turn_instructions.map((step, idx) => (
+                          <div key={idx} className="flex items-start gap-1.5 text-[10px] leading-tight">
+                            <span className="font-mono text-slate-400 font-bold">{idx + 1}.</span>
+                            <span>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 pt-2 border-t border-slate-200">
                       <span>Distance: {route.distance_km} km</span>
-                      <span>Walk: ~{route.walk_time_minutes} mins</span>
+                      <span>ETA: ~{route.walk_time_minutes} mins</span>
                       <span>Cap: {route.shelter_capacity} ppl</span>
                     </div>
                   </div>

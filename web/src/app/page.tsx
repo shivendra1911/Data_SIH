@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Header from "@/components/Dashboard/Header";
-import TelemetryStrip from "@/components/Dashboard/TelemetryStrip";
 import PredictionPanel from "@/components/Dashboard/PredictionPanel";
 import PreventiveDirectivesPanel from "@/components/Dashboard/PreventiveDirectivesPanel";
 import DisasterLocationStream from "@/components/Dashboard/DisasterLocationStream";
@@ -636,14 +635,6 @@ export default function NationalSentinelPage() {
             </button>
           </div>
         ) : null}
-
-        {/* Real-time 3-Card Telemetry Ribbon with LIVE Telemetry */}
-        <TelemetryStrip
-          activeZone={selectedZone}
-          riskPercent={displayedRisk}
-          liveTelemetry={prediction?.telemetry}
-          isLiveInternet={prediction?.is_live_internet}
-        />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto w-full space-y-8 font-sans">
           
