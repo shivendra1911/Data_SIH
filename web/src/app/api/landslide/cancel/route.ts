@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   // Sync HALT to Supabase
   try {
     const { supabase } = await import("@/lib/supabase");
-    supabase.from("sos_alerts").insert([
+    await supabase.from("sos_alerts").insert([
       {
         device_id: "ADMIN_SIREN_DISPATCH",
         lat: 11.5273,
@@ -84,13 +84,12 @@ export async function POST(req: NextRequest) {
           halted_at: new Date().toISOString(),
         }),
       },
-    ]).then(() => {});
+    ]);
 
-    supabase
+    await supabase
       .from("sos_alerts")
       .update({ status: "RESOLVED_SAFE" })
-      .eq("sos_type", "LANDSLIDE")
-      .then(() => {});
+      .eq("sos_type", "LANDSLIDE");
   } catch {}
 
   return NextResponse.json(

@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
         timestamp: nowIso,
       }),
     };
-    supabase.from("sos_alerts").insert([insertPayload]).then(() => {});
+    await supabase.from("sos_alerts").insert([insertPayload]);
   } catch {}
 
   // If confirmed by 3+ phones, activate universal emergency siren broadcast

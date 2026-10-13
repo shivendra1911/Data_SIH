@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   // 3. Post HALTED_SIREN to Supabase cloud and resolve active collapse events
   try {
-    supabase.from("sos_alerts").insert([
+    await supabase.from("sos_alerts").insert([
       {
         device_id: "ADMIN_SIREN_DISPATCH",
         lat: 27.6015,
@@ -64,14 +64,13 @@ export async function POST(req: NextRequest) {
           halted_at: new Date().toISOString(),
         }),
       },
-    ]).then(() => {});
+    ]);
 
     if (body.reset) {
-      supabase
+      await supabase
         .from("sos_alerts")
         .update({ status: "RESOLVED_SAFE" })
-        .eq("sos_type", "COLLAPSE")
-        .then(() => {});
+        .eq("sos_type", "COLLAPSE");
     }
   } catch {}
 

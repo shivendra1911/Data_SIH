@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   // Persist to Supabase for cross-serverless synchronization
   try {
     for (const p of simPeers) {
-      supabase.from("sos_alerts").insert([
+      await supabase.from("sos_alerts").insert([
         {
           device_id: p.device_uuid,
           lat: sec.lat,
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
             timestamp: nowIso,
           }),
         },
-      ]).then(() => {});
+      ]);
     }
   } catch {}
 

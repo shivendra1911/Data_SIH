@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         timestamp: nowIso,
       }),
     };
-    supabase.from("sos_alerts").insert([reportInsert]).then(() => {});
+    await supabase.from("sos_alerts").insert([reportInsert]);
   } catch {}
 
   // Forward to FastAPI asynchronously if running
