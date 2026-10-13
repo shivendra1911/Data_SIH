@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 3. Post HALTED_SIREN to Supabase cloud
+  // 3. Post HALTED_SIREN to Supabase cloud and resolve active collapse events
   try {
     supabase.from("sos_alerts").insert([
       {
@@ -65,6 +65,14 @@ export async function POST(req: NextRequest) {
         }),
       },
     ]).then(() => {});
+
+    if (body.reset) {
+      supabase
+        .from("sos_alerts")
+        .update({ status: "RESOLVED_SAFE" })
+        .eq("sos_type", "COLLAPSE")
+        .then(() => {});
+    }
   } catch {}
 
   // 4. Forward to FastAPI backend if running
@@ -81,8 +89,21 @@ export async function POST(req: NextRequest) {
   const state = getGlobalState();
   const affectedClusters: string[] = [];
 
-  if (body.reset || body.cluster_id) {
-    const cid = body.cluster_id || "clp_cluster_chm01";
+  if (body.reset) {
+    state.collapseClusters = {};
+    return NextResponse.json(
+      {
+        success: true,
+        status: "RESET",
+        message: "All collapse clusters reset to normal",
+        affected_clusters: [],
+      },
+      { headers: corsHeaders }
+    );
+  }
+
+  if (body.cluster_id) {
+    const cid = body.cluster_id;
     delete state.collapseClusters[cid];
     affectedClusters.push(cid);
   }

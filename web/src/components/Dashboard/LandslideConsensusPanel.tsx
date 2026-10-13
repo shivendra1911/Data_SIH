@@ -160,9 +160,9 @@ export default function LandslideConsensusPanel({
   const confirmedCount = sectors.filter((s) => s.status === "CONFIRMED_LANDSLIDE").length;
 
   return (
-    <div className="rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-800 font-sans h-full flex flex-col">
+    <div className="rounded-3xl glass-card border border-slate-200/80 p-6 space-y-4 text-slate-800 font-sans h-full flex flex-col shadow-sm">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 shrink-0">
             <Mountain className={`w-4 h-4 ${confirmedCount > 0 ? "text-amber-600 animate-pulse" : "text-slate-600"}`} aria-hidden />
@@ -183,10 +183,10 @@ export default function LandslideConsensusPanel({
           <button
             onClick={handleSimulateLiveTremor}
             disabled={loadingAction === "sim_live_gps"}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
             title="Simulate a phone tremor sensor at your actual device GPS coordinates"
           >
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
             <span>Simulate Tremor (My GPS)</span>
           </button>
 
@@ -222,10 +222,10 @@ export default function LandslideConsensusPanel({
                 key={sec.sector_id}
                 className={`p-4 rounded-2xl border transition-all ${
                   isConfirmed
-                    ? "bg-red-50/70 border-red-200 shadow-xs"
+                    ? "bg-red-50/70 border-red-200/90 shadow-xs"
                     : isPending
-                    ? "bg-amber-50/60 border-amber-200"
-                    : "bg-slate-50 border-slate-200"
+                    ? "bg-amber-50/60 border-amber-200/90"
+                    : "bg-white/80 border-slate-200/80 shadow-2xs"
                 }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2.5">
@@ -268,7 +268,7 @@ export default function LandslideConsensusPanel({
                 </div>
 
                 {/* Consensus Progress Bar & Telemetry Metrics */}
-                <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
+                <div className="bg-white/90 rounded-xl border border-slate-200/70 p-3.5 space-y-2">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-700 font-bold flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-slate-500" />
@@ -338,7 +338,7 @@ export default function LandslideConsensusPanel({
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
                       isConfirmed
                         ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                        : "bg-slate-800 hover:bg-slate-900 text-white"
+                        : "bg-slate-900 hover:bg-black text-white"
                     }`}
                   >
                     <Volume2 className="w-3.5 h-3.5" />

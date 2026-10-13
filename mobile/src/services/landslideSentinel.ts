@@ -260,7 +260,7 @@ class LandslideSentinel {
     for (const base of candidateUrls) {
       try {
         const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 1200);
+        const tId = setTimeout(() => controller.abort(), 3500);
         const res = await fetch(`${base}/api/landslide/report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -367,7 +367,7 @@ class LandslideSentinel {
       for (const base of candidateUrls) {
         try {
           const controller = new AbortController();
-          const tId = setTimeout(() => controller.abort(), 1200);
+          const tId = setTimeout(() => controller.abort(), 3500);
           const res = await fetch(`${base}/api/landslide/report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

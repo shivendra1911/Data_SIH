@@ -23,7 +23,7 @@ async function postCollapseApi(endpoint: string, bodyObj: any) {
   for (const base of CANDIDATE_URLS) {
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 1200);
+      const tId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
 import { supabase } from "@/lib/supabase";
 import { CitizenLocation } from "@/lib/types";
+import { checkRateLimit } from "@/lib/security";
+import type { MobileSirenRecord } from "@/app/api/mobile/siren-dispatch/route";
+
+declare global {
+  var __NEERNETRA_MOBILE_SIREN_DISPATCHES__: Map<string, MobileSirenRecord> | undefined;
+  var __NEERNETRA_CITIZENS__: CitizenLocation[] | undefined;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,109 +21,34 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const rateLimit = checkRateLimit(`landslide_${clientIp}`, 60, 60000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many landslide reports. Please wait.", retry_after_sec: rateLimit.retryAfterSec },
+      { status: 429, headers: corsHeaders }
+    );
+  }
+
   let body: any = {};
   try {
     body = await req.json();
   } catch {}
 
-  const lat = Number(body.lat) || 11.5273;
-  const lng = Number(body.lng) || 76.1242;
+  const lat = Number(body.lat) || 27.6015;
+  const lng = Number(body.lng) || 77.5975;
   const autoSectorId = `sector_${lat.toFixed(2).replace('.', '_')}_${lng.toFixed(2).replace('.', '_')}`;
   const autoSectorName = `Sector [${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E]`;
   const sectorId = body.sector_id || autoSectorId;
   const sectorName = body.sector_name || autoSectorName;
-  const deviceUuid = body.device_uuid || `dev_${Math.random().toString(36).substring(2, 8)}`;
-  const tremorG = Number(body.tremor_g) || 0.18;
+  const deviceUuid = body.device_uuid || `dev_ls_${Math.random().toString(36).substring(2, 8)}`;
+  const tremorG = Number(body.tremor_g) || 0.22;
   const frequencyHz = Number(body.frequency_hz) || 18.5;
   const durationS = Number(body.duration_s) || 30;
-
-  // 1. Try forwarding to FastAPI backend
-  const backendData = await proxyToBackend<any>("/api/landslide/report", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (backendData && backendData.success !== undefined) {
-    if (backendData.is_confirmed) {
-      const emergencyMessage = "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS — EVACUATE NOW";
-      const nowIso = new Date().toISOString();
-      const secName = backendData.sector_name || body.sector_name || sectorName;
-      const totalPhones = backendData.total_active_phones || 9;
-
-      if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
-        global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
-      }
-      global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.set(sectorId, {
-        zone_id: sectorId,
-        zone_name: secName,
-        is_active: true,
-        dispatched_at: nowIso,
-        authorized_by: "1/3rd Sector Quorum Consensus Engine",
-        target_devices_count: totalPhones,
-        cell_broadcast_channels: ["CB-4370 (Govt Emergency Civic Alarm)", "CB-919 (NDRF Audio Alert)"],
-        mobile_audio_action: "FORCE_MAX_VOLUME_EMERGENCY_SIREN_AND_VIBRATION",
-        vibration_pattern: [1000, 400, 1000, 400, 1500],
-        emergency_message: emergencyMessage,
-      });
-
-      // Mirror confirmed landslide distress to radar citizens store
-      if (!global.__NEERNETRA_CITIZENS__) {
-        global.__NEERNETRA_CITIZENS__ = [];
-      }
-      const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
-      const lsCitizen: CitizenLocation = {
-        id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
-        device_uuid: deviceUuid,
-        name: `Citizen [${deviceUuid.slice(0, 8)}]`,
-        phone: "+91 98765 43210",
-        lat,
-        lng,
-        is_live: true,
-        last_seen_minutes_ago: 0,
-        accuracy_radius_m: 10,
-        drift_radius_m: 0,
-        battery_pct: 85,
-        status: "SOS",
-        sos_type: "LANDSLIDE",
-        mesh_hops: 0,
-        zone_id: "chamoli_01",
-        medical_distress: "WATER_RISING",
-      };
-      if (existingCitIdx >= 0) {
-        global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...lsCitizen };
-      } else {
-        global.__NEERNETRA_CITIZENS__.unshift(lsCitizen);
-      }
-
-      // Automated Cloud Push via Supabase Cloud Realtime
-      try {
-        supabase.from("sos_alerts").insert([
-          {
-            device_id: "ADMIN_SIREN_DISPATCH",
-            lat,
-            lng,
-            sos_type: "CIVIL_DEFENSE_SIREN",
-            status: "ACTIVE_SIREN",
-            battery_level: 100,
-            notes: JSON.stringify({
-              zone_id: sectorId,
-              zone_name: secName,
-              action: "BROADCAST_ALL",
-              flood_pct: 95.0,
-              message: emergencyMessage,
-              created_at: nowIso,
-            }),
-          },
-        ]).then(() => {});
-      } catch {}
-    }
-    return NextResponse.json(backendData, { headers: corsHeaders });
-  }
-
-  // 2. Fall back to local in-memory state
-  const state = getGlobalState();
   const nowTs = Date.now() / 1000;
   const nowIso = new Date().toISOString();
+
+  const state = getGlobalState();
 
   if (!state.sectors[sectorId]) {
     state.sectors[sectorId] = {
@@ -174,29 +106,7 @@ export async function POST(req: NextRequest) {
     if (!sec.confirmed_at) sec.confirmed_at = nowIso;
     sec.has_active_directive = true;
 
-    // 1. Append active directive to in-memory state
-    const directiveEntry = {
-      id: `broad_landslide_${sectorId}`,
-      type: "LANDSLIDE_1_3RD_CONSENSUS",
-      severity: "CRITICAL",
-      title: "⛰️ LANDSLIDE CONFIRMED BY 1/3RD SECTOR CONSENSUS",
-      message: emergencyMessage,
-      sector_id: sectorId,
-      sector_name: sec.sector_name,
-      consensus_count: uniqueDevices.length,
-      quorum_threshold: quorumThreshold,
-      status: "ACTIVE_SIREN",
-      authorized_by: "1/3rd Sector Quorum Consensus Engine",
-      created_at: nowIso,
-    };
-    const existingDirIdx = state.directives.findIndex((d) => d.sector_id === sectorId);
-    if (existingDirIdx >= 0) {
-      state.directives[existingDirIdx] = directiveEntry;
-    } else {
-      state.directives.push(directiveEntry);
-    }
-
-    // 2. Automated Siren Dispatch: Activate mobile sirens via /api/mobile/siren-dispatch store
+    // Siren Dispatch to mobile phones
     if (!global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
       global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__ = new Map();
     }
@@ -213,7 +123,6 @@ export async function POST(req: NextRequest) {
       emergency_message: emergencyMessage,
     });
 
-    // 3. Automated Cloud Push via Supabase Cloud Realtime
     try {
       supabase.from("sos_alerts").insert([
         {
@@ -234,38 +143,37 @@ export async function POST(req: NextRequest) {
         },
       ]).then(() => {});
     } catch {}
-
-    // 4. Mirror confirmed landslide distress to radar citizens store
-    if (!global.__NEERNETRA_CITIZENS__) {
-      global.__NEERNETRA_CITIZENS__ = [];
-    }
-    const existingCitIdx = global.__NEERNETRA_CITIZENS__.findIndex((c) => c.device_uuid === deviceUuid);
-    const lsCitizen: CitizenLocation = {
-      id: `cit-${deviceUuid.replace(/[^a-zA-Z0-9_-]/g, "")}`,
-      device_uuid: deviceUuid,
-      name: `Citizen [${deviceUuid.slice(0, 8)}]`,
-      phone: "+91 98765 43210",
-      lat,
-      lng,
-      is_live: true,
-      last_seen_minutes_ago: 0,
-      accuracy_radius_m: 10,
-      drift_radius_m: 0,
-      battery_pct: 85,
-      status: "SOS",
-      sos_type: "LANDSLIDE",
-      mesh_hops: 0,
-      zone_id: "chamoli_01",
-      medical_distress: "WATER_RISING",
-    };
-    if (existingCitIdx >= 0) {
-      global.__NEERNETRA_CITIZENS__[existingCitIdx] = { ...global.__NEERNETRA_CITIZENS__[existingCitIdx], ...lsCitizen };
-    } else {
-      global.__NEERNETRA_CITIZENS__.unshift(lsCitizen);
-    }
   } else {
     sec.status = "PENDING_QUORUM";
   }
+
+  // CRITICAL: Insert EVERY tremor report to Supabase sos_alerts table for cross-serverless persistence!
+  try {
+    const reportInsert = {
+      device_id: deviceUuid,
+      lat,
+      lng,
+      sos_type: "LANDSLIDE",
+      status: isConfirmed ? "CONFIRMED_LANDSLIDE" : "PENDING_QUORUM",
+      battery_level: 85,
+      notes: JSON.stringify({
+        sector_id: sectorId,
+        sector_name: sectorName,
+        tremor_g: tremorG,
+        frequency_hz: frequencyHz,
+        duration_s: durationS,
+        timestamp: nowIso,
+      }),
+    };
+    supabase.from("sos_alerts").insert([reportInsert]).then(() => {});
+  } catch {}
+
+  // Forward to FastAPI asynchronously if running
+  proxyToBackend<any>("/api/landslide/report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {});
 
   const consensusRatioPercent = Math.round((uniqueDevices.length / totalPhones) * 1000) / 10;
 
@@ -281,6 +189,8 @@ export async function POST(req: NextRequest) {
       consensus_ratio_percent: consensusRatioPercent,
       is_confirmed: isConfirmed,
       directive_broadcast_active: isConfirmed,
+      latest_frequency_hz: frequencyHz,
+      latest_tremor_g: tremorG,
     },
     { headers: corsHeaders }
   );

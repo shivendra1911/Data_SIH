@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RegionalAlert } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import { validateAdminAuth } from "@/lib/security";
 
 declare global {
   var __NEERNETRA_ALERTS_HISTORY__: RegionalAlert[] | undefined;
@@ -33,6 +34,14 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authCheck = validateAdminAuth(req);
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { success: false, error: authCheck.reason || "Unauthorized alert broadcast action" },
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
   try {
     const body = await req.json();
 

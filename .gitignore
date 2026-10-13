@@ -12,3 +12,9 @@ crash_log.txt
 *.apk
 .agents/
 live_*.png
+.env
+.env.*
+!.env.example
+.vercel/
+*.pem
+*.key

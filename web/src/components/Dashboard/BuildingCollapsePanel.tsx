@@ -108,9 +108,9 @@ export default function BuildingCollapsePanel({
   };
 
   return (
-    <div className="rounded-3xl bg-white shadow-sm border border-slate-200 p-6 space-y-4 text-slate-800 font-sans h-full flex flex-col">
+    <div className="rounded-3xl glass-card border border-slate-200/80 p-6 space-y-4 text-slate-800 font-sans h-full flex flex-col shadow-sm">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800 shrink-0">
             <AlertTriangle className={`w-4 h-4 ${confirmedCount > 0 ? "text-red-600 animate-pulse" : "text-slate-600"}`} aria-hidden />
@@ -131,10 +131,10 @@ export default function BuildingCollapsePanel({
           <button
             onClick={handleSimulateShock}
             disabled={isSimulating}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
             title="Simulate a phone accelerometer hitting > 3.5g shock threshold"
           >
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
             <span>Simulate Phone Tremor</span>
           </button>
 
@@ -212,6 +212,16 @@ export default function BuildingCollapsePanel({
                       <span className="text-slate-600 font-mono text-[11px]">
                         {Math.min(100, Math.round((phoneCount / 3) * 100))}% towards quorum
                       </span>
+                    </div>
+
+                    {/* Quorum Progress Bar */}
+                    <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden my-1">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          isConfirmed ? "bg-red-600" : "bg-amber-500"
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(10, (phoneCount / 3) * 100))}%` }}
+                      />
                     </div>
 
                     <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3 pt-1">

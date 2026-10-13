@@ -97,14 +97,26 @@ function MapViewController({
   return null;
 }
 
+// XSS Sanitizer for Leaflet DOM injection prevention
+const escapeHtml = (unsafe: unknown): string => {
+  if (typeof unsafe !== "string") return String(unsafe || "");
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
 // Custom DivIcons — Corwdy Pure Neutral Palette
 const createRadarIcon = (status: "SOS" | "SAFE" | "HELPING", isMesh: boolean, hops: number = 0) => {
+  const safeHops = Math.max(0, Math.min(32, Number(hops) || 0));
   const colorClass =
     status === "SAFE" ? "safe" : status === "HELPING" ? "helping" : "";
   let meshBadge = "";
-  if (isMesh || hops > 0) {
-    if (hops > 1) {
-      meshBadge = `<span style="position: absolute; top: -7px; right: -7px; background: #fef08a; color: #854d0e; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #ca8a04;">${hops}H</span>`;
+  if (isMesh || safeHops > 0) {
+    if (safeHops > 1) {
+      meshBadge = `<span style="position: absolute; top: -7px; right: -7px; background: #fef08a; color: #854d0e; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #ca8a04;">${safeHops}H</span>`;
     } else {
       meshBadge = `<span style="position: absolute; top: -6px; right: -6px; background: #bbf7d0; color: #166534; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 9999px; border: 1px solid #16a34a;">1H</span>`;
     }
@@ -368,8 +380,8 @@ const createDestinationHavenIcon = (
           margin-bottom: 2px;
         ">
           <span>${pinSymbol}</span>
-          <span>${name.split(" ")[0]}</span>
-          <span style="opacity: 0.85; font-size: 9px; font-family: monospace;">+${elevGain}m</span>
+          <span>${escapeHtml(name.split(" ")[0])}</span>
+          <span style="opacity: 0.85; font-size: 9px; font-family: monospace;">+${Number(elevGain) || 0}m</span>
         </div>
         <div style="
           width: 30px;
@@ -413,7 +425,7 @@ const createAssemblyIcon = (name: string, capacity: number) => {
         cursor: pointer;
       ">
         <span>⛺</span>
-        <span>${name.split(" ")[0]} (Cap: ${capacity})</span>
+        <span>${escapeHtml(name.split(" ")[0])} (Cap: ${Number(capacity) || 0})</span>
       </div>
     `,
     iconSize: [120, 30],
@@ -443,7 +455,7 @@ const createResponderIcon = (type: string, eta: number) => {
         white-space: nowrap;
       ">
         <span>${emoji}</span>
-        <span>${type} (~${eta}m)</span>
+        <span>${escapeHtml(type)} (~${Number(eta) || 0}m)</span>
       </div>
     `,
     iconSize: [90, 24],

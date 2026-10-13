@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
         }),
       },
     ]).then(() => {});
+
+    supabase
+      .from("sos_alerts")
+      .update({ status: "RESOLVED_SAFE" })
+      .eq("sos_type", "LANDSLIDE")
+      .then(() => {});
   } catch {}
 
   return NextResponse.json(

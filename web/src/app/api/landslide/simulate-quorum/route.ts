@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
+import { supabase } from "@/lib/supabase";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +64,14 @@ export async function POST(req: NextRequest) {
     if (global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__) {
       global.__NEERNETRA_MOBILE_SIREN_DISPATCHES__.delete(sectorId);
     }
+    try {
+      supabase
+        .from("sos_alerts")
+        .update({ status: "RESOLVED_SAFE" })
+        .eq("sos_type", "LANDSLIDE")
+        .then(() => {});
+    } catch {}
+
     return NextResponse.json({
       success: true,
       status: sec.status,
@@ -96,6 +105,30 @@ export async function POST(req: NextRequest) {
   sec.latest_frequency_hz = simPeers[simPeers.length - 1].frequency_hz;
   sec.first_detected_at = sec.first_detected_at || nowIso;
   sec.last_report_at = nowIso;
+
+  // Persist to Supabase for cross-serverless synchronization
+  try {
+    for (const p of simPeers) {
+      supabase.from("sos_alerts").insert([
+        {
+          device_id: p.device_uuid,
+          lat: sec.lat,
+          lng: sec.lng,
+          sos_type: "LANDSLIDE",
+          status: newCount >= sec.quorum_threshold ? "CONFIRMED_LANDSLIDE" : "PENDING_QUORUM",
+          battery_level: 85,
+          notes: JSON.stringify({
+            sector_id: sectorId,
+            sector_name: sec.sector_name,
+            tremor_g: p.tremor_g,
+            frequency_hz: p.frequency_hz,
+            duration_s: 30,
+            timestamp: nowIso,
+          }),
+        },
+      ]).then(() => {});
+    }
+  } catch {}
 
   const isQuorumReached = newCount >= sec.quorum_threshold;
   let directiveEntry = null;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { validateAdminAuth } from "@/lib/security";
 
 export interface MobileSirenRecord {
   zone_id: string;
@@ -118,6 +119,14 @@ export async function GET(req: NextRequest) {
 
 // POST: Government team triggers or halts the siren broadcast to citizen devices
 export async function POST(req: NextRequest) {
+  const authCheck = validateAdminAuth(req);
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { success: false, error: authCheck.reason || "Unauthorized admin action" },
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
   try {
     const body = await req.json();
     const zoneId = body.zone_id || "chamoli_01";

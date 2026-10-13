@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { CitizenLocation, SOSEvent } from "@/lib/types";
+import { checkRateLimit } from "@/lib/security";
 
 // Global in-memory cache for fast local retrieval and mobile synchronization
 declare global {
@@ -26,6 +27,15 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
+  const rateLimit = checkRateLimit(`sos_${clientIp}`, 40, 60000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many SOS requests. Please wait.", retry_after_sec: rateLimit.retryAfterSec },
+      { status: 429, headers: corsHeaders }
+    );
+  }
+
   try {
     const body = await req.json();
 
