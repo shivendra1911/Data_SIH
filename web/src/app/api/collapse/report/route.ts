@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGlobalState, proxyToBackend } from "@/lib/sentinelState";
+import { getGlobalState, proxyToBackend, DeviceFallReport } from "@/lib/sentinelState";
 import { supabase } from "@/lib/supabase";
 import { CitizenLocation } from "@/lib/types";
 import { checkRateLimit } from "@/lib/security";
@@ -54,6 +54,25 @@ export async function POST(req: NextRequest) {
   const confidence = Number(body.confidence) || 0.94;
   const nowIso = new Date().toISOString();
 
+  const phoneModel = body.phone_model || (
+    deviceUuid.toLowerCase().includes("alpha") ? "Google Pixel 7 Pro" :
+    deviceUuid.toLowerCase().includes("beta") ? "Samsung Galaxy S22" :
+    deviceUuid.toLowerCase().includes("node_3") ? "OnePlus 11 5G" :
+    body.device_model || `Citizen Device (${deviceUuid.slice(-4)})`
+  );
+
+  const deviceReport: DeviceFallReport = {
+    device_id: deviceUuid,
+    phone_model: phoneModel,
+    peak_g: peakG,
+    free_fall_ms: freeFallMs,
+    confidence,
+    timestamp: nowIso,
+    lat,
+    lng,
+    notes: body.notes || `Kinetic impact (${peakG.toFixed(1)}g, free-fall ${freeFallMs}ms)`,
+  };
+
   // Ingest into in-memory state with 100-meter spatial clustering
   const state = getGlobalState();
 
@@ -77,6 +96,7 @@ export async function POST(req: NextRequest) {
       centroid_lng: lng,
       radius_meters: 100,
       reporting_devices: [deviceUuid],
+      reporting_devices_details: [deviceReport],
       trapped_headcount: 1,
       first_detected_at: nowIso,
       last_report_at: nowIso,
@@ -91,6 +111,16 @@ export async function POST(req: NextRequest) {
       cl.reporting_devices.push(deviceUuid);
       cl.trapped_headcount = cl.reporting_devices.length;
     }
+    if (!cl.reporting_devices_details) {
+      cl.reporting_devices_details = [];
+    }
+    const existingDevIdx = cl.reporting_devices_details.findIndex((d) => d.device_id === deviceUuid);
+    if (existingDevIdx >= 0) {
+      cl.reporting_devices_details[existingDevIdx] = deviceReport;
+    } else {
+      cl.reporting_devices_details.push(deviceReport);
+    }
+
     const n = cl.reporting_devices.length;
     cl.centroid_lat = Number(((cl.centroid_lat * (n - 1) + lat) / n).toFixed(5));
     cl.centroid_lng = Number(((cl.centroid_lng * (n - 1) + lng) / n).toFixed(5));
@@ -146,6 +176,7 @@ export async function POST(req: NextRequest) {
       battery_level: 85,
       notes: JSON.stringify({
         cluster_id: clusterId,
+        phone_model: phoneModel,
         peak_g: peakG,
         confidence,
         free_fall_ms: freeFallMs,

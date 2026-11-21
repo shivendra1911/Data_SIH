@@ -30,6 +30,18 @@ export interface LandslideSectorState {
   has_active_directive?: boolean;
 }
 
+export interface DeviceFallReport {
+  device_id: string;
+  phone_model?: string;
+  peak_g: number;
+  free_fall_ms?: number;
+  confidence?: number;
+  timestamp: string;
+  lat?: number;
+  lng?: number;
+  notes?: string;
+}
+
 export interface CollapseClusterState {
   cluster_id: string;
   status: "PENDING_QUORUM" | "CONFIRMED_COLLAPSE" | "RESOLVED_SAFE";
@@ -38,6 +50,7 @@ export interface CollapseClusterState {
   centroid_lng: number;
   radius_meters: number;
   reporting_devices: string[];
+  reporting_devices_details?: DeviceFallReport[];
   trapped_headcount: number;
   first_detected_at: string;
   last_report_at: string;

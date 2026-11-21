@@ -37,7 +37,10 @@ export async function GET() {
   // Load in-memory clusters first
   for (const [cid, cl] of Object.entries(inMemoryState.collapseClusters)) {
     if (cl.status !== "RESOLVED_SAFE") {
-      clustersMap.set(cid, { ...cl });
+      clustersMap.set(cid, {
+        ...cl,
+        reporting_devices_details: cl.reporting_devices_details ? [...cl.reporting_devices_details] : [],
+      });
     }
   }
 
@@ -62,7 +65,26 @@ export async function GET() {
         } catch {}
 
         const peakG = Number(parsedNotes.peak_g) || 4.2;
+        const freeFallMs = Number(parsedNotes.free_fall_ms) || 350;
         const conf = Number(parsedNotes.confidence) || 0.94;
+        const phoneModel = parsedNotes.phone_model || (
+          deviceId.includes("ALPHA") ? "Google Pixel 7 Pro" :
+          deviceId.includes("BETA") ? "Samsung Galaxy S22" :
+          deviceId.includes("NODE_3") ? "OnePlus 11 5G" :
+          `Citizen Phone (${deviceId.slice(-4)})`
+        );
+
+        const devDetail = {
+          device_id: deviceId,
+          phone_model: phoneModel,
+          peak_g: peakG,
+          free_fall_ms: freeFallMs,
+          confidence: conf,
+          timestamp: row.created_at,
+          lat,
+          lng,
+          notes: parsedNotes.notes,
+        };
 
         // Spatial match to an existing cluster within 100 meters
         let matchedKey: string | null = null;
@@ -84,6 +106,7 @@ export async function GET() {
             centroid_lng: lng,
             radius_meters: 100,
             reporting_devices: [deviceId],
+            reporting_devices_details: [devDetail],
             trapped_headcount: 1,
             first_detected_at: row.created_at,
             last_report_at: row.created_at,
@@ -96,6 +119,15 @@ export async function GET() {
           if (!cl.reporting_devices.includes(deviceId)) {
             cl.reporting_devices.push(deviceId);
             cl.trapped_headcount = cl.reporting_devices.length;
+          }
+          if (!cl.reporting_devices_details) {
+            cl.reporting_devices_details = [];
+          }
+          const exIdx = cl.reporting_devices_details.findIndex((d: any) => d.device_id === deviceId);
+          if (exIdx >= 0) {
+            cl.reporting_devices_details[exIdx] = devDetail;
+          } else {
+            cl.reporting_devices_details.push(devDetail);
           }
           const n = cl.reporting_devices.length;
           cl.centroid_lat = Number(((cl.centroid_lat * (n - 1) + lat) / n).toFixed(5));

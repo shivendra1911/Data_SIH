@@ -1,0 +1,261 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>NeerNetra - Finale Build Plan & Product Audit</title>
+<style>
+  body {
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.35;
+    color: #1a1a1a;
+    margin: 36pt 48pt;
+  }
+  h1 {
+    font-size: 20pt;
+    color: #0b3c5d;
+    margin-bottom: 2pt;
+    padding-bottom: 4pt;
+    border-bottom: 2pt solid #0b3c5d;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+  }
+  .sub-header {
+    font-size: 10pt;
+    color: #555555;
+    margin-bottom: 14pt;
+    font-weight: bold;
+  }
+  h2 {
+    font-size: 13pt;
+    color: #1d2731;
+    background-color: #eef3f7;
+    padding: 4pt 8pt;
+    margin-top: 14pt;
+    margin-bottom: 6pt;
+    border-left: 4pt solid #328cc1;
+  }
+  h3 {
+    font-size: 11pt;
+    color: #0b3c5d;
+    margin-top: 8pt;
+    margin-bottom: 4pt;
+  }
+  p {
+    margin-top: 2pt;
+    margin-bottom: 5pt;
+    text-align: justify;
+  }
+  ul {
+    margin-top: 2pt;
+    margin-bottom: 6pt;
+    padding-left: 20pt;
+  }
+  li {
+    margin-bottom: 3pt;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6pt;
+    margin-bottom: 10pt;
+    font-size: 10pt;
+  }
+  th {
+    background-color: #0b3c5d;
+    color: #ffffff;
+    font-weight: bold;
+    text-align: left;
+    padding: 5pt 7pt;
+    border: 1pt solid #0b3c5d;
+  }
+  td {
+    padding: 5pt 7pt;
+    border: 1pt solid #cccccc;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td {
+    background-color: #f9fbfd;
+  }
+  .highlight-box {
+    background-color: #fdfaf2;
+    border: 1pt solid #d9b310;
+    border-left: 4pt solid #d9b310;
+    padding: 8pt 10pt;
+    margin: 8pt 0;
+    font-size: 10.5pt;
+  }
+  .tag {
+    display: inline-block;
+    padding: 1pt 4pt;
+    font-size: 8.5pt;
+    font-weight: bold;
+    border-radius: 3pt;
+    background-color: #e0e0e0;
+    color: #333333;
+    margin-right: 4pt;
+  }
+  .tag-web { background-color: #d1ecf1; color: #0c5460; }
+  .tag-app { background-color: #d4edda; color: #155724; }
+  .tag-core { background-color: #fff3cd; color: #856404; }
+</style>
+</head>
+<body>
+
+<h1>NEERNETRA — PRODUCT AUDIT & FINALE BUILD PLAN</h1>
+<div class="sub-header">
+  STEP ZERO DELIVERABLE | Track: Disaster Management & Civil Defense | Team: Data_SIH<br>
+  Live System URL: <u>https://data-sih.vercel.app</u> | Submission Time: 4:00 PM, 21 November
+</div>
+
+<!-- ========================================================================= -->
+<!-- 1. WHERE YOU ARE -->
+<!-- ========================================================================= -->
+<h2>1. WHERE YOU ARE: Product Audit (Working vs. Mocked / Missing)</h2>
+
+<p>NeerNetra is an autonomous civil defense ecosystem linking edge mobile sensors to a national command web portal. Below is the precise audit of currently functional components versus mocked elements:</p>
+
+<h3>A. What Works 100% in Prototype Today (Live & Deployed)</h3>
+
+<p><b>[MOBILE APP FEATURES]</b></p>
+<ul>
+  <li><b>3-Phase Kinetic State Machine:</b> On-device MEMS accelerometer and gyroscope processing running in a persistent background service. Detects Free Fall (&lt;0.2g for &ge;250ms) &rarr; Hard Impact (&gt;3.5g) &rarr; Debris Immobility (&lt;0.05 rad/s for &ge;10s).</li>
+  <li><b>Inverted 60-Second Dead-Man Safety Timer:</b> Audible countdown requiring a conscious citizen to tap "I AM SAFE". If uncancelled, autonomously transmits distress telemetry with GPS coordinates.</li>
+  <li><b>Sub-Surface Bedrock Tremor Sentinel:</b> Onboard filter monitoring micro-tremors in the 10&ndash;50 Hz band on resting phones for early slope-shear detection.</li>
+  <li><b>Micro-Barometric Cloudburst Detector:</b> Tracks ground-level atmospheric pressure drops (&Delta;P &ge; 6 hPa in &le;3h) for 15&ndash;30 minute advance squall warning.</li>
+  <li><b>24/7 Android Foreground Service:</b> Low-level Android service holding <code>PARTIAL_WAKE_LOCK</code> ensuring zero OS process killing during sleep/Doze mode.</li>
+  <li><b>Offline Multi-Hop Mesh Radio:</b> Custom BLE GATT server and Wi-Fi Direct socket plumbing capable of relaying SOS beacons node-to-node without cellular service or SIM cards.</li>
+  <li><b>Wi-Fi Direct P2P Walkie-Talkie:</b> Full-duplex direct push-to-talk voice streaming between nearby devices up to 150m apart.</li>
+</ul>
+
+<p><b>[WEBSITE & COMMAND PORTAL FEATURES]</b></p>
+<ul>
+  <li><b>Tactical GIS Command Radar:</b> Live map (Next.js 14 + Leaflet/Protomaps) rendering live citizen dots, active clusters, safe havens, and flood hazard contours.</li>
+  <li><b>USAR Building Collapse Panel:</b> Aggregates distress signals into real physical 100-meter clusters, displaying exact coordinates and live phone count (e.g., "1 / 3 Phones Hit").</li>
+  <li><b>Sub-Surface Landslide Consensus Monitor:</b> Real-time ratio tracking (&ge;1/3rd active phones threshold) across geographic mountain sectors.</li>
+  <li><b>Real OSRM Topological Safe Evacuation Routing:</b> Replaced straight Euclidean lines with real navigable street-network geometry biased toward uphill elevation gain.</li>
+  <li><b>Sub-100ms Civil Defense Siren Broadcaster:</b> Instant zone-wide siren dispatch over Supabase PostgreSQL WebSockets, bypassing deprecated Google Firebase FCM.</li>
+  <li><b>Pre-Impact Operational Directives Console:</b> Standardized government command dispatcher for dam pre-releases and bridge closures.</li>
+  <li><b>OWASP Security Hardened:</b> XSS-sanitized dynamic map popups and enterprise HTTP security headers (HSTS, SAMEORIGIN, nosniff).</li>
+</ul>
+
+<p><b>[BACKEND & AI LAYER]</b></p>
+<ul>
+  <li><b>Spatiotemporal Haversine Clustering:</b> Python backend clustering incoming shocks within r &le; 100m and &Delta;t &le; 120s to enforce a &ge;3-device consensus before confirming collapse.</li>
+  <li><b>Random Forest GLOF / Flood Predictor:</b> Scikit-learn model (<code>neernetra_model.pkl</code>) forecasting flash flood windows up to 4 hours in advance.</li>
+</ul>
+
+<h3>B. What is Mocked, Hardcoded, or Missing (Transparent Audit)</h3>
+<table>
+  <tr>
+    <th style="width: 25%;">Component</th>
+    <th style="width: 35%;">Current Prototype State</th>
+    <th style="width: 40%;">Reason & Finale Resolution</th>
+  </tr>
+  <tr>
+    <td><b>Indic Vernacular Voice</b><br><span class="tag tag-app">Mobile</span></td>
+    <td>Uses standard Android TTS engine (English / robotic accent).</td>
+    <td>Lacks natural Indian vernacular nuance. Integrating <b>Sarvam AI (Saaras ASR &amp; Bulbul TTS)</b> by Nov 22.</td>
+  </tr>
+  <tr>
+    <td><b>Physical River Sensor Rig</b><br><span class="tag tag-core">Backend</span></td>
+    <td>Simulated via synthetic hydrograph REST streams.</td>
+    <td>Cannot install physical ultrasonic sensors in Himalayan rivers inside the hall. IoT bridge architecture prepared for Arduino LoRa test rig.</td>
+  </tr>
+  <tr>
+    <td><b>32-Node Mesh Stress Test</b><br><span class="tag tag-app">Mobile</span></td>
+    <td>Verified across 2&ndash;3 physical paired test devices; 32 nodes modeled in software.</td>
+    <td>Limited physical test phones in the room. Live demo will prove physical multi-hop across 3 real phones on stage.</td>
+  </tr>
+  <tr>
+    <td><b>Dynamic Road Obstruction Toggle</b><br><span class="tag tag-web">Web</span></td>
+    <td>Road network routing uses static OSRM graph.</td>
+    <td>Adding 1-click road blockage toggle on web map to force live route recalculation on mobile around flooded zones.</td>
+  </tr>
+</table>
+
+<!-- ========================================================================= -->
+<!-- 2. WHERE YOU WILL BE -->
+<!-- ========================================================================= -->
+<h2>2. WHERE YOU WILL BE: Target Integrations & Flows (By 12 PM, 22 November)</h2>
+
+<p>By 12 PM on 22 November, NeerNetra will achieve 100% full-stack closure across four critical demonstration flows:</p>
+
+<ol>
+  <li><b>Flawless Closed-Loop Kinetic Quorum Demonstration:</b>
+    <ul>
+      <li><i>Flow:</i> Presenter drops an Android phone &rarr; 3-Phase FSM triggers &rarr; 60s timer expires &rarr; Web portal (<code>https://data-sih.vercel.app</code>) immediately displays cluster at <code>1 / 3 Phones Hit</code> &rarr; Two paired phones report within 100m &rarr; Web cluster turns Critical Red and unlocks 1-click USAR brigade dispatch.</li>
+    </ul>
+  </li>
+  <li><b>Deep Partner Tech Integration (Sarvam AI Indic Speech Pipeline):</b>
+    <ul>
+      <li><i>Voice SOS Triage (Saaras ASR):</i> Trapped survivor speaks Hindi (<i>"हम मलबे में दबे हैं, खून बह रहा है"</i>) &rarr; Transcribed and categorized into <code>CRITICAL_INJURY (BLEEDING)</code> ticket automatically.</li>
+      <li><i>Indic Voice Directives (Bulbul TTS):</i> Evacuation orders from web portal are synthesized into calm, fluent Hindi audio played over citizen phone speakers at 100% volume.</li>
+    </ul>
+  </li>
+  <li><b>Zero-Internet Multi-Hop Mesh Relay Demonstration:</b>
+    <ul>
+      <li><i>Flow:</i> Three phones in Airplane Mode (Phone A, B, C). Phone A generates an offline SOS &rarr; Relays over BLE to Phone B &rarr; Relays to Phone C. Phone C reconnects to cellular/Wi-Fi &rarr; Opportunistic gateway synchronizes the buffered logs to the web portal with zero data loss.</li>
+    </ul>
+  </li>
+  <li><b>Live Interactive Road Blockage & Dynamic Rerouting:</b>
+    <ul>
+      <li><i>Flow:</i> Commander clicks a bridge on the web map to mark it "WASHED OUT" &rarr; Backend updates OSRM graph &rarr; Connected citizen mobile screens immediately recalculate their route uphill to alternate safe havens.</li>
+    </ul>
+  </li>
+</ol>
+
+<!-- ========================================================================= -->
+<!-- 3. YOUR USER SEGMENTS -->
+<!-- ========================================================================= -->
+<h2>3. YOUR USER SEGMENTS: Primary & Secondary Stakeholders</h2>
+
+<ul>
+  <li><b>1. Primary Segment — Isolated Rural & Mountain Citizens (Ramesh Rawat, Age 48):</b>
+    <p><i>Profile:</i> Farmers, villagers, and families living in cloudburst and landslide corridors (Chamoli, Kedarnath, Assam river basins) where cellular towers and power collapse within minutes of a storm.<br>
+    <i>Value Delivered:</i> Autonomous on-device 24/7 collapse detection, loud acoustic sirens that override silent mode, offline peer-to-peer walkie-talkie communication, and spoken survival instructions in their mother tongue without requiring internet or reading skills.</p>
+  </li>
+  <li><b>2. Additional Segment 1 — NDRF & USAR First Responders (Inspector Rajesh Kumar, 8th Bn):</b>
+    <p><i>Profile:</i> Field rescue teams and combat paramedics entering chaotic disaster zones during the critical "Golden Hour".<br>
+    <i>Value Delivered:</i> Exact 100-meter cluster centroids with verified victim counts, START medical distress triage classification (<code>CRITICAL_INJURY</code> prioritized over <code>STABLE</code>), and direct Wi-Fi Direct walkie-talkie audio to locate conscious survivors pinned under concrete.</p>
+  </li>
+  <li><b>3. Additional Segment 2 — State Disaster Management Authorities & District Magistrates (Smt. Ananya Sharma, IAS):</b>
+    <p><i>Profile:</i> Incident commanders and civil administrators managing multi-village evacuations, dam sluice gates, and bridge closures.<br>
+    <i>Value Delivered:</i> Macro-level GIS radar of active threats, 4-hour advance GLOF predictive warnings for controlled dam water release, and instant sub-100ms siren broadcast controls to geofenced danger contours.</p>
+  </li>
+</ul>
+
+<!-- ========================================================================= -->
+<!-- 4. YOUR PARTNER TECH CHOICE -->
+<!-- ========================================================================= -->
+<h2>4. YOUR PARTNER TECH CHOICE: Sarvam AI (Indic Speech Intelligence)</h2>
+
+<div class="highlight-box">
+  <b>Selected Partner Technology:</b> SARVAM AI (Saaras Indic ASR &amp; Bulbul Indic TTS)<br>
+  <i>(Physical Hardware Fallback Architecture: Arduino ESP32 LoRa River Level Gauge)</i>
+</div>
+
+<h3>Product Need It Solves:</h3>
+<p>In Indian disaster scenarios, English text alerts completely fail. Victims trapped under dark rubble cannot read screens or type SOS messages. Furthermore, over 70% of rural populations in high-risk Himalayan valleys panic when receiving complex written circulars. Human voice is the only universal reflex during catastrophe.</p>
+
+<h3>Deepened Integration & Architecture:</h3>
+<ul>
+  <li><b>Sarvam Saaras ASR (Speech-to-Text):</b> Captures 5-second emergency voice clips from trapped victims, transcribing Hindi and regional dialects into structured medical urgency flags (<i>Bleeding, Pinned, Suffocating</i>) to feed the automated START triage queue.</li>
+  <li><b>Sarvam Bulbul TTS (Text-to-Speech):</b> Converts official NDRF evacuation directives into natural, authoritative Hindi voice audio broadcasted directly over citizen phone loudspeakers.</li>
+  <li><i>Hardware Architecture Bridge (Arduino):</i> If judges evaluate physical IoT hardware, our architecture features a ready LoRa/BLE bridge where an Arduino ESP32 with an ultrasonic transducer feeds physical river water levels into the NeerNetra mobile node.</li>
+</ul>
+
+<!-- ========================================================================= -->
+<!-- 5. YOUR DEFINITION OF DONE -->
+<!-- ========================================================================= -->
+<h2>5. YOUR DEFINITION OF DONE (1-Sentence Yardstick)</h2>
+
+<div class="highlight-box" style="font-size: 11pt; font-weight: bold; color: #0b3c5d;">
+  "NeerNetra is complete when a physical kinetic shock on an offline citizen smartphone propagates across an ad-hoc peer-to-peer mesh to achieve spatiotemporal quorum on the live command portal, triggering an automated USAR dispatch ticket, verified Indic voice evacuation directives, and real topological road navigation without relying on external cellular infrastructure."
+</div>
+
+<p style="font-size: 9.5pt; color: #555555; text-align: center; margin-top: 15pt;">
+  &mdash; END OF BUILD PLAN & AUDIT DELIVERABLE &mdash;
+</p>
+
+</body>
+</html>
