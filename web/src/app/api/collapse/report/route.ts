@@ -54,12 +54,7 @@ export async function POST(req: NextRequest) {
   const confidence = Number(body.confidence) || 0.94;
   const nowIso = new Date().toISOString();
 
-  const phoneModel = body.phone_model || (
-    deviceUuid.toLowerCase().includes("alpha") ? "Google Pixel 7 Pro" :
-    deviceUuid.toLowerCase().includes("beta") ? "Samsung Galaxy S22" :
-    deviceUuid.toLowerCase().includes("node_3") ? "OnePlus 11 5G" :
-    body.device_model || `Citizen Device (${deviceUuid.slice(-4)})`
-  );
+  const phoneModel = body.phone_model || body.device_model || `Live Connected Device (${deviceUuid.slice(-6).toUpperCase()})`;
 
   const deviceReport: DeviceFallReport = {
     device_id: deviceUuid,

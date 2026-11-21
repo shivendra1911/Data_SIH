@@ -67,12 +67,7 @@ export async function GET() {
         const peakG = Number(parsedNotes.peak_g) || 4.2;
         const freeFallMs = Number(parsedNotes.free_fall_ms) || 350;
         const conf = Number(parsedNotes.confidence) || 0.94;
-        const phoneModel = parsedNotes.phone_model || (
-          deviceId.includes("ALPHA") ? "Google Pixel 7 Pro" :
-          deviceId.includes("BETA") ? "Samsung Galaxy S22" :
-          deviceId.includes("NODE_3") ? "OnePlus 11 5G" :
-          `Citizen Phone (${deviceId.slice(-4)})`
-        );
+        const phoneModel = parsedNotes.phone_model || `Live Connected Device (${deviceId.slice(-6).toUpperCase()})`;
 
         const devDetail = {
           device_id: deviceId,

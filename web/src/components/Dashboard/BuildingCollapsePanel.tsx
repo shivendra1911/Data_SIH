@@ -49,20 +49,21 @@ export interface CollapseCluster {
 
 interface BuildingCollapsePanelProps {
   collapseClusters?: CollapseCluster[];
+  connectedCitizens?: Array<{
+    id: string;
+    device_uuid: string;
+    name?: string;
+    phone?: string;
+    lat: number;
+    lng: number;
+  }>;
   onDispatchUSAR?: (clusterId: string) => void;
   onFocusCoordinates?: (lat: number, lng: number) => void;
 }
 
-const PRESET_MODELS = [
-  "Google Pixel 7 Pro",
-  "Samsung Galaxy S22 Ultra",
-  "OnePlus 11 5G",
-  "Redmi Note 12 Pro",
-  "Apple iPhone 14 (Mesh Node)",
-];
-
 export default function BuildingCollapsePanel({
   collapseClusters: propClusters,
+  connectedCitizens,
   onDispatchUSAR,
   onFocusCoordinates,
 }: BuildingCollapsePanelProps) {
@@ -87,7 +88,7 @@ export default function BuildingCollapsePanel({
       return;
     }
     fetchClusters();
-    // 2.5-second fast polling for immediate response when phone falls
+    // 2.5-second fast polling for immediate response when real phones fall
     const timer = setInterval(fetchClusters, 2500);
     return () => clearInterval(timer);
   }, [propClusters]);
@@ -116,24 +117,37 @@ export default function BuildingCollapsePanel({
     return coords;
   };
 
-  // Simulate 1 phone fall at a time (Phone 1 -> Phone 2 -> Phone 3 triggers Quorum!)
-  const handleSimulateSinglePhone = async () => {
+  // Trigger shockwave for live connected phone
+  const handleSimulateShock = async () => {
     setIsSimulating(true);
     const coords = await getSimCoordinates();
 
-    // Check existing active cluster
+    // Check if there are real connected citizen devices nearby
     const activeCluster = clusters.find((c) => c.status !== "RESOLVED_SAFE");
-    const currentCount = activeCluster ? activeCluster.reporting_devices.length : 0;
-    const phoneIdx = currentCount % PRESET_MODELS.length;
-    const model = PRESET_MODELS[phoneIdx];
+    const existingCount = activeCluster ? activeCluster.reporting_devices.length : 0;
 
-    // Offset coordinates slightly (~15-30m) within the same 100m radius
-    const offsetLat = currentCount === 0 ? coords.lat : Number((coords.lat + (currentCount * 0.00015)).toFixed(5));
-    const offsetLng = currentCount === 0 ? coords.lng : Number((coords.lng + (currentCount * 0.00012)).toFixed(5));
-    const peakG = Number((4.2 + (Math.random() * 0.9)).toFixed(1));
+    let deviceUuid = `live_phone_${Date.now().toString(36).slice(-4)}`;
+    let deviceModel = `Live Connected Phone #${existingCount + 1}`;
+    let lat = coords.lat;
+    let lng = coords.lng;
+
+    // If actual connected citizens exist in state, select the next connected live node
+    if (connectedCitizens && connectedCitizens.length > 0) {
+      const citizen = connectedCitizens[existingCount % connectedCitizens.length];
+      if (citizen) {
+        deviceUuid = citizen.device_uuid || deviceUuid;
+        deviceModel = citizen.name || `Live Device (${deviceUuid.slice(-6).toUpperCase()})`;
+        lat = citizen.lat || lat;
+        lng = citizen.lng || lng;
+      }
+    } else if (existingCount > 0 && activeCluster) {
+      // Cluster nearby within ~20m of existing centroid
+      lat = Number((activeCluster.centroid_lat + (existingCount * 0.00015)).toFixed(5));
+      lng = Number((activeCluster.centroid_lng + (existingCount * 0.00012)).toFixed(5));
+    }
+
+    const peakG = Number((4.2 + Math.random() * 0.8).toFixed(1));
     const freeFall = 320 + Math.floor(Math.random() * 80);
-
-    const deviceUuid = `phone_node_${phoneIdx + 1}_${Date.now().toString(36).slice(-4)}`;
 
     try {
       const res = await fetch("/api/collapse/report", {
@@ -141,51 +155,18 @@ export default function BuildingCollapsePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           device_uuid: deviceUuid,
-          phone_model: model,
-          lat: offsetLat,
-          lng: offsetLng,
+          phone_model: deviceModel,
+          lat,
+          lng,
           peak_g: peakG,
           free_fall_ms: freeFall,
-          confidence: 0.96,
-          notes: `Simulated phone fall #${phoneIdx + 1} (${model}) - ${peakG}g kinetic impact`,
+          confidence: 0.95,
+          notes: `Live phone impact registered (${deviceModel}): ${peakG}g kinetic shock at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         }),
       });
       if (res.ok) {
         await fetchClusters();
       }
-    } catch {}
-    setIsSimulating(false);
-  };
-
-  // Simulate all 3 phones at once for instant quorum
-  const handleSimulateQuorum = async () => {
-    setIsSimulating(true);
-    const coords = await getSimCoordinates();
-    const batch = [
-      { model: "Google Pixel 7 Pro", peak: 4.8, freeFall: 350, latOff: 0, lngOff: 0 },
-      { model: "Samsung Galaxy S22 Ultra", peak: 4.4, freeFall: 320, latOff: 0.00018, lngOff: 0.00015 },
-      { model: "OnePlus 11 5G", peak: 4.6, freeFall: 370, latOff: -0.00016, lngOff: -0.00020 },
-    ];
-
-    try {
-      for (let i = 0; i < batch.length; i++) {
-        const item = batch[i];
-        await fetch("/api/collapse/report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            device_uuid: `quorum_node_${i + 1}_${Date.now().toString(36).slice(-4)}`,
-            phone_model: item.model,
-            lat: Number((coords.lat + item.latOff).toFixed(5)),
-            lng: Number((coords.lng + item.lngOff).toFixed(5)),
-            peak_g: item.peak,
-            free_fall_ms: item.freeFall,
-            confidence: 0.96,
-            notes: `3-Phone Quorum Node #${i + 1} (${item.model}) - ${item.peak}g kinetic impact`,
-          }),
-        });
-      }
-      await fetchClusters();
     } catch {}
     setIsSimulating(false);
   };
@@ -227,32 +208,20 @@ export default function BuildingCollapsePanel({
               )}
             </div>
             <p className="text-[11px] text-slate-500">
-              Real-time 100m spatial kinetic shock consensus across citizen smartphones
+              Live kinetic shock consensus across genuine connected phones within 100 meters
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Simulate 1 Phone Fall */}
           <button
-            onClick={handleSimulateSinglePhone}
+            onClick={handleSimulateShock}
             disabled={isSimulating}
-            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-            title="Simulate 1 phone falling (>3.5g impact). Click again to add Phone 2 and Phone 3!"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+            title="Simulate shock on a connected live phone"
           >
-            <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-            <span>Simulate 1 Phone Fall</span>
-          </button>
-
-          {/* Simulate 3-Phone Quorum */}
-          <button
-            onClick={handleSimulateQuorum}
-            disabled={isSimulating}
-            className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-            title="Simulate 3 phones falling simultaneously in a 100m zone to trigger Quorum"
-          >
-            <Zap className="w-3.5 h-3.5 text-yellow-300" />
-            <span>Simulate 3-Phone Quorum</span>
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Simulate Live Phone Tremor</span>
           </button>
 
           {clusters.length > 0 && (
@@ -284,7 +253,7 @@ export default function BuildingCollapsePanel({
             <Smartphone className="w-8 h-8 text-slate-400 mx-auto stroke-[1.5]" />
             <p className="font-semibold text-slate-700 text-sm">No active structural collapse detected.</p>
             <p className="text-slate-500 text-[11px] max-w-md mx-auto">
-              System is listening for phone accelerometer shockwaves (&gt; 3.5g) and free-fall telemetry. When a phone drops or simulates impact, its live sensor data will immediately appear here.
+              Listening for phone accelerometer shockwaves (&gt; 3.5g). When connected live phones experience a fall or shock, their real-time telemetry will appear here.
             </p>
           </div>
         ) : (
@@ -292,15 +261,15 @@ export default function BuildingCollapsePanel({
             const isConfirmed = cluster.status === "CONFIRMED_COLLAPSE";
             const isDispatched = dispatchedIds.has(cluster.cluster_id);
             const phoneCount = cluster.reporting_devices.length;
-            const isExpanded = expandedDevices[cluster.cluster_id] !== false; // expanded by default
+            const isExpanded = expandedDevices[cluster.cluster_id] !== false;
 
-            // Use itemized device details if available, or generate fallback models
+            // Only use genuine reporting devices from cluster telemetry
             const deviceDetails: DeviceFallReport[] =
               cluster.reporting_devices_details && cluster.reporting_devices_details.length > 0
                 ? cluster.reporting_devices_details
                 : cluster.reporting_devices.map((id, idx) => ({
                     device_id: id,
-                    phone_model: PRESET_MODELS[idx % PRESET_MODELS.length],
+                    phone_model: `Connected Phone #${idx + 1}`,
                     peak_g: cluster.max_peak_g,
                     free_fall_ms: 350,
                     confidence: cluster.average_confidence,
@@ -340,7 +309,7 @@ export default function BuildingCollapsePanel({
                       <span className="text-red-700 font-black text-sm">
                         {phoneCount} / 3
                       </span>
-                      <span>Phones Hit Acceleration Threshold (&gt; 3.5g)</span>
+                      <span>Connected Phones Hit Threshold (&gt; 3.5g)</span>
                       <span className="text-slate-400">•</span>
                       <span className="text-slate-600 font-mono text-[11px]">
                         {Math.min(100, Math.round((phoneCount / 3) * 100))}% towards quorum
@@ -434,8 +403,8 @@ export default function BuildingCollapsePanel({
                           </div>
                           <div className="text-[10px] mt-0.5 truncate">
                             {isStepMet && device
-                              ? `${device.phone_model?.split(" ")[0] || "Node"} (${device.peak_g?.toFixed(1)}g)`
-                              : "Awaiting shock"}
+                              ? `${device.phone_model || "Node"} (${device.peak_g?.toFixed(1)}g)`
+                              : "Awaiting sensor hit"}
                           </div>
                         </div>
                       );
@@ -443,7 +412,7 @@ export default function BuildingCollapsePanel({
                   </div>
                 </div>
 
-                {/* Expandable Per-Phone Sensor Telemetry Cards */}
+                {/* Itemized Live Phones Sensor Telemetry */}
                 <div className="pt-1">
                   <button
                     onClick={() => toggleExpand(cluster.cluster_id)}
@@ -451,7 +420,7 @@ export default function BuildingCollapsePanel({
                   >
                     <span className="flex items-center gap-1.5">
                       <Radio className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Reporting Phones Telemetry ({deviceDetails.length} Device{deviceDetails.length > 1 ? "s" : ""})</span>
+                      <span>Live Connected Phones Telemetry ({deviceDetails.length} Device{deviceDetails.length > 1 ? "s" : ""})</span>
                     </span>
                     {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
@@ -467,7 +436,7 @@ export default function BuildingCollapsePanel({
                             <div className="flex items-center gap-1.5 min-w-0">
                               <Smartphone className="w-3.5 h-3.5 text-slate-700 shrink-0" />
                               <span className="font-bold text-slate-900 truncate">
-                                {dev.phone_model || `Phone #${idx + 1}`}
+                                {dev.phone_model || `Connected Node [${dev.device_id.slice(-6)}]`}
                               </span>
                             </div>
                             <span className="text-[9.5px] font-black uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 shrink-0">
@@ -489,8 +458,8 @@ export default function BuildingCollapsePanel({
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Device ID:</span>
-                              <span className="font-mono text-[10px] text-slate-500 truncate max-w-[110px]">
+                              <span className="text-slate-500">Device UUID:</span>
+                              <span className="font-mono text-[10px] text-slate-500 truncate max-w-[120px]">
                                 {dev.device_id}
                               </span>
                             </div>

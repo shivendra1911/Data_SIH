@@ -684,6 +684,7 @@ export default function NationalSentinelPage() {
 
             {/* USAR Structural Collapse Kinetic Sentinel Panel */}
             <BuildingCollapsePanel
+              connectedCitizens={citizens}
               onDispatchUSAR={(cid) => {
                 showToast(`USAR Brigade dispatched to structural collapse #${cid.slice(-6).toUpperCase()}`);
               }}
