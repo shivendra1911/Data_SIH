@@ -19,7 +19,7 @@ import {
 export interface Breadcrumb {
   id: string;
   device_uuid: string;
-  phone_model: string;
+  phone_model?: string;
   lat: number;
   lng: number;
   altitude?: number | null;
@@ -33,7 +33,7 @@ export interface Breadcrumb {
 export interface NodeDevice {
   device_uuid: string;
   node_name: string;
-  phone_model: string;
+  phone_model?: string;
   is_live: boolean;
   battery_pct: number;
   latestPoint: Breadcrumb;
@@ -76,12 +76,12 @@ export default function DisasterLocationStream() {
         b.device_uuid &&
         !b.device_uuid.toLowerCase().startsWith("test") &&
         !b.device_uuid.toLowerCase().includes("dummy") &&
-        !b.phone_model.toLowerCase().startsWith("test")
+        !(b.phone_model || "").toLowerCase().startsWith("test")
     );
 
     const map = new Map<string, { model: string; points: Breadcrumb[] }>();
     cleanBreadcrumbs.forEach((b) => {
-      const list = map.get(b.device_uuid) || { model: b.phone_model || "Android Phone", points: [] };
+      const list = map.get(b.device_uuid) || { model: b.phone_model || "Connected Node", points: [] };
       list.points.push(b);
       map.set(b.device_uuid, list);
     });
@@ -119,7 +119,7 @@ export default function DisasterLocationStream() {
         b.device_uuid &&
         !b.device_uuid.toLowerCase().startsWith("test") &&
         !b.device_uuid.toLowerCase().includes("dummy") &&
-        !b.phone_model.toLowerCase().startsWith("test")
+        !(b.phone_model || "").toLowerCase().startsWith("test")
     );
     if (selectedNodeId === "ALL") {
       return cleanBreadcrumbs;

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { CitizenLocation } from "@/lib/types";
 import { isGenuineDevice } from "@/lib/deviceFilter";
+import { validateAdminAuth } from "@/lib/security";
 
 export interface TelemetryBreadcrumb {
   id: string;
   device_uuid: string;
-  phone_model: string;
+  phone_model?: string;
   lat: number;
   lng: number;
   altitude?: number | null;
@@ -125,9 +126,31 @@ export async function GET(req: NextRequest) {
   // Cap at 100 entries
   const capped = stream.slice(0, 100);
 
+  // Check admin authorization: if unauthenticated, omit sensitive personal telemetry fields like phone_model
+  const isAdmin = validateAdminAuth(req).authorized;
+  const sanitizeBreadcrumb = (b: TelemetryBreadcrumb): TelemetryBreadcrumb => {
+    if (isAdmin) {
+      return b;
+    }
+    return {
+      id: b.id,
+      device_uuid: b.device_uuid,
+      lat: b.lat,
+      lng: b.lng,
+      altitude: b.altitude,
+      accuracy: b.accuracy,
+      speed: b.speed,
+      status: b.status,
+      sos_type: b.sos_type,
+      timestamp: b.timestamp,
+    };
+  };
+
+  const sanitizedCapped = capped.map(sanitizeBreadcrumb);
+
   // Group latest by device
   const deviceMap: Record<string, TelemetryBreadcrumb> = {};
-  for (const b of capped) {
+  for (const b of sanitizedCapped) {
     if (!deviceMap[b.device_uuid]) {
       deviceMap[b.device_uuid] = b;
     }
@@ -136,10 +159,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(
     {
       success: true,
-      count: capped.length,
+      count: sanitizedCapped.length,
       active_devices_count: Object.keys(deviceMap).length,
       latest_per_device: Object.values(deviceMap),
-      breadcrumbs: capped,
+      breadcrumbs: sanitizedCapped,
     },
     { headers: corsHeaders }
   );
