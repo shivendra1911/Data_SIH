@@ -31,8 +31,9 @@
 @rem Set local scope for the variables with windows NT shell
 if "%OS%"=="Windows_NT" setlocal
 
-set JAVA_HOME=C:\Users\apriy\.jdks\jdk17.0.20_10
-set PATH=C:\Users\apriy\.jdks\jdk17.0.20_10\bin;%PATH%
+if defined JAVA_HOME goto findJavaFromJavaHome
+set JAVA_HOME=C:\Program Files\Java
+:findJavaFromJavaHome
 set DIRNAME=%~dp0
 if "%DIRNAME%"=="" set DIRNAME=.
 @rem This is normally unused

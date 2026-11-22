@@ -1,113 +1,96 @@
 ﻿# 🌊 NeerNetra (नीर्नेत्र)
-### Autonomous Multi-Modal Himalayan Flash Flood & GLOF Early Warning Platform
-**Smart India Hackathon (SIH26192)** • **Team Leader:** Priyanshu • **Branch:** `main`
+### Autonomous Civil Defense & Hyperlocal Disaster Response Ecosystem
+**Live Production Web Portal:** [https://data-sih.vercel.app](https://data-sih.vercel.app) • **Mobile App:** [Direct Android APK Download](https://github.com/shivendra1911/Data_SIH/raw/main/mobile/apk/NeerNetra.apk)
 
 ---
 
-## 📌 Executive Summary
-**NeerNetra** is a mission-critical disaster management platform designed for rugged Himalayan terrains (such as Chamoli, Joshimath, Kedarnath, and Uttarkashi). It bridges physical meteorological-seismic intelligence, dual-cloud persistence, and zero-connectivity citizen survival networks.
+## ⚡ Welcome Judges & Mentors!
 
-When conventional cellular towers fail or fiber optic backbones are severed by landslides, NeerNetra seamlessly pivots into a **peer-to-peer Bluetooth Low Energy (BLE) multi-hop mesh network**, guaranteeing that distress signals (SOS) and life-saving evacuation routes reach NDRF rescue coordinators.
+NeerNetra is designed as a **unified two-part ecosystem** solving disaster management when cellular towers, electrical grids, and internet links collapse. 
 
----
+To test our project immediately, here are the two core platforms:
 
-## 🌟 Key Architecture & Technical Highlights
+| Platform | Direct Access / Download | What It Does | Source Code |
+| :--- | :--- | :--- | :--- |
+| 💻 **Web Command Center** | **[Launch Live Web Platform](https://data-sih.vercel.app)** *(No install needed)* | Tactical GIS Radar, Real-Time 100m Structural Collapse Clusters, 1/3rd Sector Landslide Consensus, and OSRM Road-Network Safe Route Navigation. | [`web/`](./web) |
+| 📱 **Mobile Citizen App** | **[Download Android APK (NeerNetra.apk)](https://github.com/shivendra1911/Data_SIH/raw/main/mobile/apk/NeerNetra.apk)** | Autonomous on-device MEMS sensor fall detection, 60s inverted safety countdown, and offline Bluetooth/Wi-Fi Direct mesh (up to 32 hops without internet). | [`mobile/`](./mobile) |
 
-### 1. 🧠 Physics-Informed Multi-Modal AI Engine
-- **Input Features (5-Dimensional Telemetry):**
-  1. `rainfall_mm_hr` (Rainfall precipitation rate)
-  2. `soil_moisture_pct` (Hydrological soil saturation level)
-  3. `terrain_slope_deg` (Geographic mountain slope grade)
-  4. `river_water_level_m` (Hydraulic river sensor level)
-  5. `seismic_magnitude` (USGS seismic tremor activity)
-- **Zero-Rain GLOF Trigger:** In glacial breach events (such as the 2021 Chamoli disaster), cloud bursts are not the culprit; glacial lake moraine collapse is triggered by seismic or permafrost failures. NeerNetra executes an immediate **100% Critical RED Alert** if seismic magnitude >= 4.0 occurs on steep glaciated terrain (>= 25 deg), regardless of rainfall.
-
-### 2. ⚡ High-Availability & Resilient Meteorological Pipeline
-- **10-Minute Spatial Coordinate TTL Caching:** Prevents quota exhaustion on upstream meteorological APIs.
-- **Automated Open-Meteo Zero-Key Failover:** Seamlessly fails over from Tomorrow.io to Open-Meteo on HTTP 429 rate-limiting.
-- **Local High-Ground Shelter Registry:** Contains pre-indexed Uttarakhand relief camps and high-ground shelters (`REGIONAL_SHELTERS_DB`) with 0ms response time when external OpenStreetMap Overpass servers throttle or timeout.
-
-### 3. 🔥 Google Firebase Cloud Dual-Persistence
-- **Project ID:** `neernetra-e2706`
-- **FastAPI `BackgroundTasks`:** All citizen GPS pings, SOS triggers, and rescue dispatches update the sub-20ms in-memory cache instantly and queue non-blocking cloud persistence to Google Cloud Firestore collections:
-  - `citizen_locations`
-  - `sos_events`
-  - `dispatched_rescues`
-  - `system_health`
-- **Firebase Cloud Messaging (FCM):** Live emergency broadcast topics for sector-wide evacuation notices.
-
-### 4. 📱 Citizen Edge Node (Expo / React Native)
-- **NetInfo Auto-Failover:** Automatically switches between `ONLINE` and `BLE_MESH` modes; immediately flushes queued offline SOS beacons upon internet restoration.
-- **Multi-Hop BLE Mesh Protocol:** Custom broadcast/relay mechanism with hop counters (`TTL=7`), packet sequence IDs, and duplicate suppression.
-- **5-Minute Red Zone Danger Timer:** Escalates automatically if a citizen trapped in a RED zone does not confirm safety.
-- **Good Samaritan / Volunteer Mode:** Citizens can tap `"I AM HELPING"` to register as local field volunteers, assisting NDRF squads with victim triaging.
-- **Offline Vector Evacuation Map:** Visualizes high-ground evacuation assembly zones without requiring mobile tile downloads.
-
-### 5. 🖥️ Tactical Web Command Portal (Next.js 14)
-- **Unified Command Overview:** Bundles zone predictions, live citizen radar, rescue clusters, and dispatches in a single call (`/api/dashboard/overview`).
-- **Adaptive Tab Visibility:** Slows background polling from 4s to 12s when browser tab is inactive.
-- **NDRF Squad Dispatcher:** Instant assignment of Air Wing Helicopters, NDRF River Boats, or Quick Response Teams (QRT).
+> 📖 **Looking for a quick walkthrough?** Read our human-written judge test guide: **[`HOW_TO_USE.md`](./HOW_TO_USE.md)**.
 
 ---
 
-## 🚀 Quick Start Guide
+## 💻 1. Web Platform (`web/`) — National Civil Defense Command Portal
 
-### Prerequisites
-- Python 3.10+ (tested on Python 3.14)
-- Node.js v18+ (tested on v20.18.0)
-- npm or yarn
+* **Live Deployment:** **[https://data-sih.vercel.app](https://data-sih.vercel.app)** (Deployed on Vercel Edge)
+* **Folder Location:** [`web/`](./web)
 
----
-
-### 1. Start the FastAPI Backend Server
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-- **Interactive Swagger Docs:** `http://localhost:8000/docs`
-- **Health Check:** `http://localhost:8000/`
+### Key Features:
+* **Interactive Tactical GIS Radar:** Leaflet & Protomaps canvas rendering live citizen pings, danger contours, and relief shelters.
+* **USAR Building Collapse Sentinel:** Aggregates incoming phone falls into real physical 100-meter clusters. Shows exact coordinates, live phone counts (`1 / 3 Phones Hit`), quorum progress bars, and itemized sensor readings (Peak $g$, free-fall $ms$).
+* **Sub-Surface Landslide Consensus Monitor:** Real-time quorum ratio tracking ($\ge \frac{1}{3}\text{rd}$ active devices threshold) for early slope-shear detection in mountainous sectors (e.g., Wayanad & Joshimath).
+* **Real OSRM Road Navigation:** Replaced straight Euclidean lines with real curved street-network navigation biased toward positive uphill elevation.
+* **Sub-100ms Civil Defense Siren Broadcaster:** Direct Supabase PostgreSQL WebSocket channel bypassing deprecated Google Firebase FCM.
 
 ---
 
-### 2. Start the Web Command Dashboard
-```bash
-cd web
-npm install
-npm run dev
-```
-- **Dashboard URL:** `http://localhost:3000`
+## 📱 2. Mobile App (`mobile/`) — Citizen Edge Sentinel
+
+* **Download APK:** **[`mobile/apk/NeerNetra.apk`](https://github.com/shivendra1911/Data_SIH/raw/main/mobile/apk/NeerNetra.apk)** (Android 10+)
+* **Folder Location:** [`mobile/`](./mobile)
+
+### Key Features:
+* **3-Phase Kinetic State Machine:** Runs on device accelerometer and gyroscope: Free Fall ($<0.2g$) $\rightarrow$ Hard Impact ($>3.5g$) $\rightarrow$ Debris Stillness ($<0.05\text{ rad/s}$).
+* **Inverted 60-Second Dead-Man Countdown:** Audible check requiring a conscious citizen to tap *"I AM SAFE"*; if uncancelled, autonomously transmits distress coordinates.
+* **Sub-Surface Bedrock Tremor Filter:** Listens for $10\text{–}50\text{ Hz}$ micro-vibrations characteristic of slope shear failure.
+* **24/7 Android Foreground Service:** Holds an Android `PARTIAL_WAKE_LOCK` ensuring life-safety monitoring never gets killed during deep sleep or Doze mode.
+* **Zero-Internet P2P Mesh:** Custom BLE GATT server and Wi-Fi Direct socket plumbing allowing phone-to-phone relay across up to 32 hops with zero cellular reception.
+* **Wi-Fi Direct Walkie-Talkie:** Full-duplex push-to-talk voice intercom between trapped survivors and nearby rescuers.
 
 ---
 
-### 3. Start the Citizen Mobile App
-```bash
-cd mobile
-npm install
-npx expo start
+## 🔄 How the Closed Loop Works (Phone $\rightarrow$ Web in Real Time)
+
+```mermaid
+flowchart LR
+    A["📱 Phone Drop / Sensor Shock\n(On Citizen Device)"] --> B["⚡ 3-Phase Kinetic FSM\n(Free-fall + >3.5g Impact)"]
+    B --> C["🌐 Supabase Cloud WebSockets\n(Sub-100ms Sync)"]
+    C --> D["💻 Web Command Portal\n(100m Quorum & Device Telemetry)"]
+    D --> E["🚨 3-Phone Quorum Reached\n(Auto USAR Dispatch + Siren)"]
 ```
 
+1. A citizen's phone drops or simulates impact in the mobile app.
+2. The phone evaluates the shock locally and pushes telemetry to the central API.
+3. Within 2 seconds, the live web portal at `https://data-sih.vercel.app` displays the exact phone ID, coordinates, and peak impact.
+4. When 3 nearby phones report within 100 meters, the cluster turns **CRITICAL COLLAPSE**, enabling 1-click rescue dispatch.
+
 ---
 
-## 🧪 Automated Verification Suite
+## 📂 Repository Directory Structure
 
-Run the pre-flight verification scripts from the project root:
-
-```bash
-# 1. Run the 10/10 End-to-End Integration Test Suite
-py backend/test_integration.py
-
-# 2. Run the Full 6-Subsystem Operational Health Audit
-py backend/full_system_status.py
-
-# 3. Type-check Mobile Application
-cd mobile && npx tsc --noEmit
-
-# 4. Build Next.js Web Dashboard
-cd web && npm run build
+```
+├── web/                             # Next.js 14 Web Command Portal (Vercel Production)
+│   ├── src/app/                     # Serverless API routes & UI pages
+│   └── src/components/              # GIS Map, Collapse & Landslide consoles
+│
+├── mobile/                          # React Native (Expo) & Android Native Java App
+│   ├── apk/                         # Direct downloadable Android APK (NeerNetra.apk)
+│   ├── android/                     # Low-level Native Java BLE GATT & Wi-Fi Direct Mesh
+│   └── src/services/                # Kinetic FSMs & Sensor Detectors
+│
+├── backend/                         # FastAPI Python Server & Hydrology ML
+│   ├── main.py                      # REST endpoints & Haversine clustering
+│   └── neernetra_model.pkl          # Random Forest GLOF & Flash Flood model
+│
+├── docs/                            # Internal architecture documentation & slide decks
+│   └── archive/                     # Historical logs, test suites & legacy sheets
+│
+├── HOW_TO_USE.md                    # Step-by-Step Judge & Mentor Testing Guide
+├── NeerNetra_Finale_Build_Plan.doc  # Official Step Zero Deliverable (Word Document)
+└── README.md                        # Master Entry Point
 ```
 
 ---
 
-## 🛡️ License & Acknowledgments
-Built for **Smart India Hackathon (SIH26192)**.
+## 👨‍💻 Testing Guide for Evaluators
+For complete step-by-step instructions on running a live test between the phone app and the web portal, see:  
+👉 **[`HOW_TO_USE.md`](./HOW_TO_USE.md)**
