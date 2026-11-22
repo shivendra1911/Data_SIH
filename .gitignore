@@ -12,6 +12,7 @@ crash_log.txt
 *.apk
 !mobile/apk/*.apk
 .agents/
+.vscode/
 live_*.png
 .env
 .env.*
