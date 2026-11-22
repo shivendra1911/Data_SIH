@@ -10,6 +10,7 @@ __pycache__/
 crash_log.txt
 *.db
 *.apk
+!mobile/apk/*.apk
 .agents/
 live_*.png
 .env
